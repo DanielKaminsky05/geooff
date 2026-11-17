@@ -17,7 +17,7 @@ vi.mock("react-router-dom", async (importOriginal) => {
 });
 
 // Real SessionProvider so playerName state works end-to-end.
-import { SessionProvider } from "../lib/session";
+import { SessionProvider, useSession, type Identity } from "../lib/session";
 import Home from "./Home";
 
 function renderHome() {
@@ -63,6 +63,34 @@ describe("<Home>", () => {
       state: { code: "ABC123" },
     });
     expect(navigate).toHaveBeenCalledWith("/room/ABC123");
+  });
+
+  it("stores identity (with roomCode) from a 'joined' event", () => {
+    let seen: Identity | null = null;
+    function Probe() {
+      seen = useSession().identity;
+      return null;
+    }
+    render(
+      <MemoryRouter initialEntries={["/"]}>
+        <SessionProvider>
+          <Home />
+          <Probe />
+        </SessionProvider>
+      </MemoryRouter>,
+    );
+    socket.__server("joined", {
+      playerId: "x",
+      slot: "p1",
+      reconnectToken: "tok",
+      state: { code: "ABC123" },
+    });
+    expect(seen).toEqual({
+      playerId: "x",
+      slot: "p1",
+      reconnectToken: "tok",
+      roomCode: "ABC123",
+    });
   });
 
   it("the join form navigates to /room/:code with an uppercased code", async () => {

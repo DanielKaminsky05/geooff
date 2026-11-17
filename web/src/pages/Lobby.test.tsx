@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { StrictMode } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
@@ -9,6 +10,7 @@ import type { RoomState, PlayerPublic } from "../lib/protocol";
 let socket: MockSocket;
 let identity: Identity | null;
 const navigate = vi.fn();
+const setIdentitySpy = vi.fn();
 
 vi.mock("../lib/socket", () => ({
   useSocket: () => socket,
@@ -19,9 +21,10 @@ vi.mock("../lib/session", () => ({
     playerName: "Alice",
     setPlayerName: vi.fn(),
     identity,
-    setIdentity: vi.fn((id: Identity | null) => {
+    setIdentity: (id: Identity | null) => {
       identity = id;
-    }),
+      setIdentitySpy(id);
+    },
     identityRef: { current: identity },
   }),
   defaultName: () => "Player 1234",
@@ -49,14 +52,19 @@ function roomState(over: Partial<RoomState> = {}): RoomState {
   };
 }
 
-function renderLobby() {
-  return render(
+function renderLobby({ strict = false }: { strict?: boolean } = {}) {
+  const tree = (
     <MemoryRouter initialEntries={["/room/ROOM01"]}>
       <Routes>
         <Route path="/room/:code" element={<Lobby />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  return render(strict ? <StrictMode>{tree}</StrictMode> : tree);
+}
+
+function joinEmits() {
+  return socket.__emitted.filter((e) => e.event === "join_room");
 }
 
 describe("<Lobby>", () => {
@@ -64,6 +72,7 @@ describe("<Lobby>", () => {
     socket = createMockSocket();
     identity = { playerId: "a", slot: "p1", reconnectToken: "tok" };
     navigate.mockClear();
+    setIdentitySpy.mockClear();
   });
 
   it("emits join_room on mount and renders the room code", () => {
@@ -161,5 +170,80 @@ describe("<Lobby>", () => {
     socket.__server("room_state", roomState());
     socket.__server("countdown", { seconds: 3 });
     expect(navigate).toHaveBeenCalledWith("/game/ROOM01");
+  });
+
+  it("emits join_room only once under StrictMode's double effect", () => {
+    identity = null;
+    renderLobby({ strict: true });
+    expect(joinEmits()).toHaveLength(1);
+    expect(joinEmits()[0].payload).toMatchObject({ code: "ROOM01", reconnectToken: undefined });
+  });
+
+  it("sends the reconnect token only when it belongs to this room", () => {
+    identity = { playerId: "a", slot: "p1", reconnectToken: "tok", roomCode: "ROOM01" };
+    renderLobby();
+    expect(socket.__lastEmit("join_room")).toMatchObject({ reconnectToken: "tok" });
+
+    socket = createMockSocket();
+    identity = { playerId: "z", slot: "p1", reconnectToken: "old", roomCode: "OTHER1" };
+    renderLobby();
+    expect(socket.__lastEmit("join_room")).toMatchObject({ reconnectToken: undefined });
+  });
+
+  it("sets identity with roomCode from the joined payload", () => {
+    identity = null;
+    renderLobby();
+    socket.__server("joined", {
+      playerId: "b",
+      slot: "p2",
+      reconnectToken: "tok-b",
+      state: roomState(),
+    });
+    expect(setIdentitySpy).toHaveBeenCalledWith({
+      playerId: "b",
+      slot: "p2",
+      reconnectToken: "tok-b",
+      roomCode: "ROOM01",
+    });
+  });
+
+  it("ignores room_full once already joined to this room", () => {
+    identity = null;
+    renderLobby({ strict: true });
+    socket.__server("joined", {
+      playerId: "b",
+      slot: "p2",
+      reconnectToken: "tok-b",
+      state: roomState(),
+    });
+    socket.__server("error_msg", { code: "room_full", message: "That room is already full." });
+    expect(screen.queryByText("That room is already full.")).toBeNull();
+    expect(screen.getByText("ROOM01")).toBeInTheDocument();
+  });
+
+  it("shows room_full as an error when we never joined", () => {
+    identity = null;
+    renderLobby();
+    socket.__server("error_msg", { code: "room_full", message: "That room is already full." });
+    expect(screen.getByText("That room is already full.")).toBeInTheDocument();
+  });
+
+  it("Leave emits leave_room, clears identity and navigates home", async () => {
+    const user = userEvent.setup();
+    renderLobby();
+    socket.__server("room_state", roomState());
+    await user.click(screen.getByRole("button", { name: "Leave" }));
+    expect(socket.__emitted.some((e) => e.event === "leave_room")).toBe(true);
+    expect(setIdentitySpy).toHaveBeenCalledWith(null);
+    expect(navigate).toHaveBeenCalledWith("/");
+  });
+
+  it("'Back to home' on the error screen clears identity", async () => {
+    const user = userEvent.setup();
+    renderLobby();
+    socket.__server("error_msg", { code: "room_not_found", message: "No such room." });
+    await user.click(screen.getByRole("button", { name: "Back to home" }));
+    expect(setIdentitySpy).toHaveBeenCalledWith(null);
+    expect(navigate).toHaveBeenCalledWith("/");
   });
 });

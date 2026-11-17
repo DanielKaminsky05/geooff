@@ -1,0 +1,86 @@
+name: CI/CD
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  protocol:
+    name: Protocol mirrors in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Diff shared/protocol.ts against its mirrors
+        run: |
+          diff -u shared/protocol.ts server/src/protocol.ts
+          diff -u shared/protocol.ts web/src/lib/protocol.ts
+
+  server:
+    name: Server (typecheck, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  web:
+    name: Web (lint, typecheck, test, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+  # Deploys the game server to EC2 after CI passes on main. Disabled until the
+  # repo variable DEPLOY_SERVER=true and the EC2_HOST / EC2_USER / EC2_SSH_KEY
+  # secrets are set. Expects the repo cloned at ~/geooff and pm2 installed.
+  deploy-server:
+    name: Deploy server (EC2)
+    needs: [protocol, server, web]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.DEPLOY_SERVER == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull, build and restart via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd ~/geooff
+            git fetch origin main
+            git reset --hard origin/main
+            cd server
+            npm ci
+            npm run build
+            pm2 restart geooff-server || pm2 start dist/index.js --name geooff-server

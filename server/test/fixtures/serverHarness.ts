@@ -1,6 +1,6 @@
 import { type AddressInfo } from "node:net";
 import { io as ioClient, type Socket } from "socket.io-client";
-import { createServer, type GeooffServer } from "../../src/index.js";
+import { createServer, type CreateServerOptions, type GeooffServer } from "../../src/index.js";
 import { rooms } from "../../src/rooms.js";
 
 export interface TestServer extends GeooffServer {
@@ -9,8 +9,8 @@ export interface TestServer extends GeooffServer {
 }
 
 /** Boot the real server on an ephemeral port. */
-export async function startTestServer(): Promise<TestServer> {
-  const server = createServer();
+export async function startTestServer(options?: CreateServerOptions): Promise<TestServer> {
+  const server = createServer(options);
   await new Promise<void>((resolve) => {
     server.httpServer.listen(0, "127.0.0.1", () => resolve());
   });

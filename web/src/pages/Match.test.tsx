@@ -9,6 +9,7 @@ import type { RoomState, PlayerPublic } from "../lib/protocol";
 let socket: MockSocket;
 let identity: Identity | null;
 const navigate = vi.fn();
+const setIdentity = vi.fn();
 
 vi.mock("../lib/socket", () => ({
   useSocket: () => socket,
@@ -19,7 +20,7 @@ vi.mock("../lib/session", () => ({
     playerName: "Alice",
     setPlayerName: vi.fn(),
     identity,
-    setIdentity: vi.fn(),
+    setIdentity,
     identityRef: { current: identity },
   }),
   defaultName: () => "Player 1234",
@@ -78,6 +79,7 @@ describe("<Match>", () => {
     socket = createMockSocket();
     identity = { playerId: "a", slot: "p1", reconnectToken: "tok" };
     navigate.mockClear();
+    setIdentity.mockClear();
   });
 
   it("submits a guess via submit_answer", async () => {
@@ -152,5 +154,130 @@ describe("<Match>", () => {
 
     await user.click(screen.getByRole("button", { name: "View opponent" }));
     expect(mobileMap().getAttribute("data-filled")).toContain("us");
+  });
+
+  it("an opponent's rematch request does not disable my button, and I can accept", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.__server("game_over", { winnerId: "a", scores: { a: 5, b: 3 } });
+
+    // Server broadcasts the opponent's request to the whole room.
+    socket.__server("rematch_requested", { playerId: "b" });
+    expect(screen.getByText("Opponent wants a rematch")).toBeInTheDocument();
+    const accept = screen.getByRole("button", { name: "Accept rematch" });
+    expect(accept).toBeEnabled();
+
+    await user.click(accept);
+    expect(socket.__emitted.some((e) => e.event === "request_rematch")).toBe(true);
+    expect(screen.getByRole("button", { name: "Waiting for opponent…" })).toBeDisabled();
+  });
+
+  it("my own rematch_requested echo keeps my button in the waiting state", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.__server("game_over", { winnerId: "a", scores: { a: 5, b: 3 } });
+    socket.__server("rematch_requested", { playerId: "a" });
+    expect(screen.getByRole("button", { name: "Waiting for opponent…" })).toBeDisabled();
+    expect(screen.queryByText("Opponent wants a rematch")).not.toBeInTheDocument();
+  });
+
+  it("colors game-over scores by slot for a p2 player", () => {
+    identity = { playerId: "b", slot: "p2", reconnectToken: "tok" };
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.__server("game_over", { winnerId: "b", scores: { a: 4, b: 10 } });
+
+    expect(screen.getByText("You win!")).toBeInTheDocument();
+    const mine = screen.getByTestId("my-final-score");
+    const theirs = screen.getByTestId("opp-final-score");
+    expect(mine.textContent).toBe("10");
+    expect(mine.getAttribute("style")).toContain("var(--color-player2)");
+    expect(theirs.textContent).toBe("4");
+    expect(theirs.getAttribute("style")).toContain("var(--color-player1)");
+  });
+
+  it("'Back to home' leaves the room, clears identity, and navigates home", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.__server("game_over", { winnerId: "a", scores: { a: 1, b: 0 } });
+
+    await user.click(screen.getByRole("button", { name: "Back to home" }));
+    expect(socket.__emitted.some((e) => e.event === "leave_room")).toBe(true);
+    expect(setIdentity).toHaveBeenCalledWith(null);
+    expect(navigate).toHaveBeenCalledWith("/");
+  });
+
+  it("shows a Reconnecting overlay on own disconnect and hides it on reconnect", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+
+    socket.__server("disconnect", "transport close");
+    expect(screen.getByText("Reconnecting…")).toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalled();
+
+    socket.__server("connect");
+    expect(screen.queryByText("Reconnecting…")).not.toBeInTheDocument();
+  });
+
+  it("hides the Reconnecting overlay when joined arrives", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.__server("disconnect", "transport close");
+    expect(screen.getByText("Reconnecting…")).toBeInTheDocument();
+
+    socket.__server("joined", {
+      playerId: "a",
+      slot: "p1",
+      reconnectToken: "tok2",
+      state: roomState(),
+    });
+    expect(screen.queryByText("Reconnecting…")).not.toBeInTheDocument();
+    expect(setIdentity).toHaveBeenCalledWith(
+      expect.objectContaining({ playerId: "a", reconnectToken: "tok2", roomCode: "ROOM01" }),
+    );
+  });
+
+  it("shows an opponent-disconnected banner with a countdown, hidden on reconnect", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+
+    socket.__server("opponent_disconnected", { playerId: "b", graceSeconds: 30 });
+    expect(screen.getByText(/Opponent disconnected — waiting 30s/)).toBeInTheDocument();
+
+    socket.__server("opponent_reconnected", { playerId: "b" });
+    expect(screen.queryByText(/Opponent disconnected/)).not.toBeInTheDocument();
+  });
+
+  it("shows a countdown overlay and disables input until game_started", () => {
+    renderMatch();
+    socket.__server("room_state", roomState({ phase: "countdown" }));
+
+    // Lobby consumed the first tick, so we start at "Get ready".
+    const overlay = () => screen.queryByTestId("countdown-overlay");
+    expect(overlay()).toHaveTextContent("Get ready");
+    expect(screen.getByLabelText("Country guess")).toBeDisabled();
+
+    socket.__server("countdown", { seconds: 2 });
+    expect(overlay()).toHaveTextContent("2");
+    socket.__server("countdown", { seconds: 1 });
+    expect(overlay()).toHaveTextContent("1");
+
+    socket.__server("game_started", {
+      categoryId: "countries",
+      total: 196,
+      endsAt: Date.now() + 300_000,
+    });
+    expect(overlay()).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Country guess")).toBeEnabled();
+  });
+
+  it("disables the input after game over", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+    expect(screen.getByLabelText("Country guess")).toBeEnabled();
+    socket.__server("game_over", { winnerId: null, scores: { a: 0, b: 0 } });
+    expect(screen.getByLabelText("Country guess")).toBeDisabled();
   });
 });

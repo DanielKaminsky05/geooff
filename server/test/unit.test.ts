@@ -13,6 +13,7 @@ import {
   matchAnswer,
   scoreGuess,
   determineWinner,
+  total as REAL_TOTAL,
 } from "../src/matching.js";
 import {
   generateRoomCode,
@@ -329,6 +330,13 @@ describe("room settings", () => {
     // filled carries only ISO codes, never names.
     expect(snap.filled![room.players[0].id]).toEqual(["fr"]);
     expect(JSON.stringify(snap)).not.toContain("France");
+    rooms.delete(code);
+  });
+
+  it("room snapshot includes the category total (defaults to the live count)", () => {
+    const room = rooms.get(code)!;
+    expect(roomStateOf(room).total).toBe(REAL_TOTAL);
+    expect(roomStateOf(room, 5).total).toBe(5);
     rooms.delete(code);
   });
 

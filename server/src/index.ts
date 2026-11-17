@@ -15,6 +15,7 @@ import {
   COUNTDOWN_SECONDS,
   RECONNECT_GRACE_SECONDS,
   clampTimeLimit,
+  type CategoryId,
   type ClientToServerEvents,
   type GamePhase,
   type ServerToClientEvents,
@@ -42,6 +43,17 @@ import {
 
 const PORT = Number(process.env.PORT ?? 3001);
 
+/** Known answer categories (keep in sync with protocol `CategoryId`). */
+const KNOWN_CATEGORIES: readonly CategoryId[] = ["countries"];
+
+/** Timing overrides, mainly so tests don't have to wait on real-world timers. */
+export interface CreateServerOptions {
+  /** Milliseconds per countdown tick (default 1000). */
+  countdownTickMs?: number;
+  /** Reconnect grace window in milliseconds (default RECONNECT_GRACE_SECONDS * 1000). */
+  graceMs?: number;
+}
+
 export interface GeooffServer {
   app: Express;
   io: Server<ClientToServerEvents, ServerToClientEvents>;
@@ -53,7 +65,11 @@ export interface GeooffServer {
  * handler. Does NOT call `.listen()` — the caller decides when/where to bind.
  * This lets tests spin the whole stack up on an ephemeral port.
  */
-export function createServer(): GeooffServer {
+export function createServer(options: CreateServerOptions = {}): GeooffServer {
+  const countdownTickMs = options.countdownTickMs ?? 1000;
+  const graceMs = options.graceMs ?? RECONNECT_GRACE_SECONDS * 1000;
+  const graceSeconds = Math.max(1, Math.ceil(graceMs / 1000));
+
   // Build lookups once per server.
   const lookup = buildLookup();
   const canonicalNames = buildCanonicalNames();
@@ -113,15 +129,26 @@ export function createServer(): GeooffServer {
     socket.emit("error_msg", { code, message });
   }
 
-  /** End the match: compute winner + missed sets, emit game_over, tidy timers. */
-  function endGame(room: Room): void {
+  /** Delete the room if no seat has a live connection (prevents leaks). */
+  function deleteIfAbandoned(room: Room): boolean {
+    if (room.players.some((p) => p.connected)) return false;
+    deleteRoom(room);
+    return true;
+  }
+
+  /**
+   * End the match: compute winner + missed sets, emit game_over, tidy timers.
+   * `forcedWinnerId` overrides the score-based winner (forfeits). Deletes the
+   * room afterwards if nobody is connected any more.
+   */
+  function endGame(room: Room, forcedWinnerId?: string): void {
     clearRoomTimers(room);
     room.phase = "ended";
     room.endsAt = undefined;
 
-    const winnerId = determineWinner(
-      room.players.map((p) => ({ playerId: p.id, score: p.score })),
-    );
+    const winnerId =
+      forcedWinnerId ??
+      determineWinner(room.players.map((p) => ({ playerId: p.id, score: p.score })));
 
     const missedByPlayer: Record<string, string[]> = {};
     for (const seat of room.players) {
@@ -133,6 +160,8 @@ export function createServer(): GeooffServer {
       scores: scoresOf(room),
       missedByPlayer,
     });
+
+    deleteIfAbandoned(room);
   }
 
   function startCountdownAndGame(room: Room): void {
@@ -164,7 +193,7 @@ export function createServer(): GeooffServer {
       room.roundTimer = setTimeout(() => {
         endGame(room);
       }, room.settings.timeLimitSeconds * 1000);
-    }, 1000);
+    }, countdownTickMs);
   }
 
   /** Reset seats for a rematch back to lobby. */
@@ -208,12 +237,15 @@ export function createServer(): GeooffServer {
   function handleLeave(socket: GameSocket, room: Room, seat: Seat): void {
     room.players = room.players.filter((p) => p.id !== seat.id);
     socket.leave(room.code);
+    const pending = room.graceTimers.get(seat.id);
+    if (pending) {
+      clearTimeout(pending);
+      room.graceTimers.delete(seat.id);
+    }
     io.to(room.code).emit("player_left", { playerId: seat.id });
 
-    if (room.players.length === 0) {
-      deleteRoom(room);
-      return;
-    }
+    // Empty, or only disconnected seats left (nobody can ever act) → delete.
+    if (deleteIfAbandoned(room)) return;
     // Reassign host if the host left.
     if (room.hostId === seat.id) {
       room.hostId = room.players[0].id;
@@ -221,11 +253,31 @@ export function createServer(): GeooffServer {
     broadcastRoomState(room);
   }
 
+  /**
+   * Voluntarily leave a room in any phase. During countdown/playing this is a
+   * forfeit: the match ends with the remaining player as winner, then the seat
+   * is removed.
+   */
+  function leaveRoom(socket: GameSocket, room: Room, seat: Seat): void {
+    if (room.phase === "countdown" || room.phase === "playing") {
+      // Stop the leaver from receiving the old room's game_over.
+      socket.leave(room.code);
+      seat.connected = false;
+      seat.socketId = null;
+      const other = otherSeat(room, seat);
+      endGame(room, other?.id);
+    }
+    handleLeave(socket, room, seat);
+  }
+
   io.on("connection", (socket: GameSocket) => {
     socket.on(
       "create_room",
       safe(socket, (payload: { playerName: string }) => {
         const name = (payload?.playerName ?? "Player 1").toString().slice(0, 40) || "Player 1";
+        // A socket holds at most one seat: vacate any previous room first.
+        const prev = seatForSocket(socket);
+        if (prev) leaveRoom(socket, prev.room, prev.seat);
         const { room, seat } = createRoom(name);
         seat.socketId = socket.id;
         socket.join(room.code);
@@ -247,6 +299,25 @@ export function createServer(): GeooffServer {
         if (!room) {
           emitError(socket, "room_not_found", `No room with code ${code}.`);
           return;
+        }
+
+        const prev = seatForSocket(socket);
+        if (prev && prev.room === room) {
+          // Already seated here (e.g. duplicate emit under React StrictMode):
+          // idempotent — just resend the seat + snapshot.
+          socket.join(room.code);
+          socket.emit("joined", {
+            playerId: prev.seat.id,
+            slot: prev.seat.slot,
+            reconnectToken: prev.seat.reconnectToken,
+            state: roomStateOf(room),
+          });
+          socket.emit("room_state", roomStateOf(room));
+          return;
+        }
+        if (prev) {
+          // Seated in a different room: vacate it before joining this one.
+          leaveRoom(socket, prev.room, prev.seat);
         }
 
         // Reconnection path: token matches a (typically disconnected) seat.
@@ -322,6 +393,13 @@ export function createServer(): GeooffServer {
         }
         if (room.phase !== "lobby") {
           emitError(socket, "locked", "Settings are locked once the round starts.");
+          return;
+        }
+        if (
+          payload?.categoryId !== undefined &&
+          !KNOWN_CATEGORIES.includes(payload.categoryId as CategoryId)
+        ) {
+          emitError(socket, "bad_category", "Unknown category.");
           return;
         }
         if (payload?.timeLimitSeconds !== undefined) {
@@ -437,7 +515,7 @@ export function createServer(): GeooffServer {
       safe0(socket, () => {
         const ctx = seatForSocket(socket);
         if (!ctx) return;
-        handleLeave(socket, ctx.room, ctx.seat);
+        leaveRoom(socket, ctx.room, ctx.seat);
       }),
     );
 
@@ -460,17 +538,21 @@ export function createServer(): GeooffServer {
         if (other?.socketId) {
           io.to(other.socketId).emit("opponent_disconnected", {
             playerId: seat.id,
-            graceSeconds: RECONNECT_GRACE_SECONDS,
+            graceSeconds,
           });
         }
         const timer = setTimeout(() => {
           room.graceTimers.delete(seat.id);
           if (seat.connected) return; // reconnected in time
-          // Grace expired mid-match → present player wins (handled by scores).
           if (room.phase === "playing" || room.phase === "countdown") {
-            endGame(room);
+            // Grace expired mid-match → the present (connected) player wins,
+            // regardless of score. If nobody is present, fall back to score.
+            const present = room.players.find((p) => p.id !== seat.id && p.connected);
+            endGame(room, present?.id);
+          } else {
+            deleteIfAbandoned(room);
           }
-        }, RECONNECT_GRACE_SECONDS * 1000);
+        }, graceMs);
         room.graceTimers.set(seat.id, timer);
       } catch (err) {
         console.error("disconnect error:", err);

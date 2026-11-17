@@ -13,6 +13,8 @@ import {
   type RoomSettings,
   type RoomState,
 } from "./protocol.js";
+// matching.ts has no dependency on rooms.ts, so this import is cycle-free.
+import { total as categoryTotal } from "./matching.js";
 
 export interface Seat {
   id: string; // stable per-seat id (playerId)
@@ -123,7 +125,7 @@ export function seatToPublic(seat: Seat): PlayerPublic {
   };
 }
 
-export function roomStateOf(room: Room): RoomState {
+export function roomStateOf(room: Room, total: number = categoryTotal): RoomState {
   const filled: Record<string, string[]> = {};
   for (const seat of room.players) {
     filled[seat.id] = [...seat.filled];
@@ -135,6 +137,7 @@ export function roomStateOf(room: Room): RoomState {
     settings: room.settings,
     players: room.players.map(seatToPublic),
     filled,
+    total,
   };
   if (room.endsAt !== undefined) state.endsAt = room.endsAt;
   return state;

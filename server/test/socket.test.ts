@@ -9,6 +9,7 @@ import {
 } from "./fixtures/serverHarness.js";
 import { COUNTDOWN_SECONDS } from "../src/protocol.js";
 import { total as REAL_TOTAL } from "../src/matching.js";
+import { rooms } from "../src/rooms.js";
 
 /**
  * A real country from the live dataset, used for "correct answer" assertions.
@@ -463,5 +464,138 @@ describe("robustness", () => {
     // No crash, still connected.
     await expectNoEvent(a, "error_msg", 200);
     expect(a.connected).toBe(true);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Regression tests (fast timers injected via createServer options)    */
+/* ------------------------------------------------------------------ */
+
+describe("regressions", () => {
+  const GRACE_MS = 150;
+
+  beforeEach(async () => {
+    // Swap the default server for one with short countdown + grace timers.
+    await server.close();
+    server = await startTestServer({ countdownTickMs: 20, graceMs: GRACE_MS });
+  });
+
+  it("grace expiry mid-match: the present player wins even when behind", async () => {
+    const ctx = await makeRoom();
+    await startGame(ctx);
+    const { a, b, bId, code } = ctx;
+
+    // A (who will disconnect) takes the lead.
+    const resA = awaitEvent<any>(a, "answer_result");
+    a.emit("submit_answer", { text: CORRECT.text });
+    expect((await resA).accepted).toBe(true);
+
+    const over = awaitEvent<any>(b, "game_over", 2000);
+    a.disconnect();
+    const go = await over;
+    expect(go.winnerId).toBe(bId);
+    // B is still connected, so the ended room is kept for them.
+    expect(rooms.get(code)?.phase).toBe("ended");
+  });
+
+  it("room is deleted when both players disconnect mid-match and grace expires", async () => {
+    const ctx = await makeRoom();
+    await startGame(ctx);
+    const { a, b, code } = ctx;
+    a.disconnect();
+    b.disconnect();
+    await new Promise((r) => setTimeout(r, GRACE_MS * 3));
+    expect(rooms.has(code)).toBe(false);
+  });
+
+  it("a socket creating a second room is removed from the first", async () => {
+    const { a, b, bId, code } = await makeRoom();
+
+    const left = awaitEvent<any>(a, "player_left");
+    b.emit("create_room", { playerName: "Bob" });
+    const joined = await awaitEvent<any>(b, "joined");
+    expect(joined.state.code).not.toBe(code);
+    expect((await left).playerId).toBe(bId);
+    expect(rooms.get(code)!.players).toHaveLength(1);
+
+    // set_ready now routes to the NEW room, not the old one.
+    const noReadyOnA = expectNoEvent(a, "player_ready", 200);
+    const readyB = awaitEvent<any>(b, "player_ready");
+    b.emit("set_ready", { ready: true });
+    expect((await readyB).playerId).toBe(joined.playerId);
+    await noReadyOnA;
+  });
+
+  it("a socket joining another room mid-match forfeits the old match to the opponent", async () => {
+    const ctx = await makeRoom();
+    await startGame(ctx);
+    const { a, b, aId, code } = ctx;
+
+    const c = client();
+    await awaitEvent(c, "connect");
+    c.emit("create_room", { playerName: "Carol" });
+    const other = (await awaitEvent<any>(c, "joined")).state.code;
+
+    const overA = awaitEvent<any>(a, "game_over");
+    const noOverB = expectNoEvent(b, "game_over", 200);
+    b.emit("join_room", { code: other, playerName: "Bob" });
+    await awaitEvent(b, "joined");
+    expect((await overA).winnerId).toBe(aId);
+    await noOverB;
+    expect(rooms.get(code)!.players).toHaveLength(1);
+    expect(rooms.get(other)!.players).toHaveLength(2);
+  });
+
+  it("a duplicate join_room from the same socket is idempotent", async () => {
+    const { a, b, bId, code } = await makeRoom();
+    const noJoinOnA = expectNoEvent(a, "player_joined", 200);
+    const noErr = expectNoEvent(b, "error_msg", 200);
+    const again = awaitEvent<any>(b, "joined");
+    const state = awaitEvent<any>(b, "room_state");
+    b.emit("join_room", { code, playerName: "Bob" });
+    expect((await again).playerId).toBe(bId);
+    expect((await state).players).toHaveLength(2);
+    await noJoinOnA;
+    await noErr;
+    expect(rooms.get(code)!.players).toHaveLength(2);
+  });
+
+  it("room_state includes the category total", async () => {
+    const a = client();
+    await awaitEvent(a, "connect");
+    a.emit("create_room", { playerName: "Alice" });
+    const joined = await awaitEvent<any>(a, "joined");
+    expect(joined.state.total).toBe(REAL_TOTAL);
+    const rs = awaitEvent<any>(a, "room_state");
+    a.emit("set_ready", { ready: true });
+    expect((await rs).total).toBe(REAL_TOTAL);
+  });
+
+  it("update_settings rejects an unknown categoryId with bad_category", async () => {
+    const { a, code } = await makeRoom();
+    const err = awaitEvent<any>(a, "error_msg");
+    a.emit("update_settings", { categoryId: "capitals" as any, timeLimitSeconds: 120 });
+    expect((await err).code).toBe("bad_category");
+    expect(rooms.get(code)!.settings.categoryId).toBe("countries");
+  });
+
+  it("leave_room mid-match ends the game with the remaining player as winner", async () => {
+    const ctx = await makeRoom();
+    await startGame(ctx);
+    const { a, b, bId, code } = ctx;
+
+    // The leaver is ahead; the remaining player must still win.
+    const resA = awaitEvent<any>(a, "answer_result");
+    a.emit("submit_answer", { text: CORRECT.text });
+    await resA;
+
+    const over = awaitEvent<any>(b, "game_over");
+    const left = awaitEvent<any>(b, "player_left");
+    a.emit("leave_room");
+    expect((await over).winnerId).toBe(bId);
+    expect((await left).playerId).toBe(ctx.aId);
+    const room = rooms.get(code)!;
+    expect(room.phase).toBe("ended");
+    expect(room.players.map((p) => p.id)).toEqual([bId]);
   });
 });

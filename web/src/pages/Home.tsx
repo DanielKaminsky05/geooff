@@ -21,6 +21,7 @@ export default function Home() {
         playerId: payload.playerId,
         slot: payload.slot,
         reconnectToken: payload.reconnectToken,
+        roomCode: payload.state.code,
       });
       navigate(`/room/${payload.state.code}`);
     }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession } from "../lib/session";
-import type { PlayerPublic, RoomState } from "../lib/protocol";
+import type { GamePhase, PlayerPublic, PlayerSlot, RoomState } from "../lib/protocol";
 import WorldMap from "../components/WorldMap";
 import ScoreBar from "../components/ScoreBar";
 import CountryInput from "../components/CountryInput";
@@ -12,13 +12,22 @@ interface GameOver {
   scores: Record<string, number>;
 }
 
+function slotColor(slot: PlayerSlot | undefined): string {
+  return slot === "p2" ? "var(--color-player2)" : "var(--color-player1)";
+}
+
+function otherSlot(slot: PlayerSlot | undefined): PlayerSlot {
+  return slot === "p2" ? "p1" : "p2";
+}
+
 export default function Match() {
   const { code = "" } = useParams();
   const socket = useSocket();
   const navigate = useNavigate();
-  const { identity, playerName, identityRef } = useSession();
+  const { identity, playerName, identityRef, setIdentity } = useSession();
 
   const [room, setRoom] = useState<RoomState | null>(null);
+  const [phase, setPhase] = useState<GamePhase | null>(null);
   const [total, setTotal] = useState<number>(0);
   const [endsAt, setEndsAt] = useState<number | null>(null);
   const [scores, setScores] = useState<Record<string, number>>({});
@@ -31,8 +40,16 @@ export default function Match() {
   const [rejectMsg, setRejectMsg] = useState<string | null>(null);
 
   const [gameOver, setGameOver] = useState<GameOver | null>(null);
-  const [rematchRequested, setRematchRequested] = useState(false);
+  const [myRematch, setMyRematch] = useState(false);
+  const [oppRematch, setOppRematch] = useState(false);
   const [showOpponent, setShowOpponent] = useState(false); // mobile toggle
+
+  /** 3-2-1 overlay: seconds left, "ready" (in countdown but no tick seen yet), or null. */
+  const [countdown, setCountdown] = useState<number | "ready" | null>(null);
+  /** Own socket dropped; waiting for socket.io to reconnect. */
+  const [reconnecting, setReconnecting] = useState(false);
+  /** Epoch ms when the opponent's reconnect grace runs out; null = connected. */
+  const [oppGraceEndsAt, setOppGraceEndsAt] = useState<number | null>(null);
 
   const myId = identity?.playerId ?? null;
   const myIdRef = useRef<string | null>(myId);
@@ -41,8 +58,14 @@ export default function Match() {
   useEffect(() => {
     function onRoomState(state: RoomState) {
       setRoom(state);
+      setPhase(state.phase);
+      if (state.phase === "countdown") {
+        setCountdown((c) => c ?? "ready");
+      } else {
+        setCountdown(null);
+      }
       if (state.total != null) setTotal(state.total);
-      if (state.endsAt != null) setEndsAt(state.endsAt);
+      if (state.endsAt != null && state.phase === "playing") setEndsAt(state.endsAt);
       // Rehydrate filled maps from snapshot if present.
       if (state.filled && myIdRef.current) {
         const mine = state.filled[myIdRef.current];
@@ -52,14 +75,38 @@ export default function Match() {
         }
       }
     }
+    function onJoined(p: {
+      playerId: string;
+      slot: PlayerSlot;
+      reconnectToken: string;
+      state: RoomState;
+    }) {
+      myIdRef.current = p.playerId;
+      setIdentity({
+        playerId: p.playerId,
+        slot: p.slot,
+        reconnectToken: p.reconnectToken,
+        roomCode: code,
+      });
+      setReconnecting(false);
+      if (p.state) onRoomState(p.state);
+    }
+    function onCountdown(p: { seconds: number }) {
+      setPhase("countdown");
+      setCountdown(p.seconds);
+    }
     function onGameStarted(p: { total: number; endsAt: number }) {
+      setPhase("playing");
+      setCountdown(null);
       setTotal(p.total);
       setEndsAt(p.endsAt);
       setGameOver(null);
       setMyFilled(new Set());
       setOppFilled(new Set());
       setScores({});
-      setRematchRequested(false);
+      setMyRematch(false);
+      setOppRematch(false);
+      setOppGraceEndsAt(null);
     }
     function onAnswerResult(p: {
       accepted: boolean;
@@ -99,18 +146,42 @@ export default function Match() {
       });
     }
     function onGameOver(p: GameOver) {
+      setPhase("ended");
+      setCountdown(null);
       setGameOver({ winnerId: p.winnerId, scores: p.scores });
       setScores(p.scores);
       setEndsAt(null);
+      setOppGraceEndsAt(null);
     }
     function onRematchStart() {
       navigate(`/room/${code}`);
     }
-    function onRematchRequested() {
-      setRematchRequested(true);
+    function onRematchRequested(p?: { playerId?: string }) {
+      // Broadcast to the whole room: distinguish my request from theirs.
+      if (p?.playerId != null && p.playerId !== myIdRef.current) {
+        setOppRematch(true);
+      } else {
+        setMyRematch(true);
+      }
+    }
+    function onOpponentDisconnected(p: { playerId: string; graceSeconds: number }) {
+      if (p.playerId === myIdRef.current) return;
+      setOppGraceEndsAt(Date.now() + p.graceSeconds * 1000);
+    }
+    function onOpponentReconnected(p: { playerId: string }) {
+      if (p.playerId === myIdRef.current) return;
+      setOppGraceEndsAt(null);
+    }
+    function onDisconnect() {
+      setReconnecting(true);
+    }
+    function onConnect() {
+      setReconnecting(false);
     }
 
     socket.on("room_state", onRoomState);
+    socket.on("joined", onJoined);
+    socket.on("countdown", onCountdown);
     socket.on("game_started", onGameStarted);
     socket.on("answer_result", onAnswerResult);
     socket.on("score_update", onScoreUpdate);
@@ -118,6 +189,10 @@ export default function Match() {
     socket.on("game_over", onGameOver);
     socket.on("rematch_start", onRematchStart);
     socket.on("rematch_requested", onRematchRequested);
+    socket.on("opponent_disconnected", onOpponentDisconnected);
+    socket.on("opponent_reconnected", onOpponentReconnected);
+    socket.on("disconnect", onDisconnect);
+    socket.on("connect", onConnect);
 
     // Ensure we're subscribed (covers hard refresh onto /game/:code).
     if (!room) {
@@ -130,6 +205,8 @@ export default function Match() {
 
     return () => {
       socket.off("room_state", onRoomState);
+      socket.off("joined", onJoined);
+      socket.off("countdown", onCountdown);
       socket.off("game_started", onGameStarted);
       socket.off("answer_result", onAnswerResult);
       socket.off("score_update", onScoreUpdate);
@@ -137,6 +214,10 @@ export default function Match() {
       socket.off("game_over", onGameOver);
       socket.off("rematch_start", onRematchStart);
       socket.off("rematch_requested", onRematchRequested);
+      socket.off("opponent_disconnected", onOpponentDisconnected);
+      socket.off("opponent_reconnected", onOpponentReconnected);
+      socket.off("disconnect", onDisconnect);
+      socket.off("connect", onConnect);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, code]);
@@ -146,10 +227,12 @@ export default function Match() {
   const me = room?.players.find((p) => p.id === myId);
   const opponent = room?.players.find((p) => p.id !== myId);
 
-  const myColor =
-    me?.slot === "p2" ? "var(--color-player2)" : "var(--color-player1)";
-  const oppColor =
-    me?.slot === "p2" ? "var(--color-player1)" : "var(--color-player2)";
+  const mySlot = me?.slot ?? identity?.slot;
+  const myColor = slotColor(mySlot);
+  const oppColor = slotColor(opponent?.slot ?? otherSlot(mySlot));
+
+  // Only accept guesses while the round is actually running.
+  const inputDisabled = gameOver != null || phase !== "playing";
 
   const effectiveScores = useMemo(() => {
     const s = { ...scores };
@@ -164,7 +247,7 @@ export default function Match() {
   }
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden">
+    <main className="relative flex h-screen flex-col overflow-hidden">
       {/* 1. Score bar */}
       <ScoreBar
         p1={p1}
@@ -210,6 +293,11 @@ export default function Match() {
             {showOpponent ? "View yours" : "View opponent"}
           </button>
         </div>
+
+        {/* Opponent disconnected banner */}
+        {oppGraceEndsAt != null && !gameOver && (
+          <OpponentDisconnectedBanner endsAt={oppGraceEndsAt} />
+        )}
       </section>
 
       {/* 3. Input */}
@@ -221,9 +309,29 @@ export default function Match() {
           onSubmit={handleSubmit}
           clearSignal={clearSignal}
           rejectSignal={rejectSignal}
-          disabled={gameOver != null}
+          disabled={inputDisabled}
         />
       </section>
+
+      {/* 3-2-1 countdown overlay */}
+      {countdown != null && !gameOver && (
+        <div
+          data-testid="countdown-overlay"
+          aria-live="assertive"
+          className="absolute inset-0 z-20 flex items-center justify-center bg-background/80"
+        >
+          {countdown === "ready" ? (
+            <p className="text-5xl font-bold">Get ready</p>
+          ) : (
+            <p
+              key={countdown}
+              className="animate-[countdown-pop_0.9s_ease-out] text-9xl font-bold tabular-nums"
+            >
+              {countdown}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Game over overlay */}
       {gameOver && (
@@ -233,11 +341,27 @@ export default function Match() {
           opponent={opponent}
           onRematch={() => {
             socket.emit("request_rematch");
-            setRematchRequested(true);
+            setMyRematch(true);
           }}
-          rematchRequested={rematchRequested}
-          onHome={() => navigate("/")}
+          myRematch={myRematch}
+          oppRematch={oppRematch}
+          onHome={() => {
+            socket.emit("leave_room");
+            setIdentity(null);
+            navigate("/");
+          }}
         />
+      )}
+
+      {/* Own connection lost: keep the user here while socket.io retries. */}
+      {reconnecting && (
+        <div
+          role="alert"
+          className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-background/90"
+        >
+          <p className="text-2xl font-bold">Reconnecting…</p>
+          <p className="text-sm text-muted">Hang tight — your seat is saved.</p>
+        </div>
       )}
     </main>
   );
@@ -264,23 +388,44 @@ function MapPane({
   );
 }
 
+function OpponentDisconnectedBanner({ endsAt }: { endsAt: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, []);
+  const secs = Math.max(0, Math.ceil((endsAt - now) / 1000));
+  return (
+    <div
+      role="status"
+      className="absolute left-1/2 top-14 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg border border-accent bg-surface px-4 py-2 text-sm font-semibold text-accent shadow"
+    >
+      Opponent disconnected — waiting {secs}s
+    </div>
+  );
+}
+
 function GameOverOverlay({
   gameOver,
   me,
   opponent,
   onRematch,
-  rematchRequested,
+  myRematch,
+  oppRematch,
   onHome,
 }: {
   gameOver: GameOver;
   me?: PlayerPublic;
   opponent?: PlayerPublic;
   onRematch: () => void;
-  rematchRequested: boolean;
+  myRematch: boolean;
+  oppRematch: boolean;
   onHome: () => void;
 }) {
   const myScore = me ? (gameOver.scores[me.id] ?? 0) : 0;
   const oppScore = opponent ? (gameOver.scores[opponent.id] ?? 0) : 0;
+  const myColor = slotColor(me?.slot);
+  const oppColor = slotColor(opponent?.slot ?? otherSlot(me?.slot));
   const result =
     gameOver.winnerId == null
       ? "It's a tie!"
@@ -295,26 +440,32 @@ function GameOverOverlay({
         <div className="mt-6 flex items-center justify-around">
           <div>
             <p className="text-sm text-muted">{me?.name ?? "You"}</p>
-            <p className="text-3xl font-bold" style={{ color: "var(--color-player1)" }}>
+            <p data-testid="my-final-score" className="text-3xl font-bold" style={{ color: myColor }}>
               {myScore}
             </p>
           </div>
           <span className="text-2xl text-muted">vs</span>
           <div>
             <p className="text-sm text-muted">{opponent?.name ?? "Opponent"}</p>
-            <p className="text-3xl font-bold" style={{ color: "var(--color-player2)" }}>
+            <p data-testid="opp-final-score" className="text-3xl font-bold" style={{ color: oppColor }}>
               {oppScore}
             </p>
           </div>
         </div>
 
         <div className="mt-8 flex flex-col gap-3">
+          {oppRematch && !myRematch && (
+            <p className="text-sm font-semibold" style={{ color: oppColor }}>
+              Opponent wants a rematch
+            </p>
+          )}
           <button
             onClick={onRematch}
-            disabled={rematchRequested}
-            className="rounded-xl bg-player1 px-6 py-3 font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
+            disabled={myRematch}
+            className="rounded-xl px-6 py-3 font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
+            style={{ background: myColor }}
           >
-            {rematchRequested ? "Waiting for opponent…" : "Rematch"}
+            {myRematch ? "Waiting for opponent…" : oppRematch ? "Accept rematch" : "Rematch"}
           </button>
           <button
             onClick={onHome}

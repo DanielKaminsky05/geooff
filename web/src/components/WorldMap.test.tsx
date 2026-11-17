@@ -21,6 +21,18 @@ describe("WorldMap", () => {
     expect(us?.getAttribute("fill")).toBe("var(--color-land)");
   });
 
+  it("does not leak unguessed country names via <title> tooltips", () => {
+    const { container } = render(
+      <WorldMap filledIso={new Set(["fr"])} color="var(--color-player1)" />,
+    );
+    const fr = container.querySelector('path[data-iso="fr"]');
+    const us = container.querySelector('path[data-iso="us"]');
+    expect(us?.querySelector("title")).toBeNull();
+    expect(fr?.querySelector("title")?.textContent).toBeTruthy();
+    // Only the one filled country carries a title.
+    expect(container.querySelectorAll("path > title")).toHaveLength(1);
+  });
+
   it("uses ISO alpha-2 lowercase ids from the map package", () => {
     const { container } = render(
       <WorldMap filledIso={new Set()} color="var(--color-player1)" />,

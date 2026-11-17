@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession, defaultName } from "../lib/session";
@@ -28,8 +28,15 @@ export default function Lobby() {
   const [room, setRoom] = useState<RoomState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Join on mount (create flow already joined, but re-emitting is harmless /
-  // supports direct-link joins and reconnects).
+  // Refs survive StrictMode's simulated unmount/remount, so they let us emit
+  // join_room exactly once per (socket, code) for this Lobby instance, and
+  // remember whether the server has already seated us in this room.
+  const joinSentRef = useRef<{ socket: unknown; code: string } | null>(null);
+  const joinedCodeRef = useRef<string | null>(null);
+
+  // Join on mount (create flow already joined, but re-emitting with the
+  // reconnect token is harmless / supports direct-link joins, reconnects and
+  // returning here after a rematch).
   useEffect(() => {
     const name = playerName.trim() || defaultName();
     if (!playerName.trim()) setPlayerName(name);
@@ -44,13 +51,18 @@ export default function Lobby() {
         playerId: payload.playerId,
         slot: payload.slot,
         reconnectToken: payload.reconnectToken,
+        roomCode: payload.state.code,
       });
+      if (payload.state.code === code) joinedCodeRef.current = code;
       setRoom(payload.state);
     }
     function onRoomState(state: RoomState) {
       setRoom(state);
     }
     function onError(payload: { code: string; message: string }) {
+      // A duplicate join (e.g. a stray re-emit) can bounce off our own seat as
+      // room_full; that's not fatal once we're already seated in this room.
+      if (payload.code === "room_full" && joinedCodeRef.current === code) return;
       setError(payload.message);
     }
     function goToGame() {
@@ -63,12 +75,17 @@ export default function Lobby() {
     socket.on("countdown", goToGame);
     socket.on("game_started", goToGame);
 
-    // Only emit join if we don't already hold identity for this session.
-    socket.emit("join_room", {
-      code,
-      playerName: name,
-      reconnectToken: identityRef.current?.reconnectToken,
-    });
+    const sent = joinSentRef.current;
+    if (!sent || sent.socket !== socket || sent.code !== code) {
+      joinSentRef.current = { socket, code };
+      const current = identityRef.current;
+      // Only offer a reconnect token that belongs to this room.
+      const reconnectToken =
+        current && (!current.roomCode || current.roomCode === code)
+          ? current.reconnectToken
+          : undefined;
+      socket.emit("join_room", { code, playerName: name, reconnectToken });
+    }
 
     return () => {
       socket.off("joined", onJoined);
@@ -109,12 +126,23 @@ export default function Lobby() {
     }
   }
 
+  function leave() {
+    socket.emit("leave_room");
+    setIdentity(null);
+    navigate("/");
+  }
+
+  function backHome() {
+    setIdentity(null);
+    navigate("/");
+  }
+
   if (error) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
         <p className="text-accent">{error}</p>
         <button
-          onClick={() => navigate("/")}
+          onClick={backHome}
           className="rounded-xl bg-surface-raised px-5 py-3 font-semibold"
         >
           Back to home
@@ -130,7 +158,7 @@ export default function Lobby() {
           geo<span className="text-player1">off</span> lobby
         </h1>
         <button
-          onClick={() => navigate("/")}
+          onClick={leave}
           className="text-sm text-muted hover:text-foreground"
         >
           Leave

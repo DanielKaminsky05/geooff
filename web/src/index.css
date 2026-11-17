@@ -53,3 +53,19 @@ body {
     transform: translateX(4px);
   }
 }
+
+/* Pop-in for each 3-2-1 countdown tick. */
+@keyframes countdown-pop {
+  0% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  30% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.85;
+  }
+}

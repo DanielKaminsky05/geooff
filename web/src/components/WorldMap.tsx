@@ -44,7 +44,9 @@ function WorldMapInner({ filledIso, color, className }: WorldMapProps) {
                   stroke="var(--color-border)"
                   strokeWidth={0.3}
                 >
-                  <title>{loc.name}</title>
+                  {/* Only reveal names of countries already guessed —
+                      a tooltip on unguessed ones would leak the answer. */}
+                  {filled && <title>{loc.name}</title>}
                 </path>
               );
             })}
