@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import { groupByContinent } from "../lib/continents";
+import { groupByContinent, type Continent, type ContinentGroup } from "../lib/continents";
 import ProgressBar from "./ProgressBar";
 
 export interface NamedCountriesProps {
@@ -9,12 +9,36 @@ export interface NamedCountriesProps {
   colorVar: string;
 }
 
+/** Header color per continent (muted to sit on the dark theme). */
+const CONTINENT_COLORS: Record<Continent, string> = {
+  Europe: "#3355cc",
+  Asia: "#b83a3a",
+  Africa: "#8a3fa6",
+  "North America": "#c98516",
+  "South America": "#2f8a3e",
+  Oceania: "#2f7fc1",
+};
+
+/** Column layout, classic quiz style: Oceania stacks under South America. */
+const COLUMNS: Continent[][] = [
+  ["Europe"],
+  ["Asia"],
+  ["Africa"],
+  ["North America"],
+  ["South America", "Oceania"],
+];
+
 /**
- * The player's correct guesses, grouped by continent with a per-continent
- * count. Lives below the game screen; reached by scrolling.
+ * The player's correct guesses as ruled lists, one per continent: a colored
+ * header, then one row per country slot — named countries fill from the top
+ * (alphabetical), the rest stay blank to show what's left.
  */
 function NamedCountriesInner({ filled, colorVar }: NamedCountriesProps) {
   const groups = useMemo(() => groupByContinent(filled), [filled]);
+  const byContinent = useMemo(
+    () => new Map(groups.map((g) => [g.continent, g])),
+    [groups],
+  );
   const totalAll = groups.reduce((n, g) => n + g.total, 0);
 
   return (
@@ -37,49 +61,51 @@ function NamedCountriesInner({ filled, colorVar }: NamedCountriesProps) {
         />
       </div>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {groups.map(({ continent, names, total }) => (
-          <div
-            key={continent}
-            data-testid={`continent-${continent}`}
-            className="rounded-xl border border-border bg-surface p-4"
-          >
-            <div className="flex items-baseline justify-between gap-2">
-              <h3 className="font-semibold">{continent}</h3>
-              <span className="text-sm tabular-nums text-muted">
-                <span style={{ color: names.length > 0 ? colorVar : undefined }}>
-                  {names.length}
-                </span>{" "}
-                / {total}
-              </span>
-            </div>
-            <div className="mt-2">
-              <ProgressBar
-                value={names.length}
-                max={total}
-                colorVar={colorVar}
-                heightClass="h-1.5"
-                label={`${continent} progress`}
-              />
-            </div>
-            {names.length === 0 ? (
-              <p className="mt-2 text-sm text-muted">None yet</p>
-            ) : (
-              <ul className="mt-2 flex flex-wrap gap-1.5">
-                {names.map((name) => (
-                  <li
-                    key={name}
-                    className="rounded-md bg-surface-raised px-2 py-0.5 text-sm"
-                  >
-                    {name}
-                  </li>
-                ))}
-              </ul>
-            )}
+      <div className="mt-6 grid grid-cols-2 items-start gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {COLUMNS.map((column) => (
+          <div key={column.join("+")} className="flex flex-col gap-3">
+            {column.map((continent) => (
+              <ContinentList key={continent} group={byContinent.get(continent)!} />
+            ))}
           </div>
         ))}
       </div>
     </section>
+  );
+}
+
+function ContinentList({ group }: { group: ContinentGroup }) {
+  const { continent, names, total } = group;
+  const blanks = total - names.length;
+  return (
+    <div data-testid={`continent-${continent}`}>
+      <h3
+        className="flex items-baseline justify-between gap-2 px-3 py-1.5 text-sm font-semibold text-white"
+        style={{ background: CONTINENT_COLORS[continent] }}
+      >
+        <span>{continent}</span>
+        <span className="tabular-nums opacity-90">
+          {names.length} / {total}
+        </span>
+      </h3>
+      <ol className="border-x border-border">
+        {names.map((name) => (
+          <li key={name} className="truncate border-b border-border px-3 py-1 text-sm">
+            {name}
+          </li>
+        ))}
+        {Array.from({ length: blanks }, (_, i) => (
+          <li
+            key={`blank-${i}`}
+            aria-hidden="true"
+            data-testid="blank-row"
+            className="border-b border-border px-3 py-1 text-sm"
+          >
+            &nbsp;
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 
