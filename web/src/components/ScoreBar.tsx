@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { PlayerPublic } from "../lib/protocol";
+import ProgressBar from "./ProgressBar";
 
 export interface ScoreBarProps {
   p1?: PlayerPublic;
@@ -45,14 +46,30 @@ function PlayerScore({
   colorVar: string;
   align: "left" | "right";
 }) {
+  const right = align === "right";
   return (
-    <div className={align === "right" ? "text-right" : "text-left"}>
+    <div className={right ? "text-right" : "text-left"}>
       <div className="truncate text-sm font-semibold" style={{ color: colorVar }}>
         {player?.name ?? "Waiting…"}
         {player && !player.connected ? " (offline)" : ""}
       </div>
-      <div className="text-xl font-bold tabular-nums" style={{ color: colorVar }}>
-        {score} <span className="text-muted">/ {total}</span>
+      <div className={`mt-1 flex items-center gap-3 ${right ? "flex-row-reverse" : ""}`}>
+        <div
+          className="shrink-0 text-xl font-bold tabular-nums"
+          style={{ color: colorVar }}
+        >
+          {score} <span className="text-sm text-muted">/ {total}</span>
+        </div>
+        <div className="max-w-80 flex-1">
+          <ProgressBar
+            value={score}
+            max={total}
+            colorVar={colorVar}
+            from={right ? "right" : "left"}
+            heightClass="h-2.5"
+            label={`${player?.name ?? "Player"} progress`}
+          />
+        </div>
       </div>
     </div>
   );

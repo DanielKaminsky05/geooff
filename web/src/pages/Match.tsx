@@ -7,6 +7,7 @@ import WorldMap from "../components/WorldMap";
 import ScoreBar from "../components/ScoreBar";
 import CountryInput from "../components/CountryInput";
 import NamedCountries from "../components/NamedCountries";
+import ProgressBar from "../components/ProgressBar";
 
 interface GameOver {
   winnerId: string | null;
@@ -497,6 +498,9 @@ function GameOverOverlay({
           <p data-testid="my-final-score" className="text-5xl font-bold tabular-nums" style={{ color: myColor }}>
             {myScore} <span className="text-2xl text-muted">/ {total}</span>
           </p>
+          <div className="mt-3">
+            <ProgressBar value={myScore} max={total} colorVar={myColor} heightClass="h-3" label="Your progress" />
+          </div>
           <div className="mt-8 flex flex-col gap-3">
             <button
               onClick={onRematch}
@@ -522,20 +526,21 @@ function GameOverOverlay({
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/90 px-6">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 text-center">
         <h2 className="text-3xl font-bold">{result}</h2>
-        <div className="mt-6 flex items-center justify-around">
-          <div>
-            <p className="text-sm text-muted">{me?.name ?? "You"}</p>
-            <p data-testid="my-final-score" className="text-3xl font-bold" style={{ color: myColor }}>
-              {myScore}
-            </p>
-          </div>
-          <span className="text-2xl text-muted">vs</span>
-          <div>
-            <p className="text-sm text-muted">{opponent?.name ?? "Opponent"}</p>
-            <p data-testid="opp-final-score" className="text-3xl font-bold" style={{ color: oppColor }}>
-              {oppScore}
-            </p>
-          </div>
+        <div className="mt-6 flex flex-col gap-4 text-left">
+          <FinalScore
+            name={me?.name ?? "You"}
+            score={myScore}
+            total={total}
+            colorVar={myColor}
+            testId="my-final-score"
+          />
+          <FinalScore
+            name={opponent?.name ?? "Opponent"}
+            score={oppScore}
+            total={total}
+            colorVar={oppColor}
+            testId="opp-final-score"
+          />
         </div>
 
         <div className="mt-8 flex flex-col gap-3">
@@ -559,6 +564,34 @@ function GameOverOverlay({
             Back to home
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function FinalScore({
+  name,
+  score,
+  total,
+  colorVar,
+  testId,
+}: {
+  name: string;
+  score: number;
+  total: number;
+  colorVar: string;
+  testId: string;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="truncate text-sm text-muted">{name}</p>
+        <p data-testid={testId} className="text-2xl font-bold tabular-nums" style={{ color: colorVar }}>
+          {score}
+        </p>
+      </div>
+      <div className="mt-1">
+        <ProgressBar value={score} max={total} colorVar={colorVar} heightClass="h-2.5" label={`${name} final score`} />
       </div>
     </div>
   );

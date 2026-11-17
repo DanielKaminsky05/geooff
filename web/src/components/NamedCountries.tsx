@@ -1,5 +1,6 @@
 import { memo, useMemo } from "react";
 import { groupByContinent } from "../lib/continents";
+import ProgressBar from "./ProgressBar";
 
 export interface NamedCountriesProps {
   /** ISO codes the player has named. */
@@ -14,6 +15,7 @@ export interface NamedCountriesProps {
  */
 function NamedCountriesInner({ filled, colorVar }: NamedCountriesProps) {
   const groups = useMemo(() => groupByContinent(filled), [filled]);
+  const totalAll = groups.reduce((n, g) => n + g.total, 0);
 
   return (
     <section
@@ -21,9 +23,19 @@ function NamedCountriesInner({ filled, colorVar }: NamedCountriesProps) {
       aria-label="Your countries"
       className="mx-auto w-full max-w-6xl px-4 py-8"
     >
-      <h2 className="text-xl font-bold">
-        Your countries <span style={{ color: colorVar }}>{filled.size}</span>
-      </h2>
+      <div className="flex items-center gap-4">
+        <h2 className="shrink-0 text-xl font-bold">
+          Your countries <span style={{ color: colorVar }}>{filled.size}</span>
+          <span className="text-base font-semibold text-muted"> / {totalAll}</span>
+        </h2>
+        <ProgressBar
+          value={filled.size}
+          max={totalAll}
+          colorVar={colorVar}
+          heightClass="h-2.5"
+          label="Total progress"
+        />
+      </div>
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {groups.map(({ continent, names, total }) => (
@@ -40,6 +52,15 @@ function NamedCountriesInner({ filled, colorVar }: NamedCountriesProps) {
                 </span>{" "}
                 / {total}
               </span>
+            </div>
+            <div className="mt-2">
+              <ProgressBar
+                value={names.length}
+                max={total}
+                colorVar={colorVar}
+                heightClass="h-1.5"
+                label={`${continent} progress`}
+              />
             </div>
             {names.length === 0 ? (
               <p className="mt-2 text-sm text-muted">None yet</p>
