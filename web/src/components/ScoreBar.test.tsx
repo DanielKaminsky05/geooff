@@ -100,6 +100,18 @@ describe("ScoreBar", () => {
       expect(screen.getByTestId("timer").textContent).toBe("1:00");
     });
 
+    it("shows the correct time immediately when endsAt arrives after mount", () => {
+      vi.useFakeTimers();
+      const mountedAt = Date.now();
+      const props = { p1, p2, scores: { a: 0, b: 0 }, total: 196, category: "Countries" };
+      const { rerender } = render(<ScoreBar {...props} endsAt={null} />);
+
+      // Countdown takes 4s before the round's endsAt is known.
+      vi.setSystemTime(mountedAt + 4_000);
+      rerender(<ScoreBar {...props} endsAt={mountedAt + 4_000 + 300_000} />);
+      expect(screen.getByTestId("timer").textContent).toBe("5:00");
+    });
+
     it("does not go negative and turns coral under 30s", () => {
       vi.useFakeTimers();
       const now = Date.now();

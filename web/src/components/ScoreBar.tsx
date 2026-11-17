@@ -22,6 +22,8 @@ function useCountdown(endsAt: number | null): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (endsAt == null) return;
+    // Resync immediately: `now` may be stale from mount (e.g. during countdown).
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, [endsAt]);
