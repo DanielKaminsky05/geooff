@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession, defaultName } from "../lib/session";
 import {
@@ -23,6 +23,8 @@ export default function Lobby() {
   const { code = "" } = useParams();
   const socket = useSocket();
   const navigate = useNavigate();
+  const location = useLocation();
+  const autoStartSolo = (location.state as { autoStartSolo?: boolean } | null)?.autoStartSolo === true;
   const { playerName, setPlayerName, identity, setIdentity, identityRef } = useSession();
 
   const [room, setRoom] = useState<RoomState | null>(null);
@@ -113,6 +115,17 @@ export default function Lobby() {
   const p2 = room?.players.find((p) => p.slot === "p2");
   const bothReady =
     room != null && room.players.length === 2 && room.players.every((p) => p.ready);
+  const alone = room != null && room.players.length === 1;
+
+  // "Play solo" from Home: start as soon as the server has seated us as host.
+  const soloStartSentRef = useRef(false);
+  useEffect(() => {
+    if (!autoStartSolo || soloStartSentRef.current) return;
+    if (room?.phase === "lobby" && alone && isHost) {
+      soloStartSentRef.current = true;
+      socket.emit("start_game");
+    }
+  }, [autoStartSolo, room, alone, isHost, socket]);
 
   const [copied, setCopied] = useState(false);
   async function copyCode() {
@@ -232,7 +245,16 @@ export default function Lobby() {
           {me?.ready ? "Not ready" : "Ready up"}
         </button>
 
-        {isHost && (
+        {isHost && alone && (
+          <button
+            onClick={() => socket.emit("start_game")}
+            className="rounded-xl border border-border bg-surface-raised px-6 py-4 text-lg font-semibold transition hover:brightness-125"
+          >
+            Play solo
+          </button>
+        )}
+
+        {isHost && !alone && (
           <button
             onClick={() => socket.emit("start_game")}
             disabled={!bothReady}

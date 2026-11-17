@@ -1,6 +1,6 @@
 // Two-player headless smoke test for geooff: two separate Chromium instances
 // play a full match (lobby → countdown → play → refresh/reconnect → game over
-// → rematch → leave). Requires server (:3001) and web (:5173) running.
+// → rematch → leave → solo). Requires server (:3001) and web (:5173) running.
 // Exit code 1 if any check fails.
 import fs from "node:fs";
 import { chromium } from "playwright";
@@ -145,6 +145,32 @@ try {
   await a.getByText("Waiting…").waitFor({ timeout: 5000 });
   check("Bob leaves → Alice sees empty seat", true);
   await shot(a, "7-after-leave-alice");
+
+  // --- Solo: Bob from Home, Alice from her now-empty lobby ---
+  const enabled = (p) => p.waitForFunction(
+    () => document.querySelector('[aria-label="Country guess"]')?.disabled === false, null, { timeout: 8000 });
+  await b.getByRole("button", { name: "Play solo" }).click();
+  await b.waitForURL(/\/game\//, { timeout: 8000 });
+  await enabled(b);
+  check("Home → Play solo drops straight into a round", true);
+  check("Solo shows a single map", (await maps(b).count()) === 1);
+  await guess(b, "brazil");
+  await b.waitForFunction(() => document.querySelector('[aria-label="Country guess"]').value === "", null, { timeout: 3000 });
+  await shot(b, "8-solo-playing-bob");
+  await b.getByRole("button", { name: "Give up" }).click();
+  await b.getByRole("heading", { name: "Round over" }).waitFor({ timeout: 3000 });
+  const soloScore = await b.getByTestId("my-final-score").innerText();
+  check("Solo results show score out of total", /1\s*\/\s*197/.test(soloScore), soloScore);
+  await shot(b, "9-solo-over-bob");
+  await b.getByRole("button", { name: "Play again" }).click();
+  await enabled(b);
+  check("Play again restarts the solo round in place",
+    /\/game\//.test(b.url()) && (await filled(b, 0, "br")) === "false");
+
+  await a.getByRole("button", { name: "Play solo" }).click();
+  await a.waitForURL(/\/game\//, { timeout: 8000 });
+  await enabled(a);
+  check("Lobby → Play solo works for a host left alone", (await maps(a).count()) === 1);
 } catch (e) {
   check("Unexpected error", false, e.message.split("\n")[0]);
   await shot(a, "error-alice").catch(() => {});

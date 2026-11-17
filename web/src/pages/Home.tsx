@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession, defaultName } from "../lib/session";
@@ -8,7 +8,8 @@ export default function Home() {
   const navigate = useNavigate();
   const { playerName, setPlayerName, setIdentity } = useSession();
   const [code, setCode] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<"versus" | "solo" | null>(null);
+  const soloRef = useRef(false);
 
   useEffect(() => {
     function onJoined(payload: {
@@ -23,7 +24,10 @@ export default function Home() {
         reconnectToken: payload.reconnectToken,
         roomCode: payload.state.code,
       });
-      navigate(`/room/${payload.state.code}`);
+      // Solo: the lobby starts the round as soon as it has seated us.
+      const url = `/room/${payload.state.code}`;
+      if (soloRef.current) navigate(url, { state: { autoStartSolo: true } });
+      else navigate(url);
     }
     socket.on("joined", onJoined);
     return () => {
@@ -31,10 +35,11 @@ export default function Home() {
     };
   }, [socket, navigate, setIdentity]);
 
-  function handleCreate() {
+  function handleCreate(solo = false) {
     const name = playerName.trim() || defaultName();
     setPlayerName(name);
-    setCreating(true);
+    soloRef.current = solo;
+    setCreating(solo ? "solo" : "versus");
     socket.emit("create_room", { playerName: name });
   }
 
@@ -74,11 +79,20 @@ export default function Home() {
 
         <button
           type="button"
-          onClick={handleCreate}
-          disabled={creating}
+          onClick={() => handleCreate()}
+          disabled={creating != null}
           className="rounded-xl bg-player1 px-6 py-4 text-lg font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
         >
-          {creating ? "Creating…" : "Create a game"}
+          {creating === "versus" ? "Creating…" : "Create a game"}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => handleCreate(true)}
+          disabled={creating != null}
+          className="rounded-xl border border-border bg-surface px-6 py-3 font-semibold transition hover:brightness-125 disabled:opacity-60"
+        >
+          {creating === "solo" ? "Starting…" : "Play solo"}
         </button>
 
         <div className="flex items-center gap-3 text-sm text-muted">

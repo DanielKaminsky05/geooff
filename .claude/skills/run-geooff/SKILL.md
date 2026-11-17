@@ -1,6 +1,6 @@
 ---
 name: run-geooff
-description: Launch the geooff game (server + web) and drive two headless Chromium players through a full match — lobby, countdown, play, mid-match refresh/reconnect, game over, rematch, leave. Use to run, screenshot, or verify the app end to end.
+description: Launch the geooff game (server + web) and drive two headless Chromium players through a full match — lobby, countdown, play, mid-match refresh/reconnect, game over, rematch, leave — then both solo entry points (Home → Play solo, lone host in lobby). Use to run, screenshot, or verify the app end to end.
 ---
 
 # Run geooff and play a two-player match headless

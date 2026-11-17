@@ -36,6 +36,8 @@ export interface Room {
   settings: RoomSettings;
   players: Seat[];
   endsAt?: number;
+  /** true when the current/last round was started with a single player. */
+  solo?: boolean;
   /** handle for the round-end timer. */
   roundTimer?: ReturnType<typeof setTimeout>;
   /** handle for the countdown sequence. */
@@ -140,6 +142,7 @@ export function roomStateOf(room: Room, total: number = categoryTotal): RoomStat
     total,
   };
   if (room.endsAt !== undefined) state.endsAt = room.endsAt;
+  if (room.solo) state.solo = true;
   return state;
 }
 

@@ -9,6 +9,8 @@ export interface ScoreBarProps {
   /** epoch ms when the round ends. */
   endsAt: number | null;
   category: string;
+  /** Solo round: no opponent column. */
+  solo?: boolean;
 }
 
 function fmt(ms: number): string {
@@ -56,7 +58,7 @@ function PlayerScore({
   );
 }
 
-export function ScoreBar({ p1, p2, scores, total, endsAt, category }: ScoreBarProps) {
+export function ScoreBar({ p1, p2, scores, total, endsAt, category, solo }: ScoreBarProps) {
   const remaining = useCountdown(endsAt);
   const p1Score = p1 ? (scores[p1.id] ?? p1.score ?? 0) : 0;
   const p2Score = p2 ? (scores[p2.id] ?? p2.score ?? 0) : 0;
@@ -86,13 +88,15 @@ export function ScoreBar({ p1, p2, scores, total, endsAt, category }: ScoreBarPr
       </div>
 
       <div className="min-w-0 flex-1">
-        <PlayerScore
-          player={p2}
-          score={p2Score}
-          total={total}
-          colorVar="var(--color-player2)"
-          align="right"
-        />
+        {!solo && (
+          <PlayerScore
+            player={p2}
+            score={p2Score}
+            total={total}
+            colorVar="var(--color-player2)"
+            align="right"
+          />
+        )}
       </div>
     </div>
   );

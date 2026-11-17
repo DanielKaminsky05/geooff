@@ -281,3 +281,53 @@ describe("<Match>", () => {
     expect(screen.getByLabelText("Country guess")).toBeDisabled();
   });
 });
+
+describe("<Match> solo", () => {
+  const soloState = (over: Partial<RoomState> = {}) =>
+    roomState({ solo: true, players: [player({ id: "a", slot: "p1", name: "Alice" })], ...over });
+
+  beforeEach(() => {
+    socket = createMockSocket();
+    identity = { playerId: "a", slot: "p1", reconnectToken: "tok" };
+    navigate.mockClear();
+    setIdentity.mockClear();
+  });
+
+  it("shows only my map and no opponent column", () => {
+    renderMatch();
+    socket.__server("room_state", soloState());
+    expect(screen.getAllByTestId("world-map").filter((m) => !m.closest(".hidden"))).toHaveLength(1);
+    expect(screen.queryByText(/Opponent/)).toBeNull();
+    expect(screen.queryByText("Waiting…")).toBeNull();
+  });
+
+  it("Give up emits give_up while playing", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", soloState());
+    await user.click(screen.getByRole("button", { name: "Give up" }));
+    expect(socket.__emitted.some((e) => e.event === "give_up")).toBe(true);
+  });
+
+  it("game over shows my score out of total and Play again restarts in place", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", soloState());
+    socket.__server("game_over", { winnerId: "a", scores: { a: 12 } });
+
+    expect(screen.getByText("Round over")).toBeInTheDocument();
+    expect(screen.queryByText("You win!")).toBeNull();
+    expect(screen.getByTestId("my-final-score").textContent).toContain("12");
+    expect(screen.getByTestId("my-final-score").textContent).toContain("/ 196");
+
+    await user.click(screen.getByRole("button", { name: "Play again" }));
+    expect(socket.__emitted.some((e) => e.event === "request_rematch")).toBe(true);
+
+    // Server restarts the round: overlay gives way to the countdown.
+    socket.__server("room_state", soloState({ phase: "countdown" }));
+    socket.__server("countdown", { seconds: 3 });
+    expect(screen.queryByText("Round over")).toBeNull();
+    expect(screen.getByTestId("countdown-overlay")).toBeInTheDocument();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+});

@@ -59,6 +59,7 @@ export default function Match() {
     function onRoomState(state: RoomState) {
       setRoom(state);
       setPhase(state.phase);
+      if (state.phase !== "ended") setGameOver(null);
       if (state.phase === "countdown") {
         setCountdown((c) => c ?? "ready");
       } else {
@@ -94,6 +95,8 @@ export default function Match() {
     function onCountdown(p: { seconds: number }) {
       setPhase("countdown");
       setCountdown(p.seconds);
+      setGameOver(null);
+      setMyRematch(false);
     }
     function onGameStarted(p: { total: number; endsAt: number }) {
       setPhase("playing");
@@ -227,6 +230,7 @@ export default function Match() {
   const me = room?.players.find((p) => p.id === myId);
   const opponent = room?.players.find((p) => p.id !== myId);
 
+  const solo = room?.solo === true;
   const mySlot = me?.slot ?? identity?.slot;
   const myColor = slotColor(mySlot);
   const oppColor = slotColor(opponent?.slot ?? otherSlot(mySlot));
@@ -250,8 +254,9 @@ export default function Match() {
     <main className="relative flex h-screen flex-col overflow-hidden">
       {/* 1. Score bar */}
       <ScoreBar
-        p1={p1}
-        p2={p2}
+        p1={solo ? me : p1}
+        p2={solo ? undefined : p2}
+        solo={solo}
         scores={effectiveScores}
         total={total}
         endsAt={endsAt}
@@ -260,39 +265,52 @@ export default function Match() {
 
       {/* 2. Maps */}
       <section className="relative min-h-0 flex-1">
-        {/* Desktop: side by side */}
-        <div className="hidden h-full md:grid md:grid-cols-2">
+        {/* Solo: just your map */}
+        {solo && (
           <MapPane
             title={`You${me ? ` · ${me.name}` : ""}`}
             colorVar={myColor}
             filled={myFilled}
-            borderRight
           />
-          <MapPane
-            title={`Opponent${opponent ? ` · ${opponent.name}` : ""}`}
-            colorVar={oppColor}
-            filled={oppFilled}
-          />
-        </div>
+        )}
 
-        {/* Mobile: single map + toggle */}
-        <div className="flex h-full flex-col md:hidden">
-          <MapPane
-            title={
-              showOpponent
-                ? `Opponent${opponent ? ` · ${opponent.name}` : ""}`
-                : `You${me ? ` · ${me.name}` : ""}`
-            }
-            colorVar={showOpponent ? oppColor : myColor}
-            filled={showOpponent ? oppFilled : myFilled}
-          />
-          <button
-            onClick={() => setShowOpponent((s) => !s)}
-            className="absolute right-3 top-3 rounded-lg bg-surface-raised px-3 py-2 text-sm font-semibold shadow"
-          >
-            {showOpponent ? "View yours" : "View opponent"}
-          </button>
-        </div>
+        {!solo && (
+          <>
+            {/* Desktop: side by side */}
+            <div className="hidden h-full md:grid md:grid-cols-2">
+              <MapPane
+                title={`You${me ? ` · ${me.name}` : ""}`}
+                colorVar={myColor}
+                filled={myFilled}
+                borderRight
+              />
+              <MapPane
+                title={`Opponent${opponent ? ` · ${opponent.name}` : ""}`}
+                colorVar={oppColor}
+                filled={oppFilled}
+              />
+            </div>
+
+            {/* Mobile: single map + toggle */}
+            <div className="flex h-full flex-col md:hidden">
+              <MapPane
+                title={
+                  showOpponent
+                    ? `Opponent${opponent ? ` · ${opponent.name}` : ""}`
+                    : `You${me ? ` · ${me.name}` : ""}`
+                }
+                colorVar={showOpponent ? oppColor : myColor}
+                filled={showOpponent ? oppFilled : myFilled}
+              />
+              <button
+                onClick={() => setShowOpponent((s) => !s)}
+                className="absolute right-3 top-3 rounded-lg bg-surface-raised px-3 py-2 text-sm font-semibold shadow"
+              >
+                {showOpponent ? "View yours" : "View opponent"}
+              </button>
+            </div>
+          </>
+        )}
 
         {/* Opponent disconnected banner */}
         {oppGraceEndsAt != null && !gameOver && (
@@ -305,12 +323,24 @@ export default function Match() {
         {rejectMsg && (
           <p className="mb-1 text-center text-sm text-accent">{rejectMsg}</p>
         )}
-        <CountryInput
-          onSubmit={handleSubmit}
-          clearSignal={clearSignal}
-          rejectSignal={rejectSignal}
-          disabled={inputDisabled}
-        />
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <CountryInput
+              onSubmit={handleSubmit}
+              clearSignal={clearSignal}
+              rejectSignal={rejectSignal}
+              disabled={inputDisabled}
+            />
+          </div>
+          {solo && phase === "playing" && !gameOver && (
+            <button
+              onClick={() => socket.emit("give_up")}
+              className="shrink-0 rounded-xl bg-surface-raised px-5 py-4 font-semibold transition hover:brightness-125"
+            >
+              Give up
+            </button>
+          )}
+        </div>
       </section>
 
       {/* 3-2-1 countdown overlay */}
@@ -337,6 +367,8 @@ export default function Match() {
       {gameOver && (
         <GameOverOverlay
           gameOver={gameOver}
+          solo={solo}
+          total={total}
           me={me}
           opponent={opponent}
           onRematch={() => {
@@ -407,6 +439,8 @@ function OpponentDisconnectedBanner({ endsAt }: { endsAt: number }) {
 
 function GameOverOverlay({
   gameOver,
+  solo,
+  total,
   me,
   opponent,
   onRematch,
@@ -415,6 +449,8 @@ function GameOverOverlay({
   onHome,
 }: {
   gameOver: GameOver;
+  solo: boolean;
+  total: number;
   me?: PlayerPublic;
   opponent?: PlayerPublic;
   onRematch: () => void;
@@ -432,6 +468,38 @@ function GameOverOverlay({
       : me && gameOver.winnerId === me.id
         ? "You win!"
         : "You lose";
+
+  if (solo) {
+    return (
+      <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/90 px-6">
+        <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 text-center">
+          <h2 className="text-3xl font-bold">
+            {total > 0 && myScore >= total ? "You named them all!" : "Round over"}
+          </h2>
+          <p className="mt-6 text-sm text-muted">You named</p>
+          <p data-testid="my-final-score" className="text-5xl font-bold tabular-nums" style={{ color: myColor }}>
+            {myScore} <span className="text-2xl text-muted">/ {total}</span>
+          </p>
+          <div className="mt-8 flex flex-col gap-3">
+            <button
+              onClick={onRematch}
+              disabled={myRematch}
+              className="rounded-xl px-6 py-3 font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
+              style={{ background: myColor }}
+            >
+              {myRematch ? "Starting…" : "Play again"}
+            </button>
+            <button
+              onClick={onHome}
+              className="rounded-xl bg-surface-raised px-6 py-3 font-semibold transition hover:brightness-125"
+            >
+              Back to home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/90 px-6">

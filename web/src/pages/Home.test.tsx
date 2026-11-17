@@ -65,6 +65,20 @@ describe("<Home>", () => {
     expect(navigate).toHaveBeenCalledWith("/room/ABC123");
   });
 
+  it("'Play solo' creates a room and navigates with the auto-start flag", async () => {
+    const user = userEvent.setup();
+    renderHome();
+    await user.click(screen.getByRole("button", { name: "Play solo" }));
+    expect(socket.__lastEmit("create_room")).toBeDefined();
+    socket.__server("joined", {
+      playerId: "x",
+      slot: "p1",
+      reconnectToken: "tok",
+      state: { code: "SOLO01" },
+    });
+    expect(navigate).toHaveBeenCalledWith("/room/SOLO01", { state: { autoStartSolo: true } });
+  });
+
   it("stores identity (with roomCode) from a 'joined' event", () => {
     let seen: Identity | null = null;
     function Probe() {

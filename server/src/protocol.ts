@@ -91,6 +91,8 @@ export interface RoomState {
   total?: number;
   /** ISO codes each player has already filled, by playerId (for rehydrate). */
   filled?: Record<string, string[]>;
+  /** true when the current/last round was started by a lone player (solo mode). */
+  solo?: boolean;
 }
 
 /* ------------------------------------------------------------------ */

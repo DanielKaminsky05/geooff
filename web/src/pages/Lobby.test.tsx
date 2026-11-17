@@ -52,9 +52,15 @@ function roomState(over: Partial<RoomState> = {}): RoomState {
   };
 }
 
-function renderLobby({ strict = false }: { strict?: boolean } = {}) {
+function renderLobby({
+  strict = false,
+  autoStartSolo = false,
+}: { strict?: boolean; autoStartSolo?: boolean } = {}) {
+  const entry = autoStartSolo
+    ? { pathname: "/room/ROOM01", state: { autoStartSolo: true } }
+    : "/room/ROOM01";
   const tree = (
-    <MemoryRouter initialEntries={["/room/ROOM01"]}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/room/:code" element={<Lobby />} />
       </Routes>
@@ -129,9 +135,10 @@ describe("<Lobby>", () => {
     const user = userEvent.setup();
     renderLobby();
 
-    // One player → no/disabled start.
+    // One player → solo is offered instead of a versus start.
     socket.__server("room_state", roomState());
-    expect(screen.getByRole("button", { name: /Waiting for both players/ })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Start game" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Play solo" })).toBeEnabled();
 
     // Two players but not both ready → still disabled.
     socket.__server("room_state", roomState({
@@ -153,6 +160,38 @@ describe("<Lobby>", () => {
     expect(start).toBeEnabled();
     await user.click(start);
     expect(socket.__emitted.some((e) => e.event === "start_game")).toBe(true);
+  });
+
+  it("Play solo emits start_game when the host is alone", async () => {
+    const user = userEvent.setup();
+    renderLobby();
+    socket.__server("room_state", roomState());
+    await user.click(screen.getByRole("button", { name: "Play solo" }));
+    expect(socket.__emitted.filter((e) => e.event === "start_game")).toHaveLength(1);
+  });
+
+  it("hides Play solo once an opponent has joined", () => {
+    renderLobby();
+    socket.__server("room_state", roomState({
+      players: [
+        player({ id: "a", slot: "p1", name: "Alice" }),
+        player({ id: "b", slot: "p2", name: "Bob" }),
+      ],
+    }));
+    expect(screen.queryByRole("button", { name: "Play solo" })).toBeNull();
+  });
+
+  it("auto-starts once when arriving from Home's Play solo", () => {
+    renderLobby({ strict: true, autoStartSolo: true });
+    socket.__server("room_state", roomState());
+    socket.__server("room_state", roomState());
+    expect(socket.__emitted.filter((e) => e.event === "start_game")).toHaveLength(1);
+  });
+
+  it("does not auto-start without the solo flag", () => {
+    renderLobby();
+    socket.__server("room_state", roomState());
+    expect(socket.__emitted.some((e) => e.event === "start_game")).toBe(false);
   });
 
   it("renders only one player when the opponent hasn't joined", () => {

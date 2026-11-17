@@ -599,3 +599,88 @@ describe("regressions", () => {
     expect(room.players.map((p) => p.id)).toEqual([bId]);
   });
 });
+
+describe("solo mode", () => {
+  beforeEach(async () => {
+    await server.close();
+    server = await startTestServer({ countdownTickMs: 20 });
+  });
+
+  async function soloRoom() {
+    const a = client();
+    a.emit("create_room", { playerName: "Solo" });
+    const joined = await awaitEvent<any>(a, "joined");
+    return { a, aId: joined.playerId as string, code: joined.state.code as string };
+  }
+
+  it("a lone host starts a solo round without readying up", async () => {
+    const { a } = await soloRoom();
+    const solo = awaitEvent<any>(a, "room_state");
+    const started = awaitEvent<any>(a, "game_started", 2000);
+    a.emit("start_game");
+    expect((await solo).solo).toBe(true);
+    expect((await started).total).toBe(REAL_TOTAL);
+  });
+
+  it("scores, and give_up ends the solo round with the player as winner", async () => {
+    const { a, aId } = await soloRoom();
+    const started = awaitEvent<any>(a, "game_started", 2000);
+    a.emit("start_game");
+    await started;
+    const res = awaitEvent<any>(a, "answer_result");
+    a.emit("submit_answer", { text: CORRECT.text });
+    expect((await res).accepted).toBe(true);
+    const over = awaitEvent<any>(a, "game_over");
+    a.emit("give_up");
+    const go = await over;
+    expect(go.winnerId).toBe(aId);
+    expect(go.scores[aId]).toBe(1);
+  });
+
+  it("nobody can join a solo round in progress", async () => {
+    const { a, code } = await soloRoom();
+    const started = awaitEvent<any>(a, "game_started", 2000);
+    a.emit("start_game");
+    await started;
+    const b = client();
+    const err = awaitEvent<any>(b, "error_msg");
+    b.emit("join_room", { code, playerName: "Late" });
+    expect((await err).code).toBe("in_progress");
+    expect(rooms.get(code)!.players).toHaveLength(1);
+  });
+
+  it("play again in solo restarts immediately with a fresh score", async () => {
+    const { a, aId } = await soloRoom();
+    let started = awaitEvent<any>(a, "game_started", 2000);
+    a.emit("start_game");
+    await started;
+    const res = awaitEvent<any>(a, "answer_result");
+    a.emit("submit_answer", { text: CORRECT.text });
+    await res;
+    const over = awaitEvent<any>(a, "game_over");
+    a.emit("give_up");
+    await over;
+
+    started = awaitEvent<any>(a, "game_started", 2000);
+    const noLobby = expectNoEvent(a, "rematch_start", 300);
+    a.emit("request_rematch");
+    await started;
+    await noLobby;
+    const state = rooms.get((await soloRoomCode(a)) ?? "")!;
+    expect(state.solo).toBe(true);
+    expect(state.players.find((p) => p.id === aId)!.score).toBe(0);
+  });
+
+  async function soloRoomCode(a: Socket) {
+    for (const room of rooms.values()) {
+      if (room.players.some((p) => p.socketId === a.id)) return room.code;
+    }
+    return null;
+  }
+
+  it("a two-player game is not marked solo", async () => {
+    const ctx = await makeRoom();
+    await startGame(ctx);
+    expect(rooms.get(ctx.code)!.solo).toBe(false);
+  });
+});

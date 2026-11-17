@@ -201,6 +201,7 @@ export function createServer(options: CreateServerOptions = {}): GeooffServer {
     clearRoomTimers(room);
     room.phase = "lobby";
     room.endsAt = undefined;
+    room.solo = false;
     for (const seat of room.players) {
       seat.score = 0;
       seat.ready = false;
@@ -352,6 +353,11 @@ export function createServer(options: CreateServerOptions = {}): GeooffServer {
           emitError(socket, "room_full", "That room is already full.");
           return;
         }
+        // New seats only in the lobby (e.g. a solo round can't be joined mid-way).
+        if (room.phase !== "lobby") {
+          emitError(socket, "in_progress", "That game is already in progress.");
+          return;
+        }
 
         const seat = addSecondPlayer(room, name);
         seat.socketId = socket.id;
@@ -426,14 +432,13 @@ export function createServer(options: CreateServerOptions = {}): GeooffServer {
           emitError(socket, "bad_phase", "The game has already started.");
           return;
         }
-        if (room.players.length < 2) {
-          emitError(socket, "need_two", "Need two players to start.");
-          return;
-        }
-        if (!room.players.every((p) => p.ready)) {
+        // A lone host starts a solo round straight away (no ready-up needed).
+        const solo = room.players.length === 1;
+        if (!solo && !room.players.every((p) => p.ready)) {
           emitError(socket, "not_ready", "Both players must be ready.");
           return;
         }
+        room.solo = solo;
         startCountdownAndGame(room);
       }),
     );
@@ -502,6 +507,13 @@ export function createServer(options: CreateServerOptions = {}): GeooffServer {
         if (room.phase !== "ended") return;
         seat.rematchRequested = true;
         io.to(room.code).emit("rematch_requested", { playerId: seat.id });
+        // Solo: "play again" restarts immediately, skipping the lobby.
+        if (room.solo && room.players.length === 1) {
+          resetForRematch(room);
+          room.solo = true;
+          startCountdownAndGame(room);
+          return;
+        }
         if (room.players.length === 2 && room.players.every((p) => p.rematchRequested)) {
           resetForRematch(room);
           broadcastRoomState(room);
