@@ -6,6 +6,7 @@ import type { GamePhase, PlayerPublic, PlayerSlot, RoomState } from "../lib/prot
 import WorldMap from "../components/WorldMap";
 import ScoreBar from "../components/ScoreBar";
 import CountryInput from "../components/CountryInput";
+import NamedCountries from "../components/NamedCountries";
 
 interface GameOver {
   winnerId: string | null;
@@ -251,145 +252,161 @@ export default function Match() {
   }
 
   return (
-    <main className="relative flex h-screen flex-col overflow-hidden">
-      {/* 1. Score bar */}
-      <ScoreBar
-        p1={solo ? me : p1}
-        p2={solo ? undefined : p2}
-        solo={solo}
-        scores={effectiveScores}
-        total={total}
-        endsAt={endsAt}
-        category="Countries"
-      />
+    <main>
+      <div className="relative flex h-screen flex-col overflow-hidden">
+        {/* 1. Score bar */}
+        <ScoreBar
+          p1={solo ? me : p1}
+          p2={solo ? undefined : p2}
+          solo={solo}
+          scores={effectiveScores}
+          total={total}
+          endsAt={endsAt}
+          category="Countries"
+        />
 
-      {/* 2. Maps */}
-      <section className="relative min-h-0 flex-1">
-        {/* Solo: just your map */}
-        {solo && (
-          <MapPane
-            title={`You${me ? ` · ${me.name}` : ""}`}
-            colorVar={myColor}
-            filled={myFilled}
+        {/* 2. Maps */}
+        <section className="relative min-h-0 flex-1">
+          {/* Solo: just your map */}
+          {solo && (
+            <MapPane
+              title={`You${me ? ` · ${me.name}` : ""}`}
+              colorVar={myColor}
+              filled={myFilled}
+            />
+          )}
+
+          {!solo && (
+            <>
+              {/* Desktop: side by side */}
+              <div className="hidden h-full md:grid md:grid-cols-2">
+                <MapPane
+                  title={`You${me ? ` · ${me.name}` : ""}`}
+                  colorVar={myColor}
+                  filled={myFilled}
+                  borderRight
+                />
+                <MapPane
+                  title={`Opponent${opponent ? ` · ${opponent.name}` : ""}`}
+                  colorVar={oppColor}
+                  filled={oppFilled}
+                />
+              </div>
+
+              {/* Mobile: single map + toggle */}
+              <div className="flex h-full flex-col md:hidden">
+                <MapPane
+                  title={
+                    showOpponent
+                      ? `Opponent${opponent ? ` · ${opponent.name}` : ""}`
+                      : `You${me ? ` · ${me.name}` : ""}`
+                  }
+                  colorVar={showOpponent ? oppColor : myColor}
+                  filled={showOpponent ? oppFilled : myFilled}
+                />
+                <button
+                  onClick={() => setShowOpponent((s) => !s)}
+                  className="absolute right-3 top-3 rounded-lg bg-surface-raised px-3 py-2 text-sm font-semibold shadow"
+                >
+                  {showOpponent ? "View yours" : "View opponent"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* The map captures the wheel for zoom, so offer a way down to the list. */}
+          <button
+            onClick={() =>
+              document.getElementById("your-countries")?.scrollIntoView({ behavior: "smooth" })
+            }
+            className="absolute bottom-3 right-3 z-10 rounded-lg bg-surface-raised px-3 py-2 text-sm font-semibold shadow transition hover:brightness-125"
+          >
+            Your countries ({myFilled.size}) ↓
+          </button>
+
+          {/* Opponent disconnected banner */}
+          {oppGraceEndsAt != null && !gameOver && (
+            <OpponentDisconnectedBanner endsAt={oppGraceEndsAt} />
+          )}
+        </section>
+
+        {/* 3. Input */}
+        <section className="border-t border-border bg-surface px-4 py-3">
+          {rejectMsg && (
+            <p className="mb-1 text-center text-sm text-accent">{rejectMsg}</p>
+          )}
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <CountryInput
+                onSubmit={handleSubmit}
+                clearSignal={clearSignal}
+                rejectSignal={rejectSignal}
+                disabled={inputDisabled}
+              />
+            </div>
+            {solo && phase === "playing" && !gameOver && (
+              <button
+                onClick={() => socket.emit("give_up")}
+                className="shrink-0 rounded-xl bg-surface-raised px-5 py-4 font-semibold transition hover:brightness-125"
+              >
+                Give up
+              </button>
+            )}
+          </div>
+        </section>
+
+        {/* 3-2-1 countdown overlay */}
+        {countdown != null && !gameOver && (
+          <div
+            data-testid="countdown-overlay"
+            aria-live="assertive"
+            className="absolute inset-0 z-20 flex items-center justify-center bg-background/80"
+          >
+            {countdown === "ready" ? (
+              <p className="text-5xl font-bold">Get ready</p>
+            ) : (
+              <p
+                key={countdown}
+                className="animate-[countdown-pop_0.9s_ease-out] text-9xl font-bold tabular-nums"
+              >
+                {countdown}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Game over overlay */}
+        {gameOver && (
+          <GameOverOverlay
+            gameOver={gameOver}
+            solo={solo}
+            total={total}
+            me={me}
+            opponent={opponent}
+            onRematch={() => {
+              socket.emit("request_rematch");
+              setMyRematch(true);
+            }}
+            myRematch={myRematch}
+            oppRematch={oppRematch}
+            onHome={() => {
+              socket.emit("leave_room");
+              setIdentity(null);
+              navigate("/");
+            }}
           />
         )}
 
-        {!solo && (
-          <>
-            {/* Desktop: side by side */}
-            <div className="hidden h-full md:grid md:grid-cols-2">
-              <MapPane
-                title={`You${me ? ` · ${me.name}` : ""}`}
-                colorVar={myColor}
-                filled={myFilled}
-                borderRight
-              />
-              <MapPane
-                title={`Opponent${opponent ? ` · ${opponent.name}` : ""}`}
-                colorVar={oppColor}
-                filled={oppFilled}
-              />
-            </div>
+      </div>
 
-            {/* Mobile: single map + toggle */}
-            <div className="flex h-full flex-col md:hidden">
-              <MapPane
-                title={
-                  showOpponent
-                    ? `Opponent${opponent ? ` · ${opponent.name}` : ""}`
-                    : `You${me ? ` · ${me.name}` : ""}`
-                }
-                colorVar={showOpponent ? oppColor : myColor}
-                filled={showOpponent ? oppFilled : myFilled}
-              />
-              <button
-                onClick={() => setShowOpponent((s) => !s)}
-                className="absolute right-3 top-3 rounded-lg bg-surface-raised px-3 py-2 text-sm font-semibold shadow"
-              >
-                {showOpponent ? "View yours" : "View opponent"}
-              </button>
-            </div>
-          </>
-        )}
-
-        {/* Opponent disconnected banner */}
-        {oppGraceEndsAt != null && !gameOver && (
-          <OpponentDisconnectedBanner endsAt={oppGraceEndsAt} />
-        )}
-      </section>
-
-      {/* 3. Input */}
-      <section className="border-t border-border bg-surface px-4 py-3">
-        {rejectMsg && (
-          <p className="mb-1 text-center text-sm text-accent">{rejectMsg}</p>
-        )}
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <CountryInput
-              onSubmit={handleSubmit}
-              clearSignal={clearSignal}
-              rejectSignal={rejectSignal}
-              disabled={inputDisabled}
-            />
-          </div>
-          {solo && phase === "playing" && !gameOver && (
-            <button
-              onClick={() => socket.emit("give_up")}
-              className="shrink-0 rounded-xl bg-surface-raised px-5 py-4 font-semibold transition hover:brightness-125"
-            >
-              Give up
-            </button>
-          )}
-        </div>
-      </section>
-
-      {/* 3-2-1 countdown overlay */}
-      {countdown != null && !gameOver && (
-        <div
-          data-testid="countdown-overlay"
-          aria-live="assertive"
-          className="absolute inset-0 z-20 flex items-center justify-center bg-background/80"
-        >
-          {countdown === "ready" ? (
-            <p className="text-5xl font-bold">Get ready</p>
-          ) : (
-            <p
-              key={countdown}
-              className="animate-[countdown-pop_0.9s_ease-out] text-9xl font-bold tabular-nums"
-            >
-              {countdown}
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Game over overlay */}
-      {gameOver && (
-        <GameOverOverlay
-          gameOver={gameOver}
-          solo={solo}
-          total={total}
-          me={me}
-          opponent={opponent}
-          onRematch={() => {
-            socket.emit("request_rematch");
-            setMyRematch(true);
-          }}
-          myRematch={myRematch}
-          oppRematch={oppRematch}
-          onHome={() => {
-            socket.emit("leave_room");
-            setIdentity(null);
-            navigate("/");
-          }}
-        />
-      )}
+      {/* 4. Countries you've named, grouped by continent */}
+      <NamedCountries filled={myFilled} colorVar={myColor} />
 
       {/* Own connection lost: keep the user here while socket.io retries. */}
       {reconnecting && (
         <div
           role="alert"
-          className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-background/90"
+          className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-background/90"
         >
           <p className="text-2xl font-bold">Reconnecting…</p>
           <p className="text-sm text-muted">Hang tight — your seat is saved.</p>

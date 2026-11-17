@@ -105,6 +105,18 @@ describe("<Match>", () => {
     expect(maps[1].getAttribute("data-filled")).toContain("us");
   });
 
+  it("lists my accepted countries by continent below the game, not the opponent's", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.__server("answer_result", { accepted: true, isoCode: "fr", canonical: "France" });
+    socket.__server("opponent_progress", { playerId: "b", isoCode: "jp" });
+
+    const list = screen.getByRole("region", { name: "Your countries" });
+    expect(within(within(list).getByTestId("continent-Europe")).getByText("France")).toBeInTheDocument();
+    expect(within(list).queryByText("Japan")).toBeNull();
+    expect(screen.getByRole("button", { name: /Your countries \(1\)/ })).toBeInTheDocument();
+  });
+
   it("updates scores on score_update", () => {
     renderMatch();
     socket.__server("room_state", roomState());
