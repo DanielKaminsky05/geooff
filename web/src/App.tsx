@@ -1,12 +1,10 @@
-"use client";
-
 import { useState } from "react";
 
-export default function Home() {
+export default function App() {
   const [code, setCode] = useState("");
 
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-10 px-6 py-16">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-10 px-6 py-16">
       <header className="text-center">
         <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">
           geo
@@ -46,7 +44,7 @@ export default function Home() {
             onChange={(e) => setCode(e.target.value.toUpperCase())}
             placeholder="ROOM CODE"
             maxLength={6}
-            className="flex-1 rounded-xl border border-border bg-surface px-4 py-3 text-center text-lg tracking-widest uppercase placeholder:tracking-normal placeholder:text-muted focus:border-player1 focus:outline-none"
+            className="flex-1 rounded-xl border border-border bg-surface px-4 py-3 text-center text-lg uppercase tracking-widest placeholder:tracking-normal placeholder:text-muted focus:border-player1 focus:outline-none"
           />
           <button
             type="submit"

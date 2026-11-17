@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+/*
+ * geooff dark "krillion" theme.
+ * Deep navy ocean, muted land, vivid-but-palatable player accents.
+ * See docs/plan-and-requirements.md → Visual / Theme Direction.
+ */
+@theme {
+  --color-background: #0f1b2a; /* ocean / app background */
+  --color-surface: #1a2838; /* panels, inputs, buttons */
+  --color-surface-raised: #223449; /* hovered/raised surface */
+  --color-border: #415169; /* country borders, dividers */
+  --color-land: #2b3a4d; /* unguessed country fill */
+
+  --color-foreground: #e6edf3; /* primary text */
+  --color-muted: #8b98a5; /* secondary text, counters */
+
+  --color-player1: #3fb950; /* emerald — player 1 */
+  --color-player2: #e3a008; /* amber — player 2 */
+  --color-both: #1f9e8e; /* teal — both guessed */
+  --color-accent: #f0623e; /* coral — timer / alerts / errors */
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: system-ui, Arial, Helvetica, sans-serif;
+}
