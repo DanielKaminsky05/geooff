@@ -65,7 +65,7 @@ describe("<Home>", () => {
     expect(navigate).toHaveBeenCalledWith("/room/ABC123");
   });
 
-  it("'Play solo' creates a room and navigates with the auto-start flag", async () => {
+  it("'Play solo' creates a room and navigates to its lobby", async () => {
     const user = userEvent.setup();
     renderHome();
     await user.click(screen.getByRole("button", { name: "Play solo" }));
@@ -76,7 +76,7 @@ describe("<Home>", () => {
       reconnectToken: "tok",
       state: { code: "SOLO01" },
     });
-    expect(navigate).toHaveBeenCalledWith("/room/SOLO01", { state: { autoStartSolo: true } });
+    expect(navigate).toHaveBeenCalledWith("/room/SOLO01");
   });
 
   it("stores identity (with roomCode) from a 'joined' event", () => {

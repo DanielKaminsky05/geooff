@@ -52,15 +52,9 @@ function roomState(over: Partial<RoomState> = {}): RoomState {
   };
 }
 
-function renderLobby({
-  strict = false,
-  autoStartSolo = false,
-}: { strict?: boolean; autoStartSolo?: boolean } = {}) {
-  const entry = autoStartSolo
-    ? { pathname: "/room/ROOM01", state: { autoStartSolo: true } }
-    : "/room/ROOM01";
+function renderLobby({ strict = false }: { strict?: boolean } = {}) {
   const tree = (
-    <MemoryRouter initialEntries={[entry]}>
+    <MemoryRouter initialEntries={["/room/ROOM01"]}>
       <Routes>
         <Route path="/room/:code" element={<Lobby />} />
       </Routes>
@@ -181,17 +175,15 @@ describe("<Lobby>", () => {
     expect(screen.queryByRole("button", { name: "Play solo" })).toBeNull();
   });
 
-  it("auto-starts once when arriving from Home's Play solo", () => {
-    renderLobby({ strict: true, autoStartSolo: true });
-    socket.__server("room_state", roomState());
-    socket.__server("room_state", roomState());
-    expect(socket.__emitted.filter((e) => e.event === "start_game")).toHaveLength(1);
-  });
-
-  it("does not auto-start without the solo flag", () => {
+  it("never auto-starts; a lone player starts from the Play solo button", async () => {
+    const user = userEvent.setup();
     renderLobby();
     socket.__server("room_state", roomState());
+    // Arriving in the lobby does not start a round on its own.
     expect(socket.__emitted.some((e) => e.event === "start_game")).toBe(false);
+    // The lone host must press "Play solo" to begin.
+    await user.click(screen.getByRole("button", { name: "Play solo" }));
+    expect(socket.__emitted.filter((e) => e.event === "start_game")).toHaveLength(1);
   });
 
   it("renders only one player when the opponent hasn't joined", () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession, defaultName } from "../lib/session";
@@ -9,7 +9,6 @@ export default function Home() {
   const { playerName, setPlayerName, setIdentity } = useSession();
   const [code, setCode] = useState("");
   const [creating, setCreating] = useState<"versus" | "solo" | null>(null);
-  const soloRef = useRef(false);
 
   useEffect(() => {
     function onJoined(payload: {
@@ -24,10 +23,10 @@ export default function Home() {
         reconnectToken: payload.reconnectToken,
         roomCode: payload.state.code,
       });
-      // Solo: the lobby starts the round as soon as it has seated us.
-      const url = `/room/${payload.state.code}`;
-      if (soloRef.current) navigate(url, { state: { autoStartSolo: true } });
-      else navigate(url);
+      // Both flows land in the lobby so the player can set the time limit (and,
+      // for versus, share the code) before starting. A lone player starts from
+      // the lobby's own "Play solo" button.
+      navigate(`/room/${payload.state.code}`);
     }
     socket.on("joined", onJoined);
     return () => {
@@ -38,7 +37,6 @@ export default function Home() {
   function handleCreate(solo = false) {
     const name = playerName.trim() || defaultName();
     setPlayerName(name);
-    soloRef.current = solo;
     setCreating(solo ? "solo" : "versus");
     socket.emit("create_room", { playerName: name });
   }
