@@ -22,14 +22,14 @@ describe("WorldMap", () => {
   });
 
   it("does not leak unguessed country names via <title> tooltips", () => {
+    // Brazil has no dependent territories, so exactly one title shows.
     const { container } = render(
-      <WorldMap filledIso={new Set(["fr"])} color="var(--color-player1)" />,
+      <WorldMap filledIso={new Set(["br"])} color="var(--color-player1)" />,
     );
-    const fr = container.querySelector('path[data-iso="fr"]');
+    const br = container.querySelector('path[data-iso="br"]');
     const us = container.querySelector('path[data-iso="us"]');
     expect(us?.querySelector("title")).toBeNull();
-    expect(fr?.querySelector("title")?.textContent).toBeTruthy();
-    // Only the one filled country carries a title.
+    expect(br?.querySelector("title")?.textContent).toBeTruthy();
     expect(container.querySelectorAll("path > title")).toHaveLength(1);
   });
 
@@ -51,5 +51,28 @@ describe("WorldMap", () => {
     expect(ids).toContain("us");
     expect(ids).toContain("fr");
     expect(ids).toContain("br");
+  });
+
+  it("fills a dependent territory when its sovereign is named", () => {
+    const { container } = render(
+      <WorldMap filledIso={new Set(["dk"])} color="var(--color-player1)" />,
+    );
+    // Greenland (gl) belongs to Denmark → fills with it.
+    expect(container.querySelector('path[data-iso="gl"]')?.getAttribute("data-filled")).toBe("true");
+    // Svalbard (sj, Norway) stays unfilled since Norway wasn't named.
+    expect(container.querySelector('path[data-iso="sj"]')?.getAttribute("data-filled")).toBe("false");
+  });
+
+  it("colours a territory with its sovereign's colour via colorByIso", () => {
+    const { container } = render(
+      <WorldMap
+        filledIso={new Set()}
+        color="x"
+        colorByIso={new Map([["no", "var(--color-player2)"]])}
+      />,
+    );
+    const svalbard = container.querySelector('path[data-iso="sj"]'); // Svalbard → Norway
+    expect(svalbard?.getAttribute("data-filled")).toBe("true");
+    expect(svalbard?.getAttribute("fill")).toBe("var(--color-player2)");
   });
 });

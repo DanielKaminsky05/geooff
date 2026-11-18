@@ -1,6 +1,6 @@
 import { memo } from "react";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import { mapFor } from "../lib/maps";
+import { mapFor, TERRITORY_PARENT } from "../lib/maps";
 import type { CategoryId } from "../lib/protocol";
 
 export interface WorldMapProps {
@@ -42,8 +42,10 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
             preserveAspectRatio="xMidYMid meet"
           >
             {locations.map((loc) => {
-              const perItem = colorByIso?.get(loc.id);
-              const filled = colorByIso ? perItem !== undefined : filledIso.has(loc.id);
+              // A dependent territory fills with its sovereign (Greenland→dk, …).
+              const key = TERRITORY_PARENT[loc.id] ?? loc.id;
+              const perItem = colorByIso?.get(key);
+              const filled = colorByIso ? perItem !== undefined : filledIso.has(key);
               const fill = perItem ?? (filled ? color : "var(--color-land)");
               return (
                 <path

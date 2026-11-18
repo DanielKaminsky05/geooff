@@ -73,6 +73,34 @@ const REGION_ISO: Record<string, string[]> = {
 };
 
 /**
+ * Dependent territories carry their own SVG shape (id) but aren't answerable
+ * countries, so they'd never fill and sit grey forever (Greenland, Svalbard,
+ * French Guiana, …). Map each to its sovereign so naming the parent fills the
+ * territory too. (Western Sahara → Morocco reflects de-facto map control.)
+ */
+export const TERRITORY_PARENT: Record<string, string> = {
+  // France
+  gf: "fr", gp: "fr", mq: "fr", re: "fr", yt: "fr", nc: "fr", pf: "fr",
+  wf: "fr", pm: "fr", bl: "fr", mf: "fr", tf: "fr", go: "fr", ju: "fr",
+  // United Kingdom
+  fk: "gb", gi: "gb", im: "gb", je: "gb", gg: "gb", ky: "gb", bm: "gb",
+  vg: "gb", ai: "gb", ms: "gb", tc: "gb", sh: "gb", io: "gb", pn: "gb", gs: "gb",
+  // United States
+  pr: "us", gu: "us", as: "us", mp: "us", vi: "us",
+  "um-dq": "us", "um-fq": "us", "um-hq": "us", "um-jq": "us", "um-mq": "us", "um-wq": "us",
+  // Netherlands
+  aw: "nl", cw: "nl", sx: "nl", bq: "nl",
+  // Denmark / Norway / Finland
+  gl: "dk", fo: "dk", sj: "no", bv: "no", ax: "fi",
+  // China
+  hk: "cn", mo: "cn",
+  // New Zealand / Australia
+  ck: "nz", nu: "nz", tk: "nz", cx: "au", cc: "au", nf: "au", hm: "au",
+  // Morocco (de-facto)
+  eh: "ma",
+};
+
+/**
  * Walk an SVG path, emitting each ABSOLUTE point. The @svg-maps/world paths are
  * relative (lowercase `m` + implicit relative linetos, `z`), so we must
  * accumulate deltas — treating the raw numbers as absolute coords collapses the
