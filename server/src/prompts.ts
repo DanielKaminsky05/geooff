@@ -136,6 +136,77 @@ function buildPrompts(): Prompt[] {
     label: "Name a country bordering more than 4 others",
     validIds: attrIds((a) => a.borders.length > 4),
   });
+  prompts.push({
+    id: "borders-1",
+    label: "Name a country with exactly one land border",
+    validIds: attrIds((a) => a.borders.length === 1),
+  });
+
+  // borders-a-given-country: data-driven. "Name a country that borders X" for
+  // every country with enough neighbours to stand on its own (Russia, China,
+  // Brazil, Germany, …). validIds = the countries whose border list includes X.
+  const isoToName = new Map(countries.map((c) => [c.iso, c.name]));
+  const neighboursOf = new Map<string, Set<string>>();
+  for (const a of allAttrs) {
+    for (const b of a.borders) {
+      if (!neighboursOf.has(b)) neighboursOf.set(b, new Set());
+      neighboursOf.get(b)!.add(a.iso);
+    }
+  }
+  for (const [iso, neighbours] of neighboursOf) {
+    const name = isoToName.get(iso);
+    if (!name || neighbours.size < MIN_VALID) continue;
+    prompts.push({
+      id: `borders-country-${iso}`,
+      label: `Name a country that borders ${name}`,
+      validIds: new Set(neighbours),
+    });
+  }
+
+  // area thresholds (km²): the giants and the micro-states.
+  prompts.push({
+    id: "area-large",
+    label: "Name a country larger than 1,000,000 km²",
+    validIds: attrIds((a) => a.areaKm2 > 1_000_000),
+  });
+  prompts.push({
+    id: "area-small",
+    label: "Name a country smaller than 10,000 km²",
+    validIds: attrIds((a) => a.areaKm2 < 10_000),
+  });
+
+  // more population tiers: the giants and the tiny.
+  prompts.push({
+    id: "population-100",
+    label: "Name a country with over 100 million people",
+    validIds: attrIds((a) => a.populationM > 100),
+  });
+  prompts.push({
+    id: "population-under-2",
+    label: "Name a country with fewer than 2 million people",
+    validIds: attrIds((a) => a.populationM < 2),
+  });
+
+  // flat countries (low highest point).
+  prompts.push({
+    id: "elevation-low",
+    label: "Name a country whose highest point is under 1,500 ft",
+    validIds: attrIds((a) => a.elevationFtMax < 1500),
+  });
+
+  // name patterns.
+  prompts.push({
+    id: "name-multiword",
+    label: "Name a country whose name is more than one word",
+    validIds: new Set(countries.filter((c) => c.name.trim().includes(" ")).map((c) => c.iso)),
+  });
+  prompts.push({
+    id: "name-ends-land",
+    label: "Name a country whose name ends in “-land”",
+    validIds: new Set(
+      countries.filter((c) => normalizeAnswer(c.name).endsWith("land")).map((c) => c.iso),
+    ),
+  });
 
   return prompts;
 }
