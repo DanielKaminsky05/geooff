@@ -40,15 +40,15 @@ describe("<Home>", () => {
 
   it("renders Create and Join entry points", () => {
     renderHome();
-    expect(screen.getByText("Create a game")).toBeInTheDocument();
+    expect(screen.getByText("Start a lobby")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Join" })).toBeInTheDocument();
   });
 
-  it("'Create a game' emits create_room with the entered name", async () => {
+  it("'Start a lobby' emits create_room with the entered name", async () => {
     const user = userEvent.setup();
     renderHome();
     await user.type(screen.getByPlaceholderText("Enter a name"), "Zoe");
-    await user.click(screen.getByText("Create a game"));
+    await user.click(screen.getByText("Start a lobby"));
 
     const payload = socket.__lastEmit("create_room") as { playerName: string };
     expect(payload).toEqual({ playerName: "Zoe" });

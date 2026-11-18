@@ -75,9 +75,9 @@ export default function Home() {
           type="button"
           onClick={() => handleCreate()}
           disabled={creating != null}
-          className="rounded-xl bg-player1 px-6 py-4 text-lg font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
+          className="rounded-xl bg-surface-raised px-6 py-4 text-lg font-semibold text-foreground transition hover:brightness-125 disabled:opacity-60"
         >
-          {creating === "versus" ? "Creating…" : "Create a game"}
+          {creating === "versus" ? "Starting lobby…" : "Start a lobby"}
         </button>
 
         <button
