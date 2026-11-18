@@ -33,6 +33,13 @@ body,
   min-height: 100%;
 }
 
+/* Global UI scale. Everything is sized in rem, so dialing the root font size
+   down shrinks all text, padding and gaps together for a more compact layout
+   (the viewport-based home globe is unaffected). 100% felt oversized. */
+html {
+  font-size: 75%; /* 12px base */
+}
+
 body {
   margin: 0;
   background: var(--color-background);
