@@ -609,8 +609,8 @@ export default function Match() {
             {solo ? "Your" : "Named"} {itemsNoun} ({solo ? myFilled.size : myFilled.size + oppFilled.size}) ↑
           </button>
 
-          {/* Opponent disconnected banner */}
-          {oppGraceEndsAt != null && !gameOver && (
+          {/* Opponent disconnected banner (versus only — solo has no opponent) */}
+          {!solo && oppGraceEndsAt != null && !gameOver && (
             <OpponentDisconnectedBanner endsAt={oppGraceEndsAt} />
           )}
         </section>
@@ -716,8 +716,10 @@ export default function Match() {
         </div>
       </div>
 
-      {/* Own connection lost: keep the user here while socket.io retries. */}
-      {reconnecting && !fatalError && (
+      {/* Own connection lost: keep the user here while socket.io retries. Shown
+          only in a versus battle — a solo blip recovers silently (or, if the
+          room is gone, surfaces as the fatal "Game unavailable" screen). */}
+      {reconnecting && !fatalError && !solo && (
         <div
           role="alert"
           className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-background/90"
