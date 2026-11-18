@@ -105,16 +105,19 @@ describe("<Match>", () => {
     expect(maps[1].getAttribute("data-filled")).toContain("us");
   });
 
-  it("lists my accepted countries by continent below the game, not the opponent's", () => {
+  it("lists each player's named countries in naming order, one column per player (versus)", () => {
     renderMatch();
     socket.__server("room_state", roomState());
     socket.__server("answer_result", { accepted: true, isoCode: "fr", canonical: "France" });
     socket.__server("opponent_progress", { playerId: "b", isoCode: "jp" });
 
-    const list = screen.getByRole("region", { name: "Your countries" });
-    expect(within(within(list).getByTestId("continent-Europe")).getByText("France")).toBeInTheDocument();
-    expect(within(list).queryByText("Japan")).toBeNull();
-    expect(screen.getByRole("button", { name: /Your countries \(1\)/ })).toBeInTheDocument();
+    const list = screen.getByRole("region", { name: "Named countries" });
+    const alice = within(list).getByTestId("named-Alice");
+    const bob = within(list).getByTestId("named-Bob");
+    expect(within(alice).getByText("France")).toBeInTheDocument();
+    expect(within(alice).queryByText("Japan")).toBeNull();
+    expect(within(bob).getByText("Japan")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Named countries \(2\)/ })).toBeInTheDocument();
   });
 
   it("updates scores on score_update", () => {

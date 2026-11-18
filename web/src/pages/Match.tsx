@@ -306,6 +306,16 @@ export default function Match() {
     return m;
   }, [myFilled, oppFilled, myColor, oppColor]);
 
+  // Versus named list: each player's items in naming order (p1 then p2).
+  const namedPlayers = useMemo(() => {
+    if (solo) return undefined;
+    return [p1, p2].map((pl, i) => ({
+      name: pl?.name ?? `Player ${i + 1}`,
+      color: i === 0 ? "var(--color-player1)" : "var(--color-player2)",
+      ids: pl ? [...(pl.id === myId ? myFilled : oppFilled)] : [],
+    }));
+  }, [solo, p1, p2, myId, myFilled, oppFilled]);
+
   // In last_standing it's my turn only when the server names me as current.
   const myTurn = !lastStanding || (myId != null && currentPlayerId === myId);
   const currentPlayer = room?.players.find((p) => p.id === currentPlayerId);
@@ -463,7 +473,7 @@ export default function Match() {
             }
             className="absolute bottom-3 right-3 z-10 rounded-lg bg-surface-raised px-3 py-2 text-sm font-semibold shadow transition hover:brightness-125"
           >
-            Your {itemsNoun} ({myFilled.size}) ↓
+            {solo ? "Your" : "Named"} {itemsNoun} ({solo ? myFilled.size : myFilled.size + oppFilled.size}) ↓
           </button>
 
           {/* Opponent disconnected banner */}
@@ -542,7 +552,7 @@ export default function Match() {
       </div>
 
       {/* 4. Countries you've named, grouped by continent */}
-      <NamedCountries filled={myFilled} categoryId={categoryId} />
+      <NamedCountries filled={myFilled} categoryId={categoryId} versus={namedPlayers} />
 
       {/* Own connection lost: keep the user here while socket.io retries. */}
       {reconnecting && (

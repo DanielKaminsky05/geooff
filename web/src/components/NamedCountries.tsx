@@ -1,13 +1,29 @@
 import { memo, useMemo } from "react";
-import { groupByContinent, type Continent } from "../lib/continents";
-import { groupByRegion, type UsRegion } from "../lib/usStates";
+import { groupByContinent, countryName, type Continent } from "../lib/continents";
+import { groupByRegion, stateName, type UsRegion } from "../lib/usStates";
 import type { CategoryId } from "../lib/protocol";
+
+/** One player's named items, in the order they named them. */
+export interface NamedPlayer {
+  name: string;
+  color: string;
+  ids: string[];
+}
 
 export interface NamedCountriesProps {
   /** Item ids the player has named (iso codes, or state ids for us-states). */
   filled: Set<string>;
   /** Which set is being played — picks the grouping + labels. */
   categoryId?: CategoryId;
+  /**
+   * Versus: show each player's items in naming order (no grouping), one column
+   * per player. When set, this replaces the grouped solo view.
+   */
+  versus?: NamedPlayer[];
+}
+
+function itemName(categoryId: CategoryId, id: string): string {
+  return categoryId === "us-states" ? stateName(id) : countryName(id);
 }
 
 /** A ruled list: a colored header + one row per item slot. */
@@ -92,8 +108,45 @@ function build(categoryId: CategoryId, filled: Set<string>): { heading: string; 
  * item slot — named items fill from the top (alphabetical), the rest stay blank
  * to show what's left.
  */
-function NamedCountriesInner({ filled, categoryId = "countries" }: NamedCountriesProps) {
+function NamedCountriesInner({ filled, categoryId = "countries", versus }: NamedCountriesProps) {
   const { heading, columns } = useMemo(() => build(categoryId, filled), [categoryId, filled]);
+
+  // Versus: per-player columns, items in naming order, no geographic grouping.
+  if (versus) {
+    const noun = categoryId === "us-states" ? "states" : "countries";
+    return (
+      <section
+        id="your-countries"
+        aria-label={`Named ${noun}`}
+        className="mx-auto w-full max-w-4xl px-4 py-8"
+      >
+        <h2 className="text-xl font-bold">Named {noun}</h2>
+        <div className="mt-6 grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
+          {versus.map((p) => (
+            <div key={p.name} data-testid={`named-${p.name}`}>
+              <h3
+                className="flex items-baseline justify-between gap-2 px-3 py-1.5 text-sm font-semibold text-white"
+                style={{ background: p.color }}
+              >
+                <span className="truncate">{p.name}</span>
+                <span className="tabular-nums opacity-90">{p.ids.length}</span>
+              </h3>
+              <ol className="border-x border-border">
+                {p.ids.map((id) => (
+                  <li key={id} className="truncate border-b border-border px-3 py-1 text-sm">
+                    {itemName(categoryId, id)}
+                  </li>
+                ))}
+                {p.ids.length === 0 && (
+                  <li className="border-b border-border px-3 py-1 text-sm text-muted">Nothing yet</li>
+                )}
+              </ol>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section
