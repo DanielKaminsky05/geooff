@@ -6,8 +6,14 @@ import GlitchWordmark from "../components/GlitchWordmark";
 import {
   TIME_LIMIT_MIN_SECONDS,
   TIME_LIMIT_MAX_SECONDS,
+  TURN_SECONDS_MIN,
+  TURN_SECONDS_MAX,
+  LIVES_MIN,
+  LIVES_MAX,
   type RoomState,
   type PlayerPublic,
+  type CategoryId,
+  type GameMode,
 } from "../lib/protocol";
 
 const PRESETS = [
@@ -19,6 +25,25 @@ const PRESETS = [
 ].filter(
   (p) => p.seconds >= TIME_LIMIT_MIN_SECONDS && p.seconds <= TIME_LIMIT_MAX_SECONDS,
 );
+
+const TURN_PRESETS = [5, 10, 15, 30, 60].filter(
+  (s) => s >= TURN_SECONDS_MIN && s <= TURN_SECONDS_MAX,
+);
+
+const LIVES_PRESETS = Array.from(
+  { length: LIVES_MAX - LIVES_MIN + 1 },
+  (_, i) => LIVES_MIN + i,
+);
+
+const MODES: { value: GameMode; label: string }[] = [
+  { value: "race", label: "Race" },
+  { value: "last_standing", label: "Last Standing" },
+];
+
+const CATEGORIES: { value: CategoryId; label: string }[] = [
+  { value: "countries", label: "Countries" },
+  { value: "us-states", label: "US states" },
+];
 
 export default function Lobby() {
   const { code = "" } = useParams();
@@ -116,6 +141,10 @@ export default function Lobby() {
     room != null && room.players.length === 2 && room.players.every((p) => p.ready);
   const alone = room != null && room.players.length === 1;
   const solo = room?.solo === true;
+  // Last Standing is multiplayer-only, so a solo room is always Race.
+  const mode = room?.settings.mode ?? "race";
+  const effectiveMode = solo ? "race" : mode;
+  const categoryId = room?.settings.categoryId ?? "countries";
 
   const [copied, setCopied] = useState(false);
   async function copyCode() {
@@ -194,32 +223,122 @@ export default function Lobby() {
 
       {/* Settings (host-only controls, read-only for guest) */}
       <section className="rounded-xl border border-border bg-surface p-5">
-        <p className="mb-2 text-sm font-semibold text-muted">Time limit</p>
+        {/* Mode is versus-only — Last Standing needs a second player. */}
+        {!solo && (
+          <>
+            <p className="mb-2 text-sm font-semibold text-muted">Mode</p>
+            <div className="mb-4 flex flex-wrap gap-2">
+              {MODES.map((m) => {
+                const active = mode === m.value;
+                return (
+                  <button
+                    key={m.value}
+                    disabled={!isHost}
+                    onClick={() => socket.emit("update_settings", { mode: m.value })}
+                    className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+                      active
+                        ? "border-foreground bg-surface-raised text-foreground"
+                        : "border-border bg-surface text-muted hover:text-foreground hover:brightness-125"
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        <p className="mb-2 text-sm font-semibold text-muted">Set</p>
         <div className="flex flex-wrap gap-2">
-          {PRESETS.map((p) => {
-            const active = room?.settings.timeLimitSeconds === p.seconds;
+          {CATEGORIES.map((c) => {
+            const active = categoryId === c.value;
             return (
               <button
-                key={p.seconds}
+                key={c.value}
                 disabled={!isHost}
-                onClick={() => socket.emit("update_settings", { timeLimitSeconds: p.seconds })}
+                onClick={() => socket.emit("update_settings", { categoryId: c.value })}
                 className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
                   active
                     ? "border-foreground bg-surface-raised text-foreground"
                     : "border-border bg-surface text-muted hover:text-foreground hover:brightness-125"
                 } disabled:cursor-not-allowed disabled:opacity-60`}
               >
-                {p.label}
+                {c.label}
               </button>
             );
           })}
         </div>
-        <p className="mt-4 text-sm font-semibold text-muted">Category</p>
-        <div className="mt-2">
-          <span className="rounded-lg border border-foreground bg-surface-raised px-4 py-2 text-sm font-semibold text-foreground">
-            Countries
-          </span>
-        </div>
+
+        {effectiveMode === "last_standing" ? (
+          <>
+            <p className="mt-4 mb-2 text-sm font-semibold text-muted">Turn time</p>
+            <div className="flex flex-wrap gap-2">
+              {TURN_PRESETS.map((s) => {
+                const active = room?.settings.turnSeconds === s;
+                return (
+                  <button
+                    key={s}
+                    disabled={!isHost}
+                    onClick={() => socket.emit("update_settings", { turnSeconds: s })}
+                    className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+                      active
+                        ? "border-foreground bg-surface-raised text-foreground"
+                        : "border-border bg-surface text-muted hover:text-foreground hover:brightness-125"
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    {s}s
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="mt-4 mb-2 text-sm font-semibold text-muted">Lives</p>
+            <div className="flex flex-wrap gap-2">
+              {LIVES_PRESETS.map((n) => {
+                const active = room?.settings.lives === n;
+                return (
+                  <button
+                    key={n}
+                    disabled={!isHost}
+                    onClick={() => socket.emit("update_settings", { lives: n })}
+                    className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+                      active
+                        ? "border-foreground bg-surface-raised text-foreground"
+                        : "border-border bg-surface text-muted hover:text-foreground hover:brightness-125"
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="mt-4 mb-2 text-sm font-semibold text-muted">Time limit</p>
+            <div className="flex flex-wrap gap-2">
+              {PRESETS.map((p) => {
+                const active = room?.settings.timeLimitSeconds === p.seconds;
+                return (
+                  <button
+                    key={p.seconds}
+                    disabled={!isHost}
+                    onClick={() => socket.emit("update_settings", { timeLimitSeconds: p.seconds })}
+                    className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+                      active
+                        ? "border-foreground bg-surface-raised text-foreground"
+                        : "border-border bg-surface text-muted hover:text-foreground hover:brightness-125"
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+
         {!isHost && (
           <p className="mt-3 text-xs text-muted">Only the host can change settings.</p>
         )}

@@ -46,7 +46,7 @@ function roomState(over: Partial<RoomState> = {}): RoomState {
     code: "ROOM01",
     phase: "lobby",
     hostId: "a",
-    settings: { categoryId: "countries", timeLimitSeconds: 300 },
+    settings: { categoryId: "countries", mode: "race", timeLimitSeconds: 300, turnSeconds: 15, lives: 5 },
     players: [player({ id: "a", slot: "p1", name: "Alice" })],
     ...over,
   };
@@ -118,6 +118,63 @@ describe("<Lobby>", () => {
     expect(screen.queryByRole("button", { name: "30 min" })).toBeNull();
     await user.click(screen.getByRole("button", { name: "15 min" }));
     expect(socket.__lastEmit("update_settings")).toEqual({ timeLimitSeconds: 900 });
+  });
+
+  it("the mode toggle emits update_settings with the chosen mode", async () => {
+    const user = userEvent.setup();
+    renderLobby();
+    socket.__server("room_state", roomState());
+
+    await user.click(screen.getByRole("button", { name: "Last Standing" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ mode: "last_standing" });
+
+    await user.click(screen.getByRole("button", { name: "Race" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ mode: "race" });
+  });
+
+  it("the set picker emits update_settings with the chosen categoryId", async () => {
+    const user = userEvent.setup();
+    renderLobby();
+    socket.__server("room_state", roomState());
+
+    await user.click(screen.getByRole("button", { name: "US states" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ categoryId: "us-states" });
+
+    await user.click(screen.getByRole("button", { name: "Countries" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ categoryId: "countries" });
+  });
+
+  it("in last_standing, shows turn/lives pickers (not the time limit) and emits them", async () => {
+    const user = userEvent.setup();
+    renderLobby();
+    socket.__server("room_state", roomState({
+      settings: { categoryId: "countries", mode: "last_standing", timeLimitSeconds: 300, turnSeconds: 15, lives: 5 },
+    }));
+
+    // Round-length presets are replaced by the per-turn picker.
+    expect(screen.queryByRole("button", { name: "5 min" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "30s" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ turnSeconds: 30 });
+
+    await user.click(screen.getByRole("button", { name: "3" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ lives: 3 });
+  });
+
+  it("a solo room has no Mode toggle and stays on Race (time limit, not turns)", () => {
+    renderLobby();
+    // Even if a stale solo room reports last_standing, the UI forces Race.
+    socket.__server("room_state", roomState({
+      solo: true,
+      settings: { categoryId: "countries", mode: "last_standing", timeLimitSeconds: 300, turnSeconds: 15, lives: 5 },
+    }));
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    // No mode toggle in solo.
+    expect(screen.queryByRole("button", { name: "Last Standing" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Race" })).toBeNull();
+    // Race pickers (time limit), not turn/lives.
+    expect(screen.getByRole("button", { name: "5 min" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "15s" })).toBeNull();
   });
 
   it("non-host sees settings presets disabled (read-only)", () => {

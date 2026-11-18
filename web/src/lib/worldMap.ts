@@ -1,21 +1,15 @@
-// Typed wrapper around @svg-maps/world.
-// The package ships a `svg-maps__common` type import that isn't installed,
-// so we declare a minimal local type and re-export the data.
-import worldData from "@svg-maps/world/index.js";
+// Backwards-compatible re-export of the world map.
+// The map data + registry now live in ./maps; this keeps existing importers
+// (continents.ts, its test) building unchanged.
+import { mapFor, type MapLocation, type GeoMap } from "./maps";
 
-export interface MapLocation {
-  id: string; // ISO 3166-1 alpha-2, LOWERCASE (matches server isoCodes)
-  name: string;
-  path: string;
-}
+export type { MapLocation };
 
-export interface WorldMap {
+export interface WorldMap extends GeoMap {
   label: string;
-  viewBox: string;
-  locations: MapLocation[];
 }
 
-const world = worldData as unknown as WorldMap;
+const world = mapFor("countries");
 
 export const WORLD_VIEWBOX = world.viewBox;
 export const WORLD_LOCATIONS = world.locations;

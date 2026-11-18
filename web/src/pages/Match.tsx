@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession } from "../lib/session";
-import type { GamePhase, PlayerPublic, PlayerSlot, RoomState } from "../lib/protocol";
+import type { CategoryId, GamePhase, PlayerPublic, PlayerSlot, RoomState } from "../lib/protocol";
 import WorldMap from "../components/WorldMap";
 import ScoreBar from "../components/ScoreBar";
 import CountryInput from "../components/CountryInput";
 import NamedCountries from "../components/NamedCountries";
 import ProgressBar from "../components/ProgressBar";
+import Hearts from "../components/Hearts";
+import TurnTimer from "../components/TurnTimer";
 
 interface GameOver {
   winnerId: string | null;
@@ -36,6 +38,11 @@ export default function Match() {
 
   const [myFilled, setMyFilled] = useState<Set<string>>(() => new Set());
   const [oppFilled, setOppFilled] = useState<Set<string>>(() => new Set());
+
+  // last_standing turn + lives state.
+  const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
+  const [turnEndsAt, setTurnEndsAt] = useState<number | null>(null);
+  const [lives, setLives] = useState<Record<string, number>>({});
 
   const [clearSignal, setClearSignal] = useState(0);
   const [rejectSignal, setRejectSignal] = useState(0);
@@ -77,6 +84,12 @@ export default function Match() {
           if (pid !== myIdRef.current) setOppFilled(new Set(isos));
         }
       }
+      // Rehydrate last_standing turn + lives from snapshot if present.
+      if (state.turn) {
+        setCurrentPlayerId(state.turn.currentPlayerId);
+        setTurnEndsAt(state.turn.endsAt);
+      }
+      if (state.lives) setLives(state.lives);
     }
     function onJoined(p: {
       playerId: string;
@@ -112,6 +125,9 @@ export default function Match() {
       setMyRematch(false);
       setOppRematch(false);
       setOppGraceEndsAt(null);
+      setCurrentPlayerId(null);
+      setTurnEndsAt(null);
+      setLives({});
     }
     function onAnswerResult(p: {
       accepted: boolean;
@@ -135,7 +151,9 @@ export default function Match() {
             ? "Already named"
             : p.reason === "wrong"
               ? "Not a match"
-              : null,
+              : p.reason === "not_your_turn"
+                ? "Not your turn"
+                : null,
         );
       }
     }
@@ -149,6 +167,14 @@ export default function Match() {
         next.add(p.isoCode);
         return next;
       });
+    }
+    function onTurnStarted(p: { playerId: string; endsAt: number }) {
+      setCurrentPlayerId(p.playerId);
+      setTurnEndsAt(p.endsAt);
+      setRejectMsg(null);
+    }
+    function onLifeLost(p: { playerId: string; livesLeft: number }) {
+      setLives((prev) => ({ ...prev, [p.playerId]: p.livesLeft }));
     }
     function onGameOver(p: GameOver) {
       setPhase("ended");
@@ -191,6 +217,8 @@ export default function Match() {
     socket.on("answer_result", onAnswerResult);
     socket.on("score_update", onScoreUpdate);
     socket.on("opponent_progress", onOpponentProgress);
+    socket.on("turn_started", onTurnStarted);
+    socket.on("life_lost", onLifeLost);
     socket.on("game_over", onGameOver);
     socket.on("rematch_start", onRematchStart);
     socket.on("rematch_requested", onRematchRequested);
@@ -216,6 +244,8 @@ export default function Match() {
       socket.off("answer_result", onAnswerResult);
       socket.off("score_update", onScoreUpdate);
       socket.off("opponent_progress", onOpponentProgress);
+      socket.off("turn_started", onTurnStarted);
+      socket.off("life_lost", onLifeLost);
       socket.off("game_over", onGameOver);
       socket.off("rematch_start", onRematchStart);
       socket.off("rematch_requested", onRematchRequested);
@@ -237,8 +267,19 @@ export default function Match() {
   const myColor = slotColor(mySlot);
   const oppColor = slotColor(opponent?.slot ?? otherSlot(mySlot));
 
-  // Only accept guesses while the round is actually running.
-  const inputDisabled = gameOver != null || phase !== "playing";
+  const mode = room?.settings.mode ?? "race";
+  const categoryId = room?.settings.categoryId ?? "countries";
+  const categoryLabel = categoryId === "us-states" ? "US states" : "Countries";
+  const itemsNoun = categoryId === "us-states" ? "states" : "countries";
+  const lastStanding = mode === "last_standing";
+  const maxLives = room?.settings.lives ?? 0;
+  // In last_standing it's my turn only when the server names me as current.
+  const myTurn = !lastStanding || (myId != null && currentPlayerId === myId);
+  const currentPlayer = room?.players.find((p) => p.id === currentPlayerId);
+
+  // Only accept guesses while the round is running; in last_standing, also gate
+  // on it being my turn.
+  const inputDisabled = gameOver != null || phase !== "playing" || !myTurn;
 
   const effectiveScores = useMemo(() => {
     const s = { ...scores };
@@ -263,8 +304,40 @@ export default function Match() {
           scores={effectiveScores}
           total={total}
           endsAt={endsAt}
-          category="Countries"
+          category={categoryLabel}
         />
+
+        {/* 1b. Last Standing: turn, per-turn clock, and lives */}
+        {lastStanding && phase === "playing" && !gameOver && (
+          <div
+            data-testid="turn-bar"
+            className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-2"
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-semibold" style={{ color: myTurn ? myColor : oppColor }}>
+                {myTurn
+                  ? "Your turn"
+                  : `${currentPlayer?.name ?? "Opponent"}'s turn`}
+              </span>
+              <TurnTimer endsAt={turnEndsAt} />
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1 text-xs">
+              {[me, opponent].map((pl, i) =>
+                pl ? (
+                  <span key={pl.id} className="flex items-center gap-2">
+                    <span className="truncate text-muted">{pl.name}</span>
+                    <Hearts
+                      lives={lives[pl.id] ?? maxLives}
+                      max={maxLives}
+                      colorVar={i === 0 ? myColor : oppColor}
+                      label={pl.name}
+                    />
+                  </span>
+                ) : null,
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 2. Maps */}
         <section className="relative min-h-0 flex-1">
@@ -274,6 +347,7 @@ export default function Match() {
               title={`You${me ? ` · ${me.name}` : ""}`}
               colorVar={myColor}
               filled={myFilled}
+              categoryId={categoryId}
             />
           )}
 
@@ -285,12 +359,14 @@ export default function Match() {
                   title={`You${me ? ` · ${me.name}` : ""}`}
                   colorVar={myColor}
                   filled={myFilled}
+                  categoryId={categoryId}
                   borderRight
                 />
                 <MapPane
                   title={`Opponent${opponent ? ` · ${opponent.name}` : ""}`}
                   colorVar={oppColor}
                   filled={oppFilled}
+                  categoryId={categoryId}
                 />
               </div>
 
@@ -304,6 +380,7 @@ export default function Match() {
                   }
                   colorVar={showOpponent ? oppColor : myColor}
                   filled={showOpponent ? oppFilled : myFilled}
+                  categoryId={categoryId}
                 />
                 <button
                   onClick={() => setShowOpponent((s) => !s)}
@@ -322,7 +399,7 @@ export default function Match() {
             }
             className="absolute bottom-3 right-3 z-10 rounded-lg bg-surface-raised px-3 py-2 text-sm font-semibold shadow transition hover:brightness-125"
           >
-            Your countries ({myFilled.size}) ↓
+            Your {itemsNoun} ({myFilled.size}) ↓
           </button>
 
           {/* Opponent disconnected banner */}
@@ -401,7 +478,7 @@ export default function Match() {
       </div>
 
       {/* 4. Countries you've named, grouped by continent */}
-      <NamedCountries filled={myFilled} />
+      <NamedCountries filled={myFilled} categoryId={categoryId} />
 
       {/* Own connection lost: keep the user here while socket.io retries. */}
       {reconnecting && (
@@ -421,11 +498,13 @@ function MapPane({
   title,
   colorVar,
   filled,
+  categoryId,
   borderRight,
 }: {
   title: string;
   colorVar: string;
   filled: Set<string>;
+  categoryId: CategoryId;
   borderRight?: boolean;
 }) {
   return (
@@ -433,7 +512,7 @@ function MapPane({
       <div className="absolute left-3 top-3 z-10 rounded-lg bg-surface/80 px-3 py-1 text-xs font-semibold" style={{ color: colorVar }}>
         {title} · {filled.size}
       </div>
-      <WorldMap filledIso={filled} color={colorVar} className="h-full w-full" />
+      <WorldMap filledIso={filled} color={colorVar} categoryId={categoryId} className="h-full w-full" />
     </div>
   );
 }

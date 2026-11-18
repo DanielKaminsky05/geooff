@@ -54,7 +54,7 @@ function roomState(over: Partial<RoomState> = {}): RoomState {
     code: "ROOM01",
     phase: "playing",
     hostId: "a",
-    settings: { categoryId: "countries", timeLimitSeconds: 300 },
+    settings: { categoryId: "countries", mode: "race", timeLimitSeconds: 300, turnSeconds: 15, lives: 5 },
     players: [
       player({ id: "a", slot: "p1", name: "Alice" }),
       player({ id: "b", slot: "p2", name: "Bob" }),
@@ -291,6 +291,66 @@ describe("<Match>", () => {
     expect(screen.getByLabelText("Country guess")).toBeEnabled();
     socket.__server("game_over", { winnerId: null, scores: { a: 0, b: 0 } });
     expect(screen.getByLabelText("Country guess")).toBeDisabled();
+  });
+});
+
+describe("<Match> last_standing", () => {
+  const lsSettings = {
+    categoryId: "countries" as const,
+    mode: "last_standing" as const,
+    timeLimitSeconds: 300,
+    turnSeconds: 15,
+    lives: 5,
+  };
+  const lsState = (over: Partial<RoomState> = {}) =>
+    roomState({
+      settings: lsSettings,
+      turn: { currentPlayerId: "b", endsAt: Date.now() + 15_000 },
+      lives: { a: 5, b: 5 },
+      ...over,
+    });
+
+  beforeEach(() => {
+    socket = createMockSocket();
+    identity = { playerId: "a", slot: "p1", reconnectToken: "tok" };
+    navigate.mockClear();
+    setIdentity.mockClear();
+  });
+
+  it("disables input when it is not my turn and shows whose turn it is", () => {
+    renderMatch();
+    socket.__server("room_state", lsState());
+    expect(screen.getByLabelText("Country guess")).toBeDisabled();
+    expect(screen.getByText("Bob's turn")).toBeInTheDocument();
+  });
+
+  it("enables input on a turn_started naming me", () => {
+    renderMatch();
+    socket.__server("room_state", lsState());
+    expect(screen.getByLabelText("Country guess")).toBeDisabled();
+
+    socket.__server("turn_started", { playerId: "a", endsAt: Date.now() + 15_000 });
+    expect(screen.getByLabelText("Country guess")).toBeEnabled();
+    expect(screen.getByText("Your turn")).toBeInTheDocument();
+  });
+
+  it("decrements a player's hearts on life_lost", () => {
+    renderMatch();
+    socket.__server("room_state", lsState());
+
+    const heartsFor = (name: string) =>
+      screen.getByRole("img", { name: new RegExp(`^${name}:`) });
+    expect(heartsFor("Bob")).toHaveAttribute("data-lives", "5");
+
+    socket.__server("life_lost", { playerId: "b", livesLeft: 4 });
+    expect(heartsFor("Bob")).toHaveAttribute("data-lives", "4");
+  });
+
+  it("surfaces a not_your_turn rejection gracefully", () => {
+    renderMatch();
+    socket.__server("room_state", lsState());
+    socket.__server("answer_result", { accepted: false, reason: "not_your_turn" });
+    expect(screen.getByText("Not your turn")).toBeInTheDocument();
   });
 });
 
