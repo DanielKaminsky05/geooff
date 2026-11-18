@@ -53,10 +53,16 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-10 px-6 py-16">
       <header className="text-center">
-        <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">
-          geo
-          <span className="text-player1">fight</span>
+        <h1
+          data-text="GEOFIGHT"
+          aria-label="geofight"
+          className="wordmark-glitch text-2xl sm:text-4xl md:text-5xl"
+        >
+          GEOFIGHT
         </h1>
+        <p className="mt-5 text-[0.65rem] tracking-[0.5em] text-muted sm:text-xs">
+          WORLD&nbsp;FACE-OFF
+        </p>
       </header>
 
       <div className="flex w-full max-w-sm flex-col gap-4">

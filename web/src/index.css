@@ -75,3 +75,64 @@ body {
     opacity: 0.85;
   }
 }
+
+/*
+ * Glitch wordmark: a pixel-font title printed three times — an off-white core
+ * with emerald (P1) and amber (P2) ghosts offset in opposite directions and
+ * additively blended (screen) so the two racers' colors bleed through the logo.
+ */
+.wordmark-glitch {
+  position: relative;
+  display: inline-block;
+  isolation: isolate; /* keep the z-index:-1 ghosts behind the core, not the page */
+  font-family: var(--font-display);
+  color: var(--color-foreground);
+  line-height: 1;
+  /* Pixel fonts render crisper without sub-pixel antialias smoothing. */
+  -webkit-font-smoothing: none;
+}
+
+.wordmark-glitch::before,
+.wordmark-glitch::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  z-index: -1; /* behind the off-white core so colors fringe the edges */
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+/* Emerald ghost, nudged up-left. */
+.wordmark-glitch::before {
+  color: var(--color-player1);
+  animation: glitch-p1 5.5s infinite steps(1);
+}
+
+/* Amber ghost, nudged down-right. */
+.wordmark-glitch::after {
+  color: var(--color-player2);
+  animation: glitch-p2 5.5s infinite steps(1);
+}
+
+@keyframes glitch-p1 {
+  0%, 90%, 100% { transform: translate(-0.05em, -0.035em); }
+  92% { transform: translate(-0.11em, -0.01em); }
+  94% { transform: translate(-0.02em, -0.06em); }
+  96% { transform: translate(-0.09em, -0.03em); }
+  98% { transform: translate(-0.05em, -0.035em); }
+}
+
+@keyframes glitch-p2 {
+  0%, 90%, 100% { transform: translate(0.05em, 0.035em); }
+  92% { transform: translate(0.02em, 0.07em); }
+  94% { transform: translate(0.1em, 0.015em); }
+  96% { transform: translate(0.04em, 0.05em); }
+  98% { transform: translate(0.05em, 0.035em); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wordmark-glitch::before,
+  .wordmark-glitch::after {
+    animation: none;
+  }
+}
