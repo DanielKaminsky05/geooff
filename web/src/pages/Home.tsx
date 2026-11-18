@@ -60,8 +60,8 @@ export default function Home() {
         >
           GEOFIGHT
         </h1>
-        <p className="mt-5 text-[0.65rem] tracking-[0.5em] text-muted sm:text-xs">
-          WORLD&nbsp;FACE-OFF
+        <p className="mt-5 text-[0.7rem] tracking-[0.2em] text-muted sm:text-xs">
+          geography against friends
         </p>
       </header>
 
