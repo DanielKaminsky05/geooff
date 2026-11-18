@@ -528,9 +528,13 @@ export default function Match() {
         </section>
 
         {/* 3. Input */}
-        <section className="border-t border-border bg-surface px-4 py-3">
+        <section className="relative border-t border-border bg-surface px-4 py-3">
+          {/* Floated above the bar (out of flow) so it never pushes the layout
+              up/down when it appears on a rejected guess. */}
           {rejectMsg && (
-            <p className="mb-1 text-center text-sm text-accent">{rejectMsg}</p>
+            <p className="pointer-events-none absolute inset-x-0 bottom-full mb-1 text-center text-sm text-accent">
+              {rejectMsg}
+            </p>
           )}
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
