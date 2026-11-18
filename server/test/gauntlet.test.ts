@@ -1,0 +1,261 @@
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import {
+  startTestServer,
+  connectClient,
+  awaitEvent,
+  expectNoEvent,
+  type TestServer,
+  type Socket,
+} from "./fixtures/serverHarness.js";
+import { rooms } from "../src/rooms.js";
+import { promptById, validIdsFor } from "../src/prompts.js";
+import { countries } from "../src/data/countries.js";
+
+/**
+ * gauntlet (Last Standing + a prompt layer).
+ *
+ * The opening prompt is chosen at random, so tests DERIVE their answers from the
+ * room's active prompt (via promptById/validIdsFor over the "countries" set)
+ * rather than hard-coding a country. Timing is deterministic: countdownTickMs is
+ * tiny and turnMsOverride pins the per-turn clock (long where we must not time
+ * out, short where we test timeouts).
+ */
+
+const CATEGORY = "countries";
+const isoToName = new Map(countries.map((c) => [c.iso, c.name]));
+
+/** The canonical name of some iso in the active prompt's valid set (on-prompt). */
+function onPromptName(promptId: string): string {
+  const prompt = promptById(promptId)!;
+  const valid = validIdsFor(prompt, CATEGORY);
+  const iso = [...valid][0];
+  return isoToName.get(iso)!;
+}
+
+/** The name of some set country NOT in the active prompt's valid set (off-prompt). */
+function offPromptName(promptId: string): string {
+  const prompt = promptById(promptId)!;
+  const valid = validIdsFor(prompt, CATEGORY);
+  const c = countries.find((c) => !valid.has(c.iso))!;
+  return c.name;
+}
+
+let server: TestServer;
+const openSockets: Socket[] = [];
+
+function client(): Socket {
+  const s = connectClient(server.url);
+  openSockets.push(s);
+  return s;
+}
+
+afterEach(async () => {
+  for (const s of openSockets.splice(0)) {
+    s.removeAllListeners();
+    s.disconnect();
+  }
+  await server.close();
+  vi.useRealTimers();
+});
+
+/** Create a 2-player room and switch it to gauntlet (host sets the mode). */
+async function makeGauntletRoom(lives = 3) {
+  const a = client();
+  await awaitEvent(a, "connect");
+  a.emit("create_room", { playerName: "Alice" });
+  const joinedA = await awaitEvent<any>(a, "joined");
+  const code = joinedA.state.code as string;
+
+  const stateModed = awaitEvent<any>(a, "room_state");
+  a.emit("update_settings", { mode: "gauntlet", lives });
+  await stateModed;
+
+  const b = client();
+  await awaitEvent(b, "connect");
+  const playerJoinedA = awaitEvent<any>(a, "player_joined");
+  b.emit("join_room", { code, playerName: "Bob" });
+  const joinedB = await awaitEvent<any>(b, "joined");
+  await playerJoinedA;
+
+  return {
+    a,
+    b,
+    code,
+    aId: joinedA.playerId as string,
+    bId: joinedB.playerId as string,
+  };
+}
+
+/** Ready both, start, and resolve with the first prompt_changed + turn_started. */
+async function startGauntlet(ctx: Awaited<ReturnType<typeof makeGauntletRoom>>) {
+  const { a, b, aId } = ctx;
+  a.emit("set_ready", { ready: true });
+  b.emit("set_ready", { ready: true });
+  await awaitEvent(a, "player_ready");
+
+  const promptA = awaitEvent<any>(a, "prompt_changed", 8000);
+  const turnA = awaitEvent<any>(a, "turn_started", 8000);
+  a.emit("start_game");
+  const prompt = await promptA;
+  const t = await turnA;
+  // Host (p1 = Alice) takes turn 1.
+  expect(t.playerId).toBe(aId);
+  return { prompt, turn: t };
+}
+
+describe("gauntlet — prompt setup", () => {
+  beforeEach(async () => {
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 60_000 });
+  });
+
+  it("sets a prompt and emits prompt_changed at game start", async () => {
+    const ctx = await makeGauntletRoom();
+    const { prompt } = await startGauntlet(ctx);
+
+    expect(typeof prompt.id).toBe("string");
+    expect(typeof prompt.label).toBe("string");
+    expect(prompt.label.length).toBeGreaterThan(0);
+    // Runtime holds the active prompt; valid set is NOT leaked over the wire.
+    const room = rooms.get(ctx.code)!;
+    expect(room.currentPromptId).toBe(prompt.id);
+    expect(room.claimedThisPrompt).toBeInstanceOf(Set);
+    expect((prompt as any).validIds).toBeUndefined();
+  });
+
+  it("room_state carries the prompt { id, label }", async () => {
+    const ctx = await makeGauntletRoom();
+    const { prompt } = await startGauntlet(ctx);
+
+    // A fresh snapshot (via reconnect-less re-fetch) includes the prompt.
+    const stateP = awaitEvent<any>(ctx.a, "room_state");
+    ctx.a.emit("set_ready", { ready: true }); // any state-broadcasting no-op works
+    const state = await stateP;
+    expect(state.prompt).toEqual({ id: prompt.id, label: prompt.label });
+  });
+});
+
+describe("gauntlet — on/off prompt answers", () => {
+  beforeEach(async () => {
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 60_000 });
+  });
+
+  it("an on-prompt valid answer scores and passes the turn", async () => {
+    const ctx = await makeGauntletRoom();
+    const { prompt } = await startGauntlet(ctx);
+    const { a, aId, bId } = ctx;
+
+    const resA = awaitEvent<any>(a, "answer_result");
+    const turn2 = awaitEvent<any>(a, "turn_started");
+    a.emit("submit_answer", { text: onPromptName(prompt.id) });
+
+    const r = await resA;
+    expect(r.accepted).toBe(true);
+
+    const t2 = await turn2;
+    expect(t2.playerId).toBe(bId);
+    const room = rooms.get(ctx.code)!;
+    expect(room.currentPlayerId).toBe(bId);
+    // Correct answer costs no life.
+    expect(room.lives![aId]).toBe(3);
+    // Claimed under this prompt.
+    expect(room.claimedThisPrompt!.has(r.isoCode)).toBe(true);
+  });
+
+  it("an off-prompt valid country is rejected off_prompt with no turn pass", async () => {
+    const ctx = await makeGauntletRoom();
+    const { prompt } = await startGauntlet(ctx);
+    const { a, aId } = ctx;
+
+    const resA = awaitEvent<any>(a, "answer_result");
+    const noTurn = expectNoEvent(a, "turn_started", 300);
+    a.emit("submit_answer", { text: offPromptName(prompt.id) });
+
+    const r = await resA;
+    expect(r.accepted).toBe(false);
+    expect(r.reason).toBe("off_prompt");
+    await noTurn;
+    // Still A's turn, no life lost.
+    const room = rooms.get(ctx.code)!;
+    expect(room.currentPlayerId).toBe(aId);
+    expect(room.lives![aId]).toBe(3);
+  });
+
+  it("a non-country guess is rejected wrong (not off_prompt)", async () => {
+    const ctx = await makeGauntletRoom();
+    await startGauntlet(ctx);
+    const { a } = ctx;
+
+    const resA = awaitEvent<any>(a, "answer_result");
+    a.emit("submit_answer", { text: "atlantis" });
+    expect((await resA).reason).toBe("wrong");
+  });
+});
+
+describe("gauntlet — timeout cycles the prompt", () => {
+  it("a turn timeout costs a life AND cycles in a different prompt", async () => {
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 80 });
+    const ctx = await makeGauntletRoom();
+    const { a, b, aId, bId } = ctx;
+
+    a.emit("set_ready", { ready: true });
+    b.emit("set_ready", { ready: true });
+    await awaitEvent(a, "player_ready");
+
+    const firstPrompt = awaitEvent<any>(a, "prompt_changed", 8000);
+    const firstTurn = awaitEvent<any>(a, "turn_started", 8000);
+    const lifeLost = awaitEvent<any>(a, "life_lost", 8000);
+    // The SECOND prompt_changed is the cycle on timeout.
+    const secondPrompt = new Promise<any>((resolve) => {
+      let seen = 0;
+      a.on("prompt_changed", function onP(p: any) {
+        seen += 1;
+        if (seen === 2) {
+          a.off("prompt_changed", onP);
+          resolve(p);
+        }
+      });
+    });
+    a.emit("start_game");
+    const p1 = await firstPrompt;
+    await firstTurn;
+
+    // A never answers → A's clock runs out.
+    const ll = await lifeLost;
+    expect(ll.playerId).toBe(aId);
+    expect(ll.livesLeft).toBe(2);
+
+    // A fresh prompt cycled in, with a different id.
+    const p2 = await secondPrompt;
+    expect(p2.id).not.toBe(p1.id);
+    const room = rooms.get(ctx.code)!;
+    expect(room.currentPromptId).toBe(p2.id);
+    expect(room.claimedThisPrompt!.size).toBe(0);
+    // Play passed to B for the new prompt.
+    expect(room.currentPlayerId).toBe(bId);
+  }, 10000);
+});
+
+describe("gauntlet — elimination", () => {
+  it("reaching 0 lives ends the game with the OTHER player as winner", async () => {
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 60 });
+    const ctx = await makeGauntletRoom(1);
+    const { a, b, bId, code } = ctx;
+
+    a.emit("set_ready", { ready: true });
+    b.emit("set_ready", { ready: true });
+    await awaitEvent(a, "player_ready");
+
+    const over = awaitEvent<any>(b, "game_over", 8000);
+    a.emit("start_game");
+    // A lets the only turn run out → A eliminated → B wins.
+    const go = await over;
+    expect(go.winnerId).toBe(bId);
+    const room = rooms.get(code)!;
+    expect(room.phase).toBe("ended");
+    // Gauntlet runtime fully torn down.
+    expect(room.turnTimer).toBeUndefined();
+    expect(room.currentPlayerId).toBeUndefined();
+    expect(room.currentPromptId).toBeUndefined();
+    expect(room.claimedThisPrompt).toBeUndefined();
+  }, 10000);
+});

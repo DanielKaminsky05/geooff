@@ -17,6 +17,8 @@ import {
 } from "./protocol.js";
 // sets.ts has no dependency on rooms.ts, so this import is cycle-free.
 import { totalFor } from "./sets.js";
+// prompts.ts does not depend on rooms.ts either, so this is cycle-free.
+import { promptById } from "./prompts.js";
 
 export interface Seat {
   id: string; // stable per-seat id (playerId)
@@ -62,6 +64,12 @@ export interface Room {
   claimed?: Set<string>;
   /** paused turn's remaining ms, stored when the current player disconnects. */
   pausedTurnMs?: number;
+
+  /* ---- gauntlet runtime (additive; unused in race / last_standing) ---- */
+  /** id of the active prompt (resolve its label/validIds via prompts.ts). */
+  currentPromptId?: string;
+  /** isos already claimed under the CURRENT prompt (reset on each cycle). */
+  claimedThisPrompt?: Set<string>;
 }
 
 const CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -170,6 +178,12 @@ export function roomStateOf(room: Room, total: number = totalFor(room.settings.c
     state.turn = { currentPlayerId: room.currentPlayerId, endsAt: room.turnEndsAt };
   }
   if (room.lives !== undefined) state.lives = { ...room.lives };
+  // gauntlet: surface the active prompt (label only — the valid set is never
+  // sent) so a reconnecting client rehydrates the banner.
+  if (room.currentPromptId !== undefined) {
+    const prompt = promptById(room.currentPromptId);
+    if (prompt) state.prompt = { id: prompt.id, label: prompt.label };
+  }
   return state;
 }
 
@@ -199,6 +213,8 @@ export function clearTurnRuntime(room: Room): void {
   room.lives = undefined;
   room.claimed = undefined;
   room.pausedTurnMs = undefined;
+  room.currentPromptId = undefined;
+  room.claimedThisPrompt = undefined;
 }
 
 export function deleteRoom(room: Room): void {

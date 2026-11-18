@@ -26,8 +26,15 @@ import type {
 } from "./protocol.js";
 import type { Room, Seat } from "./rooms.js";
 import { scoresOf } from "./rooms.js";
-import { scoreGuess } from "./matching.js";
+import { scoreGuess, matchAnswer } from "./matching.js";
+import { normalizeAnswer } from "./protocol.js";
 import { lookupFor, canonicalFor, totalFor } from "./sets.js";
+import {
+  buildPromptPool,
+  promptById,
+  validIdsFor,
+  type Prompt,
+} from "./prompts.js";
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 
@@ -45,9 +52,23 @@ export interface LastStandingDeps {
   turnDurationMs: (room: Room) => number;
 }
 
-/** True when this room is playing the turn-based mode. */
+/** True when this room is playing plain last_standing (no prompt layer). */
 export function isLastStanding(room: Room): boolean {
   return room.settings.mode === "last_standing";
+}
+
+/** True when this room is playing gauntlet (last_standing + a prompt layer). */
+export function isGauntlet(room: Room): boolean {
+  return room.settings.mode === "gauntlet";
+}
+
+/**
+ * True for any turn-based mode (last_standing OR gauntlet). The shared turn /
+ * lives / per-turn-clock machinery (arm/pass/timeout/pause/resume) applies to
+ * both; only submit scoring and the timeout follow-up differ.
+ */
+export function isTurnBased(room: Room): boolean {
+  return isLastStanding(room) || isGauntlet(room);
 }
 
 /** The seat whose turn it currently is, if any. */
@@ -72,7 +93,51 @@ export function beginFirstTurn(deps: LastStandingDeps, room: Room): void {
   for (const seat of room.players) room.lives[seat.id] = room.settings.lives;
   room.claimed = new Set<string>();
   room.pausedTurnMs = undefined;
+  // Gauntlet: seed the opening prompt (resets claimedThisPrompt + announces it)
+  // BEFORE arming turn 1, so the banner is up when the first clock starts.
+  if (isGauntlet(room)) {
+    room.currentPromptId = undefined;
+    room.claimedThisPrompt = undefined;
+    const first = pickPrompt(room);
+    if (first) setPrompt(deps, room, first);
+  }
   armTurn(deps, room, room.hostId);
+}
+
+/* ------------------------------------------------------------------ */
+/* Gauntlet: prompt selection + cycling                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Pick a prompt at random from the category's pool, optionally excluding one id
+ * (so a cycle lands on a DIFFERENT prompt). Falls back to any pool member if
+ * the exclusion would leave nothing. Returns undefined only for an empty pool.
+ */
+function pickPrompt(room: Room, excludeId?: string): Prompt | undefined {
+  const pool = buildPromptPool(room.settings.categoryId);
+  if (pool.length === 0) return undefined;
+  const candidates =
+    excludeId !== undefined && pool.length > 1
+      ? pool.filter((p) => p.id !== excludeId)
+      : pool;
+  const choice = candidates[Math.floor(Math.random() * candidates.length)];
+  return choice ?? pool[0];
+}
+
+/**
+ * Make `prompt` the room's active prompt: store its id, reset the per-prompt
+ * claimed pool, and announce it to both players (label only — never validIds).
+ */
+function setPrompt(deps: LastStandingDeps, room: Room, prompt: Prompt): void {
+  room.currentPromptId = prompt.id;
+  room.claimedThisPrompt = new Set<string>();
+  deps.io.to(room.code).emit("prompt_changed", { id: prompt.id, label: prompt.label });
+}
+
+/** Cycle to a fresh prompt (different id when possible), resetting its pool. */
+function cyclePrompt(deps: LastStandingDeps, room: Room): void {
+  const next = pickPrompt(room, room.currentPromptId);
+  if (next) setPrompt(deps, room, next);
 }
 
 /** Point the turn at `playerId`, set a fresh deadline, emit + arm the timer. */
@@ -119,6 +184,9 @@ function onTurnTimeout(deps: LastStandingDeps, room: Room): void {
     deps.endGame(room, other?.id);
     return;
   }
+  // Gauntlet: a timeout means "can't answer" — cycle in a fresh prompt (new id,
+  // reset claimed pool) before the next player's turn begins.
+  if (isGauntlet(room)) cyclePrompt(deps, room);
   passTurn(deps, room);
 }
 
@@ -189,12 +257,94 @@ export function handleSubmit(
 }
 
 /**
+ * Handle a submit_answer in gauntlet mode. Like last_standing, but answers are
+ * filtered through the active prompt:
+ *  - not the current player → not_your_turn.
+ *  - resolves to a set item, in the prompt's valid set, not yet claimed THIS
+ *    prompt → accept (score, claim from the per-prompt pool), then pass the turn
+ *    (cycling a fresh prompt first if this answer exhausted the prompt's pool).
+ *  - resolves to a set item but NOT in the prompt's valid set → off_prompt
+ *    (burns the clock, no turn pass).
+ *  - already claimed this prompt → duplicate.
+ *  - not a set item at all → wrong. Empty → empty.
+ */
+export function handleGauntletSubmit(
+  deps: LastStandingDeps,
+  room: Room,
+  seat: Seat,
+  socket: { emit: (ev: "answer_result", payload: any) => void },
+  text: string,
+): void {
+  if (room.currentPlayerId !== seat.id) {
+    socket.emit("answer_result", { accepted: false, reason: "not_your_turn" });
+    return;
+  }
+
+  const categoryId = room.settings.categoryId;
+  const prompt =
+    room.currentPromptId !== undefined ? promptById(room.currentPromptId) : undefined;
+  const validIds = prompt ? validIdsFor(prompt, categoryId) : new Set<string>();
+  const claimedThisPrompt =
+    room.claimedThisPrompt ?? (room.claimedThisPrompt = new Set<string>());
+
+  // Resolve the raw text to a set item (iso) — distinguishes wrong vs off_prompt.
+  const match = matchAnswer(text, lookupFor(categoryId), canonicalFor(categoryId));
+  if (!match.found || !match.iso) {
+    const reason = outcomeReasonFor(text);
+    socket.emit("answer_result", { accepted: false, reason });
+    return;
+  }
+  const iso = match.iso;
+
+  // In the set, but not satisfying the prompt → off_prompt (clock burns, no pass).
+  if (!validIds.has(iso)) {
+    socket.emit("answer_result", { accepted: false, reason: "off_prompt" });
+    return;
+  }
+  // Already named for THIS prompt → duplicate (clock burns, no pass).
+  if (claimedThisPrompt.has(iso)) {
+    socket.emit("answer_result", { accepted: false, reason: "duplicate" });
+    return;
+  }
+
+  // Accept: score + record in the player's filled set and the per-prompt pool.
+  claimedThisPrompt.add(iso);
+  seat.filled.add(iso);
+  seat.score += 1;
+  socket.emit("answer_result", {
+    accepted: true,
+    canonical: match.canonical ?? iso,
+    isoCode: iso,
+  });
+  deps.io.to(room.code).emit("score_update", { scores: scoresOf(room) });
+  const other = deps.otherSeat(room, seat);
+  if (other?.socketId) {
+    deps.io.to(other.socketId).emit("opponent_progress", {
+      playerId: seat.id,
+      isoCode: iso,
+    });
+  }
+
+  // Prompt exhausted (every valid answer named) → cycle a fresh prompt, NO life
+  // lost, then pass the turn.
+  if (claimedThisPrompt.size >= validIds.size) {
+    cyclePrompt(deps, room);
+  }
+  passTurn(deps, room);
+}
+
+/** Reason for an answer that didn't resolve to any set item (empty vs wrong). */
+function outcomeReasonFor(text: string): "empty" | "wrong" {
+  return normalizeAnswer(text) === "" ? "empty" : "wrong";
+}
+
+/**
  * The current player disconnected mid-turn: pause the clock (store remaining
  * ms, clear the timeout) so no life bleeds while they are away. The 30s grace
  * runs independently in index.ts. No-op if it was not their turn.
  */
 export function pauseTurnForDisconnect(room: Room, seat: Seat): void {
-  if (!isLastStanding(room) || room.phase !== "playing") return;
+  if (!isTurnBased(room) || room.phase !== "playing") return;
   if (room.currentPlayerId !== seat.id) return;
   if (room.turnEndsAt === undefined) return;
   clearTurnTimer(room);
@@ -206,7 +356,7 @@ export function pauseTurnForDisconnect(room: Room, seat: Seat): void {
  * ms, re-emit turn_started and re-arm the timeout. No-op if not paused.
  */
 export function resumeTurnOnReconnect(deps: LastStandingDeps, room: Room, seat: Seat): void {
-  if (!isLastStanding(room) || room.phase !== "playing") return;
+  if (!isTurnBased(room) || room.phase !== "playing") return;
   if (room.currentPlayerId !== seat.id) return;
   if (room.pausedTurnMs === undefined) return;
   const remaining = room.pausedTurnMs;

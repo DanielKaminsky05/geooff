@@ -39,8 +39,11 @@ import {
 import { scoreGuess, determineWinner } from "./matching.js";
 import {
   isLastStanding,
+  isGauntlet,
+  isTurnBased,
   beginFirstTurn,
   handleSubmit as lastStandingSubmit,
+  handleGauntletSubmit,
   pauseTurnForDisconnect,
   resumeTurnOnReconnect,
   type LastStandingDeps,
@@ -210,8 +213,9 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         total: totalFor(room.settings.categoryId),
         endsAt: room.endsAt,
       });
-      if (isLastStanding(room)) {
-        // Turn-based: no shared round clock — begin turn 1 (lives + first turn).
+      if (isTurnBased(room)) {
+        // Turn-based (last_standing / gauntlet): no shared round clock — begin
+        // turn 1 (lives + first turn; gauntlet also seeds the opening prompt).
         beginFirstTurn(lsDeps, room);
         broadcastRoomState(room);
       } else {
@@ -454,13 +458,22 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           emitError(socket, "bad_category", "Unknown category.");
           return;
         }
-        if (payload?.mode !== undefined && payload.mode !== "race" && payload.mode !== "last_standing") {
+        if (
+          payload?.mode !== undefined &&
+          payload.mode !== "race" &&
+          payload.mode !== "last_standing" &&
+          payload.mode !== "gauntlet"
+        ) {
           emitError(socket, "bad_mode", "Unknown mode.");
           return;
         }
-        // Last Standing is multiplayer-only; a private solo room can never host it.
-        if (payload?.mode === "last_standing" && room.solo) {
-          emitError(socket, "needs_two", "Last Standing needs a second player.");
+        // Last Standing and Gauntlet are multiplayer-only; a private solo room
+        // can never host either (both need a second player to alternate turns).
+        if (
+          (payload?.mode === "last_standing" || payload?.mode === "gauntlet") &&
+          room.solo
+        ) {
+          emitError(socket, "needs_two", "That mode needs a second player.");
           return;
         }
         if (payload?.timeLimitSeconds !== undefined) {
@@ -498,9 +511,10 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         }
         // A lone host starts a solo round straight away (no ready-up needed).
         const solo = room.players.length === 1;
-        // Last Standing is multiplayer-only — it needs a real opponent to alternate turns.
-        if (room.settings.mode === "last_standing" && solo) {
-          emitError(socket, "needs_two", "Last Standing needs a second player.");
+        // Last Standing and Gauntlet are multiplayer-only — they need a real
+        // opponent to alternate turns.
+        if ((room.settings.mode === "last_standing" || room.settings.mode === "gauntlet") && solo) {
+          emitError(socket, "needs_two", "That mode needs a second player.");
           return;
         }
         if (!solo && !room.players.every((p) => p.ready)) {
@@ -520,6 +534,10 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         const { room, seat } = ctx;
         if (room.phase !== "playing") {
           socket.emit("answer_result", { accepted: false, reason: "not_playing" });
+          return;
+        }
+        if (isGauntlet(room)) {
+          handleGauntletSubmit(lsDeps, room, seat, socket, payload?.text ?? "");
           return;
         }
         if (isLastStanding(room)) {
