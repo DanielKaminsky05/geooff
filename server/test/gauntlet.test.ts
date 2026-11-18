@@ -259,3 +259,52 @@ describe("gauntlet — elimination", () => {
     expect(room.claimedThisPrompt).toBeUndefined();
   }, 10000);
 });
+
+describe("gauntlet — solo", () => {
+  /** Lone-host gauntlet room (private solo), already in gauntlet mode. */
+  async function makeSoloGauntlet(lives: number) {
+    const a = client();
+    await awaitEvent(a, "connect");
+    a.emit("create_room", { playerName: "Solo", solo: true });
+    const joined = await awaitEvent<any>(a, "joined");
+    const code = joined.state.code as string;
+    const moded = awaitEvent<any>(a, "room_state");
+    a.emit("update_settings", { mode: "gauntlet", lives });
+    await moded;
+    return { a, aId: joined.playerId as string, code };
+  }
+
+  it("a lone host starts gauntlet (no ready-up) and takes every turn", async () => {
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 60_000 });
+    const { a, aId, code } = await makeSoloGauntlet(2);
+
+    const promptA = awaitEvent<any>(a, "prompt_changed", 8000);
+    const turnA = awaitEvent<any>(a, "turn_started", 8000);
+    a.emit("start_game");
+    const prompt = await promptA;
+    expect((await turnA).playerId).toBe(aId);
+    expect(typeof prompt.label).toBe("string");
+    expect(rooms.get(code)!.currentPromptId).toBe(prompt.id);
+    // A valid on-prompt answer keeps the turn on the lone player.
+    const resA = awaitEvent<any>(a, "answer_result");
+    const turn2 = awaitEvent<any>(a, "turn_started");
+    a.emit("submit_answer", { text: onPromptName(prompt.id) });
+    expect((await resA).accepted).toBe(true);
+    expect((await turn2).playerId).toBe(aId);
+  });
+
+  it("the run ends at 0 lives with no winner (survival over)", async () => {
+    // Short turn + lives:1 → one timeout drains the only life and ends the run.
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 60 });
+    const { a, code } = await makeSoloGauntlet(1);
+
+    const over = awaitEvent<any>(a, "game_over", 8000);
+    a.emit("start_game");
+    // Never answer → the clock runs out → last life gone → run over.
+    const go = await over;
+    expect(go.winnerId).toBeNull();
+    const room = rooms.get(code)!;
+    expect(room.phase).toBe("ended");
+    expect(room.turnTimer).toBeUndefined();
+  }, 10000);
+});

@@ -55,6 +55,7 @@ import {
   totalFor,
   allIdsFor,
 } from "./sets.js";
+import { buildPromptPool } from "./prompts.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -467,13 +468,10 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           emitError(socket, "bad_mode", "Unknown mode.");
           return;
         }
-        // Last Standing and Gauntlet are multiplayer-only; a private solo room
-        // can never host either (both need a second player to alternate turns).
-        if (
-          (payload?.mode === "last_standing" || payload?.mode === "gauntlet") &&
-          room.solo
-        ) {
-          emitError(socket, "needs_two", "That mode needs a second player.");
+        // Last Standing is multiplayer-only (needs a real opponent to alternate
+        // turns). Gauntlet works solo too (you race the prompts yourself).
+        if (payload?.mode === "last_standing" && room.solo) {
+          emitError(socket, "needs_two", "Last Standing needs a second player.");
           return;
         }
         if (payload?.timeLimitSeconds !== undefined) {
@@ -511,10 +509,14 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         }
         // A lone host starts a solo round straight away (no ready-up needed).
         const solo = room.players.length === 1;
-        // Last Standing and Gauntlet are multiplayer-only — they need a real
-        // opponent to alternate turns.
-        if ((room.settings.mode === "last_standing" || room.settings.mode === "gauntlet") && solo) {
-          emitError(socket, "needs_two", "That mode needs a second player.");
+        // Last Standing needs a real opponent; Gauntlet works solo too.
+        if (room.settings.mode === "last_standing" && solo) {
+          emitError(socket, "needs_two", "Last Standing needs a second player.");
+          return;
+        }
+        // Gauntlet needs a prompt pool (country sets only).
+        if (room.settings.mode === "gauntlet" && buildPromptPool(room.settings.categoryId).length === 0) {
+          emitError(socket, "no_prompts", "Gauntlet isn't available for this set.");
           return;
         }
         if (!solo && !room.players.every((p) => p.ready)) {

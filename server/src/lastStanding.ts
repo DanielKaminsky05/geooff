@@ -179,9 +179,10 @@ function onTurnTimeout(deps: LastStandingDeps, room: Room): void {
   deps.io.to(room.code).emit("life_lost", { playerId: current.id, livesLeft });
 
   if (livesLeft === 0) {
-    // Eliminated → the OTHER player wins.
+    // Eliminated → the OTHER player wins (multiplayer). Solo gauntlet has no
+    // opponent, so the run just ends with no winner (score = items named).
     const other = deps.otherSeat(room, current);
-    deps.endGame(room, other?.id);
+    deps.endGame(room, other ? other.id : null);
     return;
   }
   // Gauntlet: a timeout means "can't answer" — cycle in a fresh prompt (new id,
