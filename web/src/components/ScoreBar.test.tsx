@@ -42,7 +42,7 @@ describe("ScoreBar", () => {
     expect(screen.getByText("Countries")).toBeInTheDocument();
   });
 
-  it("in gauntlet shows each player's named / prompt total, not score/total", () => {
+  it("in gauntlet shows one unified named / prompt total for the shared pool", () => {
     render(
       <ScoreBar
         p1={p1}
@@ -59,10 +59,10 @@ describe("ScoreBar", () => {
         promptTotal={46}
       />,
     );
-    // Alice named 3 / 46; Bob named 1 / 46. The set total (196) is not shown.
-    expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getByText("1")).toBeInTheDocument();
-    expect(screen.getAllByText("/ 46")).toHaveLength(2);
+    // Combined 3 + 1 = 4 named of 46, shown once (not per-player, not score/total).
+    const count = screen.getByTestId("gauntlet-count");
+    expect(count).toHaveTextContent("4 / 46");
+    expect(screen.getAllByText("/ 46")).toHaveLength(1);
     expect(screen.queryByText("/ 196")).toBeNull();
   });
 

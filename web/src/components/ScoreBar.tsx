@@ -64,8 +64,6 @@ function PlayerScore({
   maxLives,
   hitKey = 0,
   gauntlet = false,
-  promptCount = 0,
-  promptTotal = 0,
 }: {
   player?: PlayerPublic;
   score: number;
@@ -77,10 +75,9 @@ function PlayerScore({
   maxLives?: number;
   /** Increments each time this player loses a life → replays the hit FX. */
   hitKey?: number;
-  /** Gauntlet: show "named / prompt total" for the current prompt instead of score/total. */
+  /** Gauntlet: a shared pool — the count is unified in the center, not per-player,
+      so each slot here shows just the name + lives (no number). */
   gauntlet?: boolean;
-  promptCount?: number;
-  promptTotal?: number;
 }) {
   const right = align === "right";
   const showLives = lives != null && maxLives != null;
@@ -91,20 +88,14 @@ function PlayerScore({
         {player && !player.connected ? " (offline)" : ""}
       </div>
       <div className={`mt-1 flex items-center gap-3 ${right ? "flex-row-reverse" : ""}`}>
-        <div
-          className="shrink-0 text-xl font-bold tabular-nums"
-          style={{ color: colorVar }}
-        >
-          {gauntlet ? (
-            <>
-              {promptCount} <span className="text-sm text-muted">/ {promptTotal}</span>
-            </>
-          ) : (
-            <>
-              {score} <span className="text-sm text-muted">/ {total}</span>
-            </>
-          )}
-        </div>
+        {!gauntlet && (
+          <div
+            className="shrink-0 text-xl font-bold tabular-nums"
+            style={{ color: colorVar }}
+          >
+            {score} <span className="text-sm text-muted">/ {total}</span>
+          </div>
+        )}
         {showLives ? (
           // Re-key on the hit count so the group pops + "−1" replays on a loss.
           <span key={hitKey} className="hearts-hit">
@@ -160,7 +151,8 @@ export function ScoreBar({
   const livesFor = (p?: PlayerPublic) =>
     lastStanding && p && lives ? (lives[p.id] ?? maxLives) : undefined;
   const hitFor = (p?: PlayerPublic) => (lastStanding && p && hits ? (hits[p.id] ?? 0) : 0);
-  const promptCountFor = (p?: PlayerPublic) => (gauntlet && p && promptCounts ? (promptCounts[p.id] ?? 0) : 0);
+  // Gauntlet is a shared pool: unify both players' progress into one count.
+  const promptNamed = Object.values(promptCounts ?? {}).reduce((s, n) => s + n, 0);
 
   return (
     <div
@@ -176,8 +168,6 @@ export function ScoreBar({
           colorVar="var(--color-player1)"
           align="left"
           gauntlet={gauntlet}
-          promptCount={promptCountFor(p1)}
-          promptTotal={promptTotal}
           lives={livesFor(p1)}
           maxLives={lastStanding ? maxLives : undefined}
           hitKey={hitFor(p1)}
@@ -197,6 +187,15 @@ export function ScoreBar({
           </div>
         )}
         <div className="text-xs uppercase tracking-wide text-muted">{category}</div>
+        {/* Gauntlet: one unified count for the shared pool (not per-player). */}
+        {gauntlet && (
+          <div
+            data-testid="gauntlet-count"
+            className="text-xl font-bold tabular-nums text-foreground"
+          >
+            {promptNamed} <span className="text-sm text-muted">/ {promptTotal}</span>
+          </div>
+        )}
         {/* last_standing/gauntlet: whose turn + the per-turn clock, folded in
             here so there's no separate turn strip. */}
         {showTurn && (
@@ -218,8 +217,6 @@ export function ScoreBar({
             colorVar="var(--color-player2)"
             align="right"
             gauntlet={gauntlet}
-            promptCount={promptCountFor(p2)}
-            promptTotal={promptTotal}
             lives={livesFor(p2)}
             maxLives={lastStanding ? maxLives : undefined}
             hitKey={hitFor(p2)}
