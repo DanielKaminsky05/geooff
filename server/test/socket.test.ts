@@ -427,7 +427,7 @@ describe("disconnect + reconnect", () => {
     a.disconnect();
     const disc = await oppDisc;
     expect(disc.playerId).toBe(aId);
-    expect(disc.graceSeconds).toBe(30);
+    expect(disc.graceSeconds).toBe(60);
 
     const a2 = client();
     await awaitEvent(a2, "connect");

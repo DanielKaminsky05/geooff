@@ -22,7 +22,7 @@
 
 export const ROOM_CODE_LENGTH = 6;
 export const COUNTDOWN_SECONDS = 3;
-export const RECONNECT_GRACE_SECONDS = 30;
+export const RECONNECT_GRACE_SECONDS = 60;
 
 /** Host-configurable time limit, clamped server-side to this range. */
 export const TIME_LIMIT_MIN_SECONDS = 60; // 1 min
