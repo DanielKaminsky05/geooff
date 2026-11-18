@@ -57,10 +57,6 @@ export default function Home() {
           geo
           <span className="text-player1">fight</span>
         </h1>
-        <p className="mt-3 max-w-md text-muted">
-          Two players, one map. Race to name more countries of the world and see
-          who knows the globe better.
-        </p>
       </header>
 
       <div className="flex w-full max-w-sm flex-col gap-4">
@@ -93,12 +89,6 @@ export default function Home() {
           {creating === "solo" ? "Starting…" : "Play solo"}
         </button>
 
-        <div className="flex items-center gap-3 text-sm text-muted">
-          <span className="h-px flex-1 bg-border" />
-          or join
-          <span className="h-px flex-1 bg-border" />
-        </div>
-
         <form className="flex gap-2" onSubmit={handleJoin}>
           <input
             value={code}
@@ -116,10 +106,6 @@ export default function Home() {
           </button>
         </form>
       </div>
-
-      <footer className="text-xs text-muted">
-        First to name the most countries wins.
-      </footer>
     </main>
   );
 }
