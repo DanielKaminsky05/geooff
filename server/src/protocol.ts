@@ -79,7 +79,14 @@ export function normalizeAnswer(input: string): string {
 
 export type GameMode = "race" | "last_standing";
 
-export type CategoryId = "countries" | "us-states"; // more categories later (capitals…)
+export type CategoryId =
+  | "countries"
+  | "us-states"
+  | "europe"
+  | "africa"
+  | "asia"
+  | "middle-east"
+  | "americas"; // more categories later (capitals…)
 
 export type PlayerSlot = "p1" | "p2";
 

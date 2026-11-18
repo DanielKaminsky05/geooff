@@ -29,6 +29,82 @@ const countriesSet: GeoSet = {
   mapId: "world",
 };
 
+/**
+ * Regional sets — curated ISO-code lists over the existing country data.
+ * Each region's `items` are the countries data filtered to its isoCodes,
+ * preserving countries.ts order and reusing the same AnswerItem mapping as the
+ * countries set (so aliases come for free). Each reuses the world SVG, cropped
+ * to the region via its own mapId.
+ */
+const REGIONS: { id: CategoryId; label: string; isoCodes: string[] }[] = [
+  {
+    id: "europe",
+    label: "Europe",
+    isoCodes: [
+      "al", "ad", "at", "by", "be", "ba", "bg", "hr", "cy", "cz",
+      "dk", "ee", "fi", "fr", "de", "gr", "hu", "is", "ie", "it",
+      "xk", "lv", "li", "lt", "lu", "mt", "md", "mc", "me", "nl",
+      "mk", "no", "pl", "pt", "ro", "ru", "sm", "rs", "sk", "si",
+      "es", "se", "ch", "ua", "gb", "va",
+    ],
+  },
+  {
+    id: "africa",
+    label: "Africa",
+    isoCodes: [
+      "dz", "ao", "bj", "bw", "bf", "bi", "cv", "cm", "cf", "td",
+      "km", "cg", "cd", "ci", "dj", "eg", "gq", "er", "sz", "et",
+      "ga", "gm", "gh", "gn", "gw", "ke", "ls", "lr", "ly", "mg",
+      "mw", "ml", "mr", "mu", "ma", "mz", "na", "ne", "ng", "rw",
+      "st", "sn", "sc", "sl", "so", "za", "ss", "sd", "tz", "tg",
+      "tn", "ug", "zm", "zw",
+    ],
+  },
+  {
+    id: "asia",
+    label: "Asia",
+    isoCodes: [
+      "af", "am", "az", "bh", "bd", "bt", "bn", "kh", "cn", "cy",
+      "ge", "in", "id", "ir", "iq", "il", "jp", "jo", "kz", "kw",
+      "kg", "la", "lb", "my", "mv", "mn", "mm", "np", "kp", "om",
+      "pk", "ps", "ph", "qa", "sa", "sg", "kr", "lk", "sy", "tj",
+      "th", "tl", "tw", "tr", "tm", "ae", "uz", "vn", "ye",
+    ],
+  },
+  {
+    id: "middle-east",
+    label: "Middle East",
+    isoCodes: [
+      "tr", "sy", "lb", "il", "ps", "jo", "iq", "ir",
+      "sa", "ye", "om", "ae", "qa", "bh", "kw", "eg",
+    ],
+  },
+  {
+    id: "americas",
+    label: "Americas",
+    isoCodes: [
+      "ag", "ar", "bs", "bb", "bz", "bo", "br", "ca", "cl", "co",
+      "cr", "cu", "dm", "do", "ec", "sv", "gd", "gt", "gy", "ht",
+      "hn", "jm", "mx", "ni", "pa", "pe", "kn", "lc", "vc", "sr",
+      "tt", "us", "uy", "ve", "py",
+    ],
+  },
+];
+
+/** Build a region GeoSet: countries data filtered to the region's isoCodes. */
+function regionSet(region: (typeof REGIONS)[number]): GeoSet {
+  const members = new Set(region.isoCodes);
+  return {
+    id: region.id,
+    label: region.label,
+    items: countries
+      .filter((c) => members.has(c.iso))
+      .map((c) => ({ id: c.iso, name: c.name, aliases: c.aliases })),
+    hasMap: true,
+    mapId: region.id,
+  };
+}
+
 /** US states — the 50 states (no DC, no territories). id = USPS postal code. */
 const usStatesSet: GeoSet = {
   id: "us-states",
@@ -43,6 +119,7 @@ export const sets: Partial<Record<CategoryId, GeoSet>> = {
   countries: countriesSet,
   "us-states": usStatesSet,
   // add more sets here
+  ...Object.fromEntries(REGIONS.map((r) => [r.id, regionSet(r)])),
 };
 
 /** CategoryIds that actually have a registered set (for validation). */
