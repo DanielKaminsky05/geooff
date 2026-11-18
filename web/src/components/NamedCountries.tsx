@@ -1,12 +1,9 @@
 import { memo, useMemo } from "react";
 import { groupByContinent, type Continent, type ContinentGroup } from "../lib/continents";
-import ProgressBar from "./ProgressBar";
 
 export interface NamedCountriesProps {
   /** ISO codes the player has named. */
   filled: Set<string>;
-  /** The player's fill color (e.g. "var(--color-player1)"). */
-  colorVar: string;
 }
 
 /** Header color per continent (muted to sit on the dark theme). */
@@ -33,13 +30,12 @@ const COLUMNS: Continent[][] = [
  * header, then one row per country slot — named countries fill from the top
  * (alphabetical), the rest stay blank to show what's left.
  */
-function NamedCountriesInner({ filled, colorVar }: NamedCountriesProps) {
+function NamedCountriesInner({ filled }: NamedCountriesProps) {
   const groups = useMemo(() => groupByContinent(filled), [filled]);
   const byContinent = useMemo(
     () => new Map(groups.map((g) => [g.continent, g])),
     [groups],
   );
-  const totalAll = groups.reduce((n, g) => n + g.total, 0);
 
   return (
     <section
@@ -47,19 +43,7 @@ function NamedCountriesInner({ filled, colorVar }: NamedCountriesProps) {
       aria-label="Your countries"
       className="mx-auto w-full max-w-6xl px-4 py-8"
     >
-      <div className="flex items-center gap-4">
-        <h2 className="shrink-0 text-xl font-bold">
-          Your countries <span style={{ color: colorVar }}>{filled.size}</span>
-          <span className="text-base font-semibold text-muted"> / {totalAll}</span>
-        </h2>
-        <ProgressBar
-          value={filled.size}
-          max={totalAll}
-          colorVar={colorVar}
-          heightClass="h-2.5"
-          label="Total progress"
-        />
-      </div>
+      <h2 className="text-xl font-bold">Your countries</h2>
 
       <div className="mt-6 grid grid-cols-2 items-start gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {COLUMNS.map((column) => (

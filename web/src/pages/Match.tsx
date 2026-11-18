@@ -401,7 +401,7 @@ export default function Match() {
       </div>
 
       {/* 4. Countries you've named, grouped by continent */}
-      <NamedCountries filled={myFilled} colorVar={myColor} />
+      <NamedCountries filled={myFilled} />
 
       {/* Own connection lost: keep the user here while socket.io retries. */}
       {reconnecting && (

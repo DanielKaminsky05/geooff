@@ -5,7 +5,7 @@ import { CONTINENTS } from "../lib/continents";
 
 describe("NamedCountries", () => {
   it("lists named countries under their continent with counts", () => {
-    render(<NamedCountries filled={new Set(["fr", "de", "jp"])} colorVar="var(--color-player1)" />);
+    render(<NamedCountries filled={new Set(["fr", "de", "jp"])} />);
 
     const europe = screen.getByTestId("continent-Europe");
     expect(within(europe).getByText("France")).toBeInTheDocument();
@@ -15,14 +15,14 @@ describe("NamedCountries", () => {
   });
 
   it("fills named countries from the top, alphabetically, then blank slots", () => {
-    render(<NamedCountries filled={new Set(["de", "fr", "al"])} colorVar="var(--color-player1)" />);
+    render(<NamedCountries filled={new Set(["de", "fr", "al"])} />);
     const rows = within(screen.getByTestId("continent-Europe")).getAllByRole("listitem", { hidden: true });
     expect(rows.slice(0, 3).map((r) => r.textContent)).toEqual(["Albania", "France", "Germany"]);
     expect(rows).toHaveLength(CONTINENTS.Europe.length);
   });
 
   it("shows one blank row per country slot when nothing is named", () => {
-    render(<NamedCountries filled={new Set()} colorVar="var(--color-player1)" />);
+    render(<NamedCountries filled={new Set()} />);
     expect(screen.getAllByTestId("blank-row")).toHaveLength(197);
   });
 });
