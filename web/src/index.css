@@ -19,6 +19,10 @@
   --color-player2: #e3a008; /* amber — player 2 */
   --color-both: #1f9e8e; /* teal — both guessed */
   --color-accent: #f0623e; /* coral — timer / alerts / errors */
+
+  /* Plus Jakarta Sans (self-hosted via @fontsource-variable) — a friendly,
+     rounded humanist sans; supports tabular figures for the timer/scores. */
+  --font-sans: "Plus Jakarta Sans Variable", system-ui, Arial, Helvetica, sans-serif;
 }
 
 html,
@@ -31,7 +35,7 @@ body {
   margin: 0;
   background: var(--color-background);
   color: var(--color-foreground);
-  font-family: system-ui, Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* Shake/flash for rejected or duplicate country guesses. */
