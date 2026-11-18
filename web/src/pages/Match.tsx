@@ -188,7 +188,7 @@ export default function Match() {
       if (mine && p.livesLeft === 0) {
         // My final life: a heart breaks in the center before the lose screen.
         setBreaking(true);
-        setTimeout(() => setBreaking(false), 1150);
+        setTimeout(() => setBreaking(false), 1700);
         return;
       }
       // Otherwise a vignette flash — red for my hit, green for the opponent's.
@@ -305,6 +305,7 @@ export default function Match() {
     for (const id of myFilled) m.set(id, myColor);
     return m;
   }, [myFilled, oppFilled, myColor, oppColor]);
+
   // In last_standing it's my turn only when the server names me as current.
   const myTurn = !lastStanding || (myId != null && currentPlayerId === myId);
   const currentPlayer = room?.players.find((p) => p.id === currentPlayerId);
@@ -342,7 +343,11 @@ export default function Match() {
           <span className="heartbreak-half heartbreak-right">♥</span>
         </div>
       )}
-      <div className={`relative flex h-screen flex-col overflow-hidden ${shaking ? "screen-shake" : ""}`}>
+      <div
+        className={`relative flex h-screen flex-col overflow-hidden ${
+          breaking ? "screen-shake-violent" : shaking ? "screen-shake" : ""
+        }`}
+      >
         {/* 1. Score bar */}
         <ScoreBar
           p1={solo ? me : p1}
@@ -625,7 +630,7 @@ function GameOverOverlay({
 
   if (solo) {
     return (
-      <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/90 px-6">
+      <div className="fade-in absolute inset-0 z-20 flex items-center justify-center bg-background/90 px-6">
         <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 text-center">
           <h2 className="text-3xl font-bold">
             {total > 0 && myScore >= total ? "You named them all!" : "Round over"}
@@ -658,7 +663,7 @@ function GameOverOverlay({
   }
 
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-background/90 px-6">
+    <div className="fade-in absolute inset-0 z-20 flex items-center justify-center bg-background/90 px-6">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 text-center">
         <h2 className="text-3xl font-bold">{result}</h2>
         <div className="mt-6 flex flex-col gap-4 text-left">
