@@ -52,6 +52,24 @@ export default function Home() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-10 px-6 py-16">
+      {/* Decorative wireframe-globe graticule behind the content. */}
+      <div aria-hidden className="home-bg">
+        <div className="home-globe">
+          <span className="axis" />
+          <span className="meridian" style={{ "--w": "100%" } as React.CSSProperties} />
+          <span className="meridian" style={{ "--w": "78%" } as React.CSSProperties} />
+          <span className="meridian" style={{ "--w": "55%" } as React.CSSProperties} />
+          <span className="meridian" style={{ "--w": "30%" } as React.CSSProperties} />
+          <span className="parallel" style={{ top: "15%" }} />
+          <span className="parallel" style={{ top: "26%" }} />
+          <span className="parallel" style={{ top: "38%" }} />
+          <span className="parallel equator" style={{ top: "50%" }} />
+          <span className="parallel" style={{ top: "62%" }} />
+          <span className="parallel" style={{ top: "74%" }} />
+          <span className="parallel" style={{ top: "85%" }} />
+        </div>
+      </div>
+
       <header className="text-center">
         <h1
           data-text="GEOFIGHT"

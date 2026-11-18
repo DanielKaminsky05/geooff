@@ -136,3 +136,88 @@ body {
     animation: none;
   }
 }
+
+/*
+ * Home background: a faint wireframe-globe graticule (meridians + parallels)
+ * with a soft emerald glow, sitting behind the content.
+ */
+.home-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Soft emerald/amber glow blooms behind the globe. */
+.home-bg::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: min(200vmax, 2000px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  background:
+    radial-gradient(circle at 42% 44%, color-mix(in srgb, var(--color-player1) 13%, transparent), transparent 48%),
+    radial-gradient(circle at 60% 58%, color-mix(in srgb, var(--color-player2) 9%, transparent), transparent 48%);
+}
+
+.home-globe {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: min(175vmax, 1700px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 1px solid color-mix(in srgb, var(--color-player1) 26%, transparent);
+  border-radius: 50%;
+  overflow: hidden; /* clips parallels into chords, like a globe */
+  opacity: 0.5;
+  animation: globe-breathe 16s ease-in-out infinite;
+}
+
+/* Meridians: nested vertical ellipses of decreasing width (longitude lines). */
+.home-globe .meridian {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: var(--w);
+  border: 1px solid color-mix(in srgb, var(--color-player1) 17%, transparent);
+  border-radius: 50%;
+}
+
+/* Parallels: horizontal lines (latitude), clipped by the globe circle. */
+.home-globe .parallel {
+  position: absolute;
+  left: -2%;
+  right: -2%;
+  height: 0;
+  border-top: 1px solid color-mix(in srgb, var(--color-player1) 15%, transparent);
+}
+
+/* Equator and central meridian read a touch brighter. */
+.home-globe .parallel.equator {
+  border-top-color: color-mix(in srgb, var(--color-player1) 30%, transparent);
+}
+.home-globe .axis {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  border-left: 1px solid color-mix(in srgb, var(--color-player1) 24%, transparent);
+}
+
+@keyframes globe-breathe {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
+  50% { transform: translate(-50%, -50%) scale(1.025); opacity: 0.62; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-globe {
+    animation: none;
+  }
+}
