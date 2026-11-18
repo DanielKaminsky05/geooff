@@ -8,6 +8,12 @@ export interface WorldMapProps {
   filledIso: Set<string>;
   /** CSS color for filled countries (e.g. "var(--color-player1)"). */
   color: string;
+  /**
+   * Per-item fill colors (id → color). When given it takes precedence over
+   * `filledIso`/`color` — used by the shared Last Standing map to colour each
+   * claimed item by the player who took it.
+   */
+  colorByIso?: Map<string, string>;
   /** Which set's map to render (default "countries"). */
   categoryId?: CategoryId;
   className?: string;
@@ -15,10 +21,10 @@ export interface WorldMapProps {
 
 /**
  * Renders the world map as an <svg> with one <path> per country.
- * Filled countries use `color`; the rest use the land token.
- * Wrapped in react-zoom-pan-pinch for independent zoom/pan.
+ * Filled countries use `color` (or `colorByIso` per item); the rest use the
+ * land token. Wrapped in react-zoom-pan-pinch for independent zoom/pan.
  */
-function WorldMapInner({ filledIso, color, categoryId = "countries", className }: WorldMapProps) {
+function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries", className }: WorldMapProps) {
   const { viewBox, locations } = mapFor(categoryId);
   return (
     <div className={className} data-testid="world-map">
@@ -36,7 +42,9 @@ function WorldMapInner({ filledIso, color, categoryId = "countries", className }
             preserveAspectRatio="xMidYMid meet"
           >
             {locations.map((loc) => {
-              const filled = filledIso.has(loc.id);
+              const perItem = colorByIso?.get(loc.id);
+              const filled = colorByIso ? perItem !== undefined : filledIso.has(loc.id);
+              const fill = perItem ?? (filled ? color : "var(--color-land)");
               return (
                 <path
                   key={loc.id}
@@ -44,7 +52,7 @@ function WorldMapInner({ filledIso, color, categoryId = "countries", className }
                   data-iso={loc.id}
                   data-filled={filled ? "true" : "false"}
                   d={loc.path}
-                  fill={filled ? color : "var(--color-land)"}
+                  fill={fill}
                   stroke="var(--color-border)"
                   strokeWidth={0.3}
                 >

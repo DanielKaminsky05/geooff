@@ -8,7 +8,6 @@ import ScoreBar from "../components/ScoreBar";
 import CountryInput from "../components/CountryInput";
 import NamedCountries from "../components/NamedCountries";
 import ProgressBar from "../components/ProgressBar";
-import Hearts from "../components/Hearts";
 import TurnTimer from "../components/TurnTimer";
 
 interface GameOver {
@@ -43,6 +42,13 @@ export default function Match() {
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [turnEndsAt, setTurnEndsAt] = useState<number | null>(null);
   const [lives, setLives] = useState<Record<string, number>>({});
+  // Per-player life-loss counters → replay the hearts hit FX + "−1" in the bar.
+  const [hits, setHits] = useState<Record<string, number>>({});
+  // Full-screen flash: red when I take a hit, green when the opponent does.
+  const [flash, setFlash] = useState<{ kind: "damage" | "gain"; key: number } | null>(null);
+  const [shaking, setShaking] = useState(false); // screen shake on my (non-fatal) hit
+  const [breaking, setBreaking] = useState(false); // my final life → heart-break sequence
+  const fxSeq = useRef(0);
 
   const [clearSignal, setClearSignal] = useState(0);
   const [rejectSignal, setRejectSignal] = useState(0);
@@ -175,6 +181,24 @@ export default function Match() {
     }
     function onLifeLost(p: { playerId: string; livesLeft: number }) {
       setLives((prev) => ({ ...prev, [p.playerId]: p.livesLeft }));
+      // Pop the hearts + "−1" for whoever lost one.
+      setHits((h) => ({ ...h, [p.playerId]: (h[p.playerId] ?? 0) + 1 }));
+
+      const mine = p.playerId === myIdRef.current;
+      if (mine && p.livesLeft === 0) {
+        // My final life: a heart breaks in the center before the lose screen.
+        setBreaking(true);
+        setTimeout(() => setBreaking(false), 1150);
+        return;
+      }
+      // Otherwise a vignette flash — red for my hit, green for the opponent's.
+      const key = (fxSeq.current += 1);
+      setFlash({ kind: mine ? "damage" : "gain", key });
+      setTimeout(() => setFlash((cur) => (cur && cur.key === key ? null : cur)), 550);
+      if (mine) {
+        setShaking(true);
+        setTimeout(() => setShaking(false), 450);
+      }
     }
     function onGameOver(p: GameOver) {
       setPhase("ended");
@@ -273,6 +297,14 @@ export default function Match() {
   const itemsNoun = categoryId === "us-states" ? "states" : "countries";
   const lastStanding = mode === "last_standing";
   const maxLives = room?.settings.lives ?? 0;
+
+  // Last Standing is one shared map: colour each claimed item by who took it.
+  const claimedColors = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const id of oppFilled) m.set(id, oppColor);
+    for (const id of myFilled) m.set(id, myColor);
+    return m;
+  }, [myFilled, oppFilled, myColor, oppColor]);
   // In last_standing it's my turn only when the server names me as current.
   const myTurn = !lastStanding || (myId != null && currentPlayerId === myId);
   const currentPlayer = room?.players.find((p) => p.id === currentPlayerId);
@@ -295,7 +327,22 @@ export default function Match() {
 
   return (
     <main>
-      <div className="relative flex h-screen flex-col overflow-hidden">
+      {/* Vignette flash on a life loss: red for mine, green for the opponent's. */}
+      {flash && (
+        <div
+          key={flash.key}
+          aria-hidden
+          className={flash.kind === "damage" ? "damage-flash" : "gain-flash"}
+        />
+      )}
+      {/* My final life: a heart cracks apart before the lose screen appears. */}
+      {breaking && (
+        <div className="heartbreak" aria-hidden>
+          <span className="heartbreak-half heartbreak-left">♥</span>
+          <span className="heartbreak-half heartbreak-right">♥</span>
+        </div>
+      )}
+      <div className={`relative flex h-screen flex-col overflow-hidden ${shaking ? "screen-shake" : ""}`}>
         {/* 1. Score bar */}
         <ScoreBar
           p1={solo ? me : p1}
@@ -305,37 +352,23 @@ export default function Match() {
           total={total}
           endsAt={endsAt}
           category={categoryLabel}
+          lastStanding={lastStanding}
+          lives={lives}
+          maxLives={maxLives}
+          hits={hits}
         />
 
-        {/* 1b. Last Standing: turn, per-turn clock, and lives */}
+        {/* 1b. Last Standing: whose turn + the per-turn clock (lives live up in
+            the score bar). */}
         {lastStanding && phase === "playing" && !gameOver && (
           <div
             data-testid="turn-bar"
-            className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-2"
+            className="flex items-center justify-center gap-3 border-b border-border bg-surface px-4 py-2"
           >
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-sm font-semibold" style={{ color: myTurn ? myColor : oppColor }}>
-                {myTurn
-                  ? "Your turn"
-                  : `${currentPlayer?.name ?? "Opponent"}'s turn`}
-              </span>
-              <TurnTimer endsAt={turnEndsAt} />
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1 text-xs">
-              {[me, opponent].map((pl, i) =>
-                pl ? (
-                  <span key={pl.id} className="flex items-center gap-2">
-                    <span className="truncate text-muted">{pl.name}</span>
-                    <Hearts
-                      lives={lives[pl.id] ?? maxLives}
-                      max={maxLives}
-                      colorVar={i === 0 ? myColor : oppColor}
-                      label={pl.name}
-                    />
-                  </span>
-                ) : null,
-              )}
-            </div>
+            <span className="truncate text-sm font-semibold" style={{ color: myTurn ? myColor : oppColor }}>
+              {myTurn ? "Your turn" : `${currentPlayer?.name ?? "Opponent"}'s turn`}
+            </span>
+            <TurnTimer endsAt={turnEndsAt} />
           </div>
         )}
 
@@ -351,7 +384,33 @@ export default function Match() {
             />
           )}
 
-          {!solo && (
+          {/* Last Standing: a single shared battlefield, each claim coloured by
+              whoever took it (it's a direct fight over one pool). */}
+          {!solo && lastStanding && (
+            <div className="relative h-full">
+              <div
+                className="absolute left-3 top-3 z-10 rounded-lg bg-surface/80 px-3 py-1 text-xs font-semibold"
+                style={{ color: myColor }}
+              >
+                {me?.name ?? "You"} · {myFilled.size}
+              </div>
+              <div
+                className="absolute right-3 top-3 z-10 rounded-lg bg-surface/80 px-3 py-1 text-xs font-semibold"
+                style={{ color: oppColor }}
+              >
+                {opponent?.name ?? "Opponent"} · {oppFilled.size}
+              </div>
+              <WorldMap
+                filledIso={myFilled}
+                color={myColor}
+                colorByIso={claimedColors}
+                categoryId={categoryId}
+                className="h-full w-full"
+              />
+            </div>
+          )}
+
+          {!solo && !lastStanding && (
             <>
               {/* Desktop: side by side */}
               <div className="hidden h-full md:grid md:grid-cols-2">
@@ -454,7 +513,7 @@ export default function Match() {
         )}
 
         {/* Game over overlay */}
-        {gameOver && (
+        {gameOver && !breaking && (
           <GameOverOverlay
             gameOver={gameOver}
             solo={solo}

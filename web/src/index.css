@@ -221,3 +221,153 @@ body {
     animation: none;
   }
 }
+
+/* ---- Last Standing: lives ---- */
+
+/* Hearts shake harder as lives run out: amplitude (--amp), rotation (--rot)
+   and speed (--dur) are set inline from the remaining-lives ratio, so there's
+   no shake at full health and it peaks on the last heart. Colour is also mixed
+   toward the alert red inline. */
+@keyframes heart-shake {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  20% { transform: translateX(calc(-1 * var(--amp, 0px))) rotate(calc(-1 * var(--rot, 0deg))); }
+  60% { transform: translateX(var(--amp, 0px)) rotate(var(--rot, 0deg)); }
+}
+.heart-shake {
+  display: inline-block;
+  transform-origin: 50% 85%;
+  animation: heart-shake var(--dur, 1s) ease-in-out infinite;
+}
+
+/* A clear jolt + red glow on the hearts whenever that player loses a life. */
+@keyframes hearts-hit {
+  0% { transform: scale(1); filter: none; }
+  30% { transform: scale(1.45); filter: drop-shadow(0 0 7px var(--color-accent)); }
+  100% { transform: scale(1); filter: none; }
+}
+.hearts-hit {
+  position: relative;
+  display: inline-block;
+  animation: hearts-hit 0.45s ease-out;
+}
+
+/* A floating "−1" that rises off the hearts on a life loss (either player). */
+@keyframes damage-pop {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(0.8); }
+  20% { opacity: 1; transform: translate(-50%, -6px) scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -22px) scale(1); }
+}
+.damage-pop {
+  position: absolute;
+  left: 50%;
+  top: -0.9rem;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--color-accent);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
+  pointer-events: none;
+  animation: damage-pop 0.85s ease-out forwards;
+}
+
+/* Taking damage (you lost a life): shake the match + a red vignette flash. */
+@keyframes screen-shake {
+  0%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-9px, 3px); }
+  30% { transform: translate(8px, -3px); }
+  45% { transform: translate(-6px, 2px); }
+  60% { transform: translate(5px, -2px); }
+  80% { transform: translate(-3px, 1px); }
+}
+.screen-shake {
+  animation: screen-shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+@keyframes damage-flash {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.damage-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 40%,
+    color-mix(in srgb, var(--color-accent) 55%, transparent) 100%
+  );
+  animation: damage-flash 0.5s ease-out forwards;
+}
+
+/* Opponent lost a life — a green vignette flash (good for you). */
+.gain-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 45%,
+    color-mix(in srgb, var(--color-player1) 42%, transparent) 100%
+  );
+  animation: damage-flash 0.5s ease-out forwards;
+}
+
+/* Final life lost: a heart cracks apart in the center before the lose screen.
+   Two half-clipped hearts overlap into one, pulse in, shudder, then split and
+   fall away over a darkening backdrop. */
+.heartbreak {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: heartbreak-bg 1.15s ease-out forwards;
+}
+@keyframes heartbreak-bg {
+  0% { background: rgb(0 0 0 / 0); }
+  30% { background: rgb(0 0 0 / 0.55); }
+  100% { background: rgb(0 0 0 / 0.72); }
+}
+.heartbreak-half {
+  position: absolute;
+  font-size: clamp(6rem, 22vmin, 11rem);
+  line-height: 1;
+  color: var(--color-accent);
+  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--color-accent) 60%, transparent));
+}
+.heartbreak-left {
+  clip-path: inset(0 50% 0 0);
+  animation: heartbreak-left 1.15s ease-in forwards;
+}
+.heartbreak-right {
+  clip-path: inset(0 0 0 50%);
+  animation: heartbreak-right 1.15s ease-in forwards;
+}
+@keyframes heartbreak-left {
+  0% { transform: translate(0, 0) rotate(0) scale(0.5); opacity: 0; }
+  22% { transform: translate(0, 0) rotate(0) scale(1.18); opacity: 1; }
+  38% { transform: translate(-2px, 0) rotate(-3deg) scale(1.12); }
+  48% { transform: translate(2px, 0) rotate(3deg) scale(1.12); }
+  60% { transform: translate(-3px, 0) rotate(-6deg) scale(1.08); }
+  100% { transform: translate(-48px, 72px) rotate(-32deg) scale(0.95); opacity: 0; }
+}
+@keyframes heartbreak-right {
+  0% { transform: translate(0, 0) rotate(0) scale(0.5); opacity: 0; }
+  22% { transform: translate(0, 0) rotate(0) scale(1.18); opacity: 1; }
+  38% { transform: translate(2px, 0) rotate(3deg) scale(1.12); }
+  48% { transform: translate(-2px, 0) rotate(-3deg) scale(1.12); }
+  60% { transform: translate(3px, 0) rotate(6deg) scale(1.08); }
+  100% { transform: translate(48px, 72px) rotate(32deg) scale(0.95); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heart-shake,
+  .hearts-hit,
+  .screen-shake {
+    animation: none;
+  }
+}
