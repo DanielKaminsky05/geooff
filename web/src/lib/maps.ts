@@ -159,17 +159,31 @@ export function fitViewBox(locations: MapLocation[]): string {
   return `${minX - padX} ${minY - padY} ${w + 2 * padX} ${h + 2 * padY}`;
 }
 
-function regionMap(iso: string[]): GeoMap {
+/**
+ * Build a region map: render all `iso` countries, but fit the viewBox to
+ * `fitIso` only (defaults to all). This lets a transcontinental outlier still
+ * render while being left out of the crop — e.g. Europe excludes Russia from
+ * the fit so core Europe fills the pane and Russia extends off the right edge
+ * (reachable by pan).
+ */
+function regionMap(iso: string[], fitIso: string[] = iso): GeoMap {
   const want = new Set(iso);
   const locations = world.locations.filter((loc) => want.has(loc.id));
-  return { viewBox: fitViewBox(locations), locations };
+  const fit = new Set(fitIso);
+  const fitLocations = locations.filter((loc) => fit.has(loc.id));
+  return { viewBox: fitViewBox(fitLocations), locations };
 }
 
 /** Maps keyed by CategoryId. Map-less sets simply have no entry. */
 export const maps: Partial<Record<CategoryId, GeoMap>> = {
   countries: countriesMap,
   "us-states": usStatesMap,
-  europe: regionMap(REGION_ISO.europe),
+  // Crop to core Europe — Russia still renders but is left out of the fit, so
+  // it extends off the right edge instead of dwarfing the continent.
+  europe: regionMap(
+    REGION_ISO.europe,
+    REGION_ISO.europe.filter((id) => id !== "ru"),
+  ),
   africa: regionMap(REGION_ISO.africa),
   asia: regionMap(REGION_ISO.asia),
   "middle-east": regionMap(REGION_ISO["middle-east"]),
