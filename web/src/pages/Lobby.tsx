@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession, defaultName } from "../lib/session";
+import GlitchWordmark from "../components/GlitchWordmark";
 import {
   TIME_LIMIT_MIN_SECONDS,
   TIME_LIMIT_MAX_SECONDS,
@@ -155,8 +156,9 @@ export default function Lobby() {
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col gap-6 px-6 py-10">
       <header className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">
-          geo<span className="text-player1">fight</span> lobby
+        <h1 className="flex items-center gap-2 text-lg font-bold">
+          <GlitchWordmark className="text-sm sm:text-base" />
+          <span className="font-semibold text-muted">lobby</span>
         </h1>
         <button
           onClick={leave}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession, defaultName } from "../lib/session";
+import GlitchWordmark from "../components/GlitchWordmark";
 
 export default function Home() {
   const socket = useSocket();
@@ -71,12 +72,8 @@ export default function Home() {
       </div>
 
       <header className="text-center">
-        <h1
-          data-text="GEOFIGHT"
-          aria-label="geofight"
-          className="wordmark-glitch text-2xl sm:text-4xl md:text-5xl"
-        >
-          GEOFIGHT
+        <h1>
+          <GlitchWordmark className="text-2xl sm:text-4xl md:text-5xl" />
         </h1>
         <p className="mt-5 text-[0.7rem] tracking-[0.2em] text-muted sm:text-xs">
           geography against friends
