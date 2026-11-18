@@ -25,4 +25,14 @@ describe("NamedCountries", () => {
     render(<NamedCountries filled={new Set()} />);
     expect(screen.getAllByTestId("blank-row")).toHaveLength(197);
   });
+
+  it("renders a region set as a single alphabetical list (named first, then blanks)", () => {
+    render(<NamedCountries filled={new Set(["de", "fr", "al"])} categoryId="europe" />);
+    const list = screen.getByTestId("region-list-europe");
+    const rows = within(list).getAllByRole("listitem", { hidden: true });
+    // Named items lead, alphabetically; the rest are blank slots.
+    expect(rows.slice(0, 3).map((r) => r.textContent)).toEqual(["Albania", "France", "Germany"]);
+    expect(rows.length).toBe(CONTINENTS.Europe.length);
+    expect(screen.getByRole("region", { name: "Your countries" })).toBeInTheDocument();
+  });
 });

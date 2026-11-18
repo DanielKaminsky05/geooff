@@ -15,6 +15,17 @@ interface GameOver {
   scores: Record<string, number>;
 }
 
+/** Display label per set, shown in the score bar / toggles. */
+const CATEGORY_LABELS: Record<CategoryId, string> = {
+  countries: "Countries",
+  "us-states": "US states",
+  europe: "Europe",
+  africa: "Africa",
+  asia: "Asia",
+  "middle-east": "Middle East",
+  americas: "Americas",
+};
+
 function slotColor(slot: PlayerSlot | undefined): string {
   return slot === "p2" ? "var(--color-player2)" : "var(--color-player1)";
 }
@@ -293,7 +304,8 @@ export default function Match() {
 
   const mode = room?.settings.mode ?? "race";
   const categoryId = room?.settings.categoryId ?? "countries";
-  const categoryLabel = categoryId === "us-states" ? "US states" : "Countries";
+  const categoryLabel = CATEGORY_LABELS[categoryId] ?? "Countries";
+  // Only US states use a different noun; regions are scoped country sets.
   const itemsNoun = categoryId === "us-states" ? "states" : "countries";
   const lastStanding = mode === "last_standing";
   const maxLives = room?.settings.lives ?? 0;

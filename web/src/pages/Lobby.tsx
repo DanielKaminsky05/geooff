@@ -43,6 +43,11 @@ const MODES: { value: GameMode; label: string }[] = [
 const CATEGORIES: { value: CategoryId; label: string }[] = [
   { value: "countries", label: "Countries" },
   { value: "us-states", label: "US states" },
+  { value: "europe", label: "Europe" },
+  { value: "africa", label: "Africa" },
+  { value: "asia", label: "Asia" },
+  { value: "middle-east", label: "Middle East" },
+  { value: "americas", label: "Americas" },
 ];
 
 export default function Lobby() {

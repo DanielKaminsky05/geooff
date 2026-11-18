@@ -1,7 +1,18 @@
 import { memo, useMemo } from "react";
 import { groupByContinent, countryName, type Continent } from "../lib/continents";
 import { groupByRegion, stateName, type UsRegion } from "../lib/usStates";
+import { mapFor } from "../lib/maps";
 import type { CategoryId } from "../lib/protocol";
+
+/** A region set is any mapped category that isn't countries or us-states. */
+function isRegion(categoryId: CategoryId): boolean {
+  return categoryId !== "countries" && categoryId !== "us-states";
+}
+
+/** Display names for a region's items, keyed by id (from its map locations). */
+function regionNames(categoryId: CategoryId): Map<string, string> {
+  return new Map(mapFor(categoryId).locations.map((l) => [l.id, l.name]));
+}
 
 /** One player's named items, in the order they named them. */
 export interface NamedPlayer {
@@ -23,7 +34,9 @@ export interface NamedCountriesProps {
 }
 
 function itemName(categoryId: CategoryId, id: string): string {
-  return categoryId === "us-states" ? stateName(id) : countryName(id);
+  if (categoryId === "us-states") return stateName(id);
+  // Regions and countries alike are countries — use the shared country names.
+  return countryName(id);
 }
 
 /** A ruled list: a colored header + one row per item slot. */
@@ -67,6 +80,25 @@ const REGION_COLUMNS: UsRegion[][] = [["Northeast"], ["Midwest"], ["South"], ["W
 
 /** Build the heading + column sections for the active set. */
 function build(categoryId: CategoryId, filled: Set<string>): { heading: string; columns: Section[][] } {
+  if (isRegion(categoryId)) {
+    // Region sets: one simple alphabetical list (named first, then blanks).
+    const names = regionNames(categoryId);
+    const all = [...names.values()].sort((a, b) => a.localeCompare(b));
+    const have = [...names.entries()]
+      .filter(([id]) => filled.has(id))
+      .map(([, name]) => name)
+      .sort((a, b) => a.localeCompare(b));
+    const section: Section = {
+      key: categoryId,
+      testId: `region-list-${categoryId}`,
+      label: "Countries",
+      color: "#3355cc",
+      names: have,
+      total: all.length,
+    };
+    return { heading: "Your countries", columns: [[section]] };
+  }
+
   if (categoryId === "us-states") {
     const byRegion = new Map(groupByRegion(filled).map((g) => [g.region, g]));
     const columns = REGION_COLUMNS.map((col) =>

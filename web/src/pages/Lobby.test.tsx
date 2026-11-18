@@ -144,6 +144,21 @@ describe("<Lobby>", () => {
     expect(socket.__lastEmit("update_settings")).toEqual({ categoryId: "countries" });
   });
 
+  it("the set picker offers the region sets and emits their categoryId", async () => {
+    const user = userEvent.setup();
+    renderLobby();
+    socket.__server("room_state", roomState());
+
+    await user.click(screen.getByRole("button", { name: "Europe" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ categoryId: "europe" });
+
+    await user.click(screen.getByRole("button", { name: "Middle East" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ categoryId: "middle-east" });
+
+    await user.click(screen.getByRole("button", { name: "Americas" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ categoryId: "americas" });
+  });
+
   it("in last_standing, shows turn/lives pickers (not the time limit) and emits them", async () => {
     const user = userEvent.setup();
     renderLobby();
