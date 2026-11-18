@@ -33,6 +33,14 @@ export function CountryInput({
   const firstClear = useRef(true);
   const firstReject = useRef(true);
 
+  // Auto-refocusing after each guess keeps the typing flow on desktop, but on
+  // touch devices it force-pops the on-screen keyboard and scrolls the page —
+  // so skip it there and let the player tap the field themselves.
+  const refocus = () => {
+    const coarse = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+    if (!coarse) inputRef.current?.focus();
+  };
+
   // Accept → clear field.
   useEffect(() => {
     if (firstClear.current) {
@@ -40,7 +48,7 @@ export function CountryInput({
       return;
     }
     setText("");
-    inputRef.current?.focus();
+    refocus();
   }, [clearSignal]);
 
   // Reject → keep text, shake/flash.
@@ -50,8 +58,9 @@ export function CountryInput({
       return;
     }
     setShaking(true);
-    inputRef.current?.focus();
-    inputRef.current?.select();
+    refocus();
+    const coarse = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+    if (!coarse) inputRef.current?.select();
     const t = setTimeout(() => setShaking(false), 400);
     return () => clearTimeout(t);
   }, [rejectSignal]);
