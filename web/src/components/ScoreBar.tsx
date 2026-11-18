@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { PlayerPublic } from "../lib/protocol";
 import ProgressBar from "./ProgressBar";
 import Hearts from "./Hearts";
+import TurnTimer from "./TurnTimer";
 
 export interface ScoreBarProps {
   p1?: PlayerPublic;
@@ -25,6 +26,13 @@ export interface ScoreBarProps {
   promptCounts?: Record<string, number>;
   /** gauntlet: number of valid answers in the current prompt. */
   promptTotal?: number;
+  /** Drop the bar's own border/background (for use inside the floating HUD). */
+  bare?: boolean;
+  /** last_standing: fold whose-turn + per-turn clock into the center column. */
+  showTurn?: boolean;
+  turnName?: string;
+  turnColor?: string;
+  turnEndsAt?: number | null;
 }
 
 function fmt(ms: number): string {
@@ -139,6 +147,11 @@ export function ScoreBar({
   gauntlet,
   promptCounts,
   promptTotal,
+  bare,
+  showTurn,
+  turnName,
+  turnColor,
+  turnEndsAt,
 }: ScoreBarProps) {
   const remaining = useCountdown(endsAt);
   const p1Score = p1 ? (scores[p1.id] ?? p1.score ?? 0) : 0;
@@ -150,7 +163,11 @@ export function ScoreBar({
   const promptCountFor = (p?: PlayerPublic) => (gauntlet && p && promptCounts ? (promptCounts[p.id] ?? 0) : 0);
 
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
+    <div
+      className={`flex items-center justify-between gap-3 px-4 py-3 ${
+        bare ? "" : "border-b border-border bg-surface"
+      }`}
+    >
       <div className="min-w-0 flex-1">
         <PlayerScore
           player={p1}
@@ -180,6 +197,16 @@ export function ScoreBar({
           </div>
         )}
         <div className="text-xs uppercase tracking-wide text-muted">{category}</div>
+        {/* last_standing/gauntlet: whose turn + the per-turn clock, folded in
+            here so there's no separate turn strip. */}
+        {showTurn && (
+          <div className="mt-0.5 flex items-center gap-2">
+            <span className="text-sm font-semibold" style={{ color: turnColor }}>
+              {turnName}
+            </span>
+            <TurnTimer endsAt={turnEndsAt ?? null} />
+          </div>
+        )}
       </div>
 
       <div className="min-w-0 flex-1">

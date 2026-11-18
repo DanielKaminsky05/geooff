@@ -8,7 +8,6 @@ import ScoreBar from "../components/ScoreBar";
 import CountryInput from "../components/CountryInput";
 import NamedCountries from "../components/NamedCountries";
 import ProgressBar from "../components/ProgressBar";
-import TurnTimer from "../components/TurnTimer";
 import PromptBanner from "../components/PromptBanner";
 
 interface GameOver {
@@ -378,6 +377,33 @@ export default function Match() {
     socket.emit("submit_answer", { text });
   }
 
+  // Shared score row. In Last Standing / gauntlet it renders "bare" (no border
+  // or background of its own) inside the floating HUD, with whose-turn + the
+  // per-turn clock folded into its center column.
+  const scoreBar = (
+    <ScoreBar
+      p1={solo ? me : p1}
+      p2={solo ? undefined : p2}
+      solo={solo}
+      scores={effectiveScores}
+      total={total}
+      endsAt={endsAt}
+      category={categoryLabel}
+      lastStanding={lastStanding}
+      gauntlet={gauntlet}
+      promptCounts={promptCounts}
+      promptTotal={prompt?.total ?? 0}
+      lives={lives}
+      maxLives={maxLives}
+      hits={hits}
+      bare={lastStanding}
+      showTurn={lastStanding && phase === "playing" && !gameOver}
+      turnName={myTurn ? "Your turn" : `${currentPlayer?.name ?? "Opponent"}'s turn`}
+      turnColor={myTurn ? myColor : oppColor}
+      turnEndsAt={turnEndsAt}
+    />
+  );
+
   return (
     <main>
       {/* Vignette flash on a life loss: red for mine, green for the opponent's. */}
@@ -400,41 +426,20 @@ export default function Match() {
           breaking ? "screen-shake-violent" : shaking ? "screen-shake" : ""
         }`}
       >
-        {/* 1. Score bar */}
-        <ScoreBar
-          p1={solo ? me : p1}
-          p2={solo ? undefined : p2}
-          solo={solo}
-          scores={effectiveScores}
-          total={total}
-          endsAt={endsAt}
-          category={categoryLabel}
-          lastStanding={lastStanding}
-          gauntlet={gauntlet}
-          promptCounts={promptCounts}
-          promptTotal={prompt?.total ?? 0}
-          lives={lives}
-          maxLives={maxLives}
-          hits={hits}
-        />
-
-        {/* 1a. Gauntlet: the active prompt that answers must satisfy. */}
-        {gauntlet && phase === "playing" && !gameOver && prompt && (
-          <PromptBanner label={prompt.label} />
-        )}
-
-        {/* 1b. Last Standing: whose turn + the per-turn clock (lives live up in
-            the score bar). */}
-        {lastStanding && phase === "playing" && !gameOver && (
-          <div
-            data-testid="turn-bar"
-            className="flex items-center justify-center gap-3 border-b border-border bg-surface px-4 py-2"
-          >
-            <span className="truncate text-sm font-semibold" style={{ color: myTurn ? myColor : oppColor }}>
-              {myTurn ? "Your turn" : `${currentPlayer?.name ?? "Opponent"}'s turn`}
-            </span>
-            <TurnTimer endsAt={turnEndsAt} />
+        {/* 1. The HUD. In race it's a normal top strip. In Last Standing /
+            gauntlet it's a single floating panel over a full-height map: the
+            score row (with whose-turn + per-turn clock folded into its center)
+            and the prompt row share one top-fading gradient, so the two rows
+            read as one HUD rather than three stacked bars. */}
+        {lastStanding ? (
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col bg-gradient-to-b from-background via-background/90 to-transparent pb-12">
+            {scoreBar}
+            {gauntlet && phase === "playing" && !gameOver && prompt && (
+              <PromptBanner bare label={prompt.label} />
+            )}
           </div>
+        ) : (
+          scoreBar
         )}
 
         {/* 2. Maps */}
@@ -446,25 +451,15 @@ export default function Match() {
               colorVar={myColor}
               filled={myFilled}
               categoryId={categoryId}
+              hideTitle={lastStanding}
             />
           )}
 
           {/* Last Standing: a single shared battlefield, each claim coloured by
-              whoever took it (it's a direct fight over one pool). */}
+              whoever took it (it's a direct fight over one pool). Per-player
+              name + count live in the HUD above, so the map stays unlabelled. */}
           {!solo && lastStanding && (
             <div className="relative h-full">
-              <div
-                className="absolute left-3 top-3 z-10 rounded-lg bg-surface/80 px-3 py-1 text-xs font-semibold"
-                style={{ color: myColor }}
-              >
-                {me?.name ?? "You"} · {myFilled.size}
-              </div>
-              <div
-                className="absolute right-3 top-3 z-10 rounded-lg bg-surface/80 px-3 py-1 text-xs font-semibold"
-                style={{ color: oppColor }}
-              >
-                {opponent?.name ?? "Opponent"} · {oppFilled.size}
-              </div>
               <WorldMap
                 filledIso={myFilled}
                 color={myColor}
@@ -625,18 +620,23 @@ function MapPane({
   filled,
   categoryId,
   borderRight,
+  hideTitle,
 }: {
   title: string;
   colorVar: string;
   filled: Set<string>;
   categoryId: CategoryId;
   borderRight?: boolean;
+  /** Suppress the corner label (e.g. when the floating HUD already shows it). */
+  hideTitle?: boolean;
 }) {
   return (
     <div className={`relative flex h-full flex-col ${borderRight ? "md:border-r md:border-border" : ""}`}>
-      <div className="absolute left-3 top-3 z-10 rounded-lg bg-surface/80 px-3 py-1 text-xs font-semibold" style={{ color: colorVar }}>
-        {title} · {filled.size}
-      </div>
+      {!hideTitle && (
+        <div className="absolute left-3 top-3 z-10 rounded-lg bg-surface/80 px-3 py-1 text-xs font-semibold" style={{ color: colorVar }}>
+          {title} · {filled.size}
+        </div>
+      )}
       <WorldMap filledIso={filled} color={colorVar} categoryId={categoryId} className="h-full w-full" />
     </div>
   );
