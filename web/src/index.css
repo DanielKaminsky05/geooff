@@ -23,6 +23,8 @@
   /* Plus Jakarta Sans (self-hosted via @fontsource-variable) — a friendly,
      rounded humanist sans; supports tabular figures for the timer/scores. */
   --font-sans: "Plus Jakarta Sans Variable", system-ui, Arial, Helvetica, sans-serif;
+  /* Press Start 2P — blocky arcade pixel font, used only for the wordmark. */
+  --font-display: "Press Start 2P", var(--font-sans);
 }
 
 html,
