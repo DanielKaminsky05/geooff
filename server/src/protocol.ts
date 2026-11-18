@@ -77,7 +77,7 @@ export function normalizeAnswer(input: string): string {
 /* Core types                                                          */
 /* ------------------------------------------------------------------ */
 
-export type GameMode = "race" | "last_standing";
+export type GameMode = "race" | "last_standing" | "gauntlet";
 
 export type CategoryId =
   | "countries"
@@ -92,7 +92,13 @@ export type PlayerSlot = "p1" | "p2";
 
 export type GamePhase = "lobby" | "countdown" | "playing" | "ended";
 
-export type RejectReason = "wrong" | "duplicate" | "empty" | "not_playing" | "not_your_turn";
+export type RejectReason =
+  | "wrong"
+  | "duplicate"
+  | "empty"
+  | "not_playing"
+  | "not_your_turn"
+  | "off_prompt";
 
 /** A player as seen by everyone (no secrets). */
 export interface PlayerPublic {
@@ -131,6 +137,8 @@ export interface RoomState {
   turn?: { currentPlayerId: string; endsAt: number };
   /** last_standing: remaining lives by playerId (for rehydrate). */
   lives?: Record<string, number>;
+  /** gauntlet: the active prompt (label only — the valid set is never sent). */
+  prompt?: { id: string; label: string };
 }
 
 /* ------------------------------------------------------------------ */
@@ -184,6 +192,8 @@ export interface ServerToClientEvents {
   turn_started: (payload: { playerId: string; endsAt: number }) => void;
   /** last_standing: `playerId` lost a life (timeout); `livesLeft` remain. */
   life_lost: (payload: { playerId: string; livesLeft: number }) => void;
+  /** gauntlet: a new prompt cycled in (label only — never the valid set). */
+  prompt_changed: (p: { id: string; label: string }) => void;
   /** Result of YOUR guess only. canonical/isoCode present when accepted. */
   answer_result: (payload: {
     accepted: boolean;
