@@ -42,7 +42,7 @@ describe("ScoreBar", () => {
     expect(screen.getByText("Countries")).toBeInTheDocument();
   });
 
-  it("in gauntlet shows countries left (total − score), not score/total", () => {
+  it("in gauntlet shows each player's named / prompt total, not score/total", () => {
     render(
       <ScoreBar
         p1={p1}
@@ -55,12 +55,14 @@ describe("ScoreBar", () => {
         lastStanding
         lives={{ a: 5, b: 5 }}
         maxLives={5}
+        promptCounts={{ a: 3, b: 1 }}
+        promptTotal={46}
       />,
     );
-    // 196 − 12 = 184 left; 196 − 7 = 189 left. No "/ 196".
-    expect(screen.getByText("184")).toBeInTheDocument();
-    expect(screen.getByText("189")).toBeInTheDocument();
-    expect(screen.getAllByText("left")).toHaveLength(2);
+    // Alice named 3 / 46; Bob named 1 / 46. The set total (196) is not shown.
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(screen.getAllByText("/ 46")).toHaveLength(2);
     expect(screen.queryByText("/ 196")).toBeNull();
   });
 

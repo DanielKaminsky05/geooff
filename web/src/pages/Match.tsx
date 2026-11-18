@@ -55,7 +55,7 @@ export default function Match() {
   const [turnEndsAt, setTurnEndsAt] = useState<number | null>(null);
   const [lives, setLives] = useState<Record<string, number>>({});
   // gauntlet: the active prompt (label only — the valid set is never sent).
-  const [prompt, setPrompt] = useState<{ id: string; label: string } | null>(null);
+  const [prompt, setPrompt] = useState<{ id: string; label: string; total: number } | null>(null);
   // Per-player life-loss counters → replay the hearts hit FX + "−1" in the bar.
   const [hits, setHits] = useState<Record<string, number>>({});
   // Full-screen flash: red when I take a hit, green when the opponent does.
@@ -219,8 +219,8 @@ export default function Match() {
         setTimeout(() => setShaking(false), 450);
       }
     }
-    function onPromptChanged(p: { id: string; label: string }) {
-      setPrompt({ id: p.id, label: p.label });
+    function onPromptChanged(p: { id: string; label: string; total: number }) {
+      setPrompt({ id: p.id, label: p.label, total: p.total });
       // A fresh prompt is a clean slate: clear the board (both players' claimed
       // countries) and any stale reject banner from the last turn.
       setMyFilled(new Set());
@@ -339,6 +339,15 @@ export default function Match() {
     return m;
   }, [myFilled, oppFilled, myColor, oppColor]);
 
+  // Gauntlet: how many each player has named for the CURRENT prompt (the filled
+  // sets reset on each prompt), shown as "named / prompt total" in the score bar.
+  const promptCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    if (me) m[me.id] = myFilled.size;
+    if (opponent) m[opponent.id] = oppFilled.size;
+    return m;
+  }, [me, opponent, myFilled, oppFilled]);
+
   // Versus named list: each player's items in naming order (p1 then p2).
   const namedPlayers = useMemo(() => {
     if (solo) return undefined;
@@ -402,6 +411,8 @@ export default function Match() {
           category={categoryLabel}
           lastStanding={lastStanding}
           gauntlet={gauntlet}
+          promptCounts={promptCounts}
+          promptTotal={prompt?.total ?? 0}
           lives={lives}
           maxLives={maxLives}
           hits={hits}

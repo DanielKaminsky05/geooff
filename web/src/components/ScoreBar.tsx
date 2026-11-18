@@ -19,8 +19,12 @@ export interface ScoreBarProps {
   maxLives?: number;
   /** last_standing: per-player life-loss counters, to replay the hit FX. */
   hits?: Record<string, number>;
-  /** gauntlet: show "N left" (countries remaining in the set) instead of score/total. */
+  /** gauntlet: show "named / prompt total" for the current prompt instead of score/total. */
   gauntlet?: boolean;
+  /** gauntlet: per-player count named for the current prompt. */
+  promptCounts?: Record<string, number>;
+  /** gauntlet: number of valid answers in the current prompt. */
+  promptTotal?: number;
 }
 
 function fmt(ms: number): string {
@@ -52,6 +56,8 @@ function PlayerScore({
   maxLives,
   hitKey = 0,
   gauntlet = false,
+  promptCount = 0,
+  promptTotal = 0,
 }: {
   player?: PlayerPublic;
   score: number;
@@ -63,8 +69,10 @@ function PlayerScore({
   maxLives?: number;
   /** Increments each time this player loses a life → replays the hit FX. */
   hitKey?: number;
-  /** Gauntlet: show "N left" (countries remaining in the set) instead of score/total. */
+  /** Gauntlet: show "named / prompt total" for the current prompt instead of score/total. */
   gauntlet?: boolean;
+  promptCount?: number;
+  promptTotal?: number;
 }) {
   const right = align === "right";
   const showLives = lives != null && maxLives != null;
@@ -81,7 +89,7 @@ function PlayerScore({
         >
           {gauntlet ? (
             <>
-              {Math.max(0, total - score)} <span className="text-sm text-muted">left</span>
+              {promptCount} <span className="text-sm text-muted">/ {promptTotal}</span>
             </>
           ) : (
             <>
@@ -129,6 +137,8 @@ export function ScoreBar({
   maxLives,
   hits,
   gauntlet,
+  promptCounts,
+  promptTotal,
 }: ScoreBarProps) {
   const remaining = useCountdown(endsAt);
   const p1Score = p1 ? (scores[p1.id] ?? p1.score ?? 0) : 0;
@@ -137,6 +147,7 @@ export function ScoreBar({
   const livesFor = (p?: PlayerPublic) =>
     lastStanding && p && lives ? (lives[p.id] ?? maxLives) : undefined;
   const hitFor = (p?: PlayerPublic) => (lastStanding && p && hits ? (hits[p.id] ?? 0) : 0);
+  const promptCountFor = (p?: PlayerPublic) => (gauntlet && p && promptCounts ? (promptCounts[p.id] ?? 0) : 0);
 
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border bg-surface px-4 py-3">
@@ -148,6 +159,8 @@ export function ScoreBar({
           colorVar="var(--color-player1)"
           align="left"
           gauntlet={gauntlet}
+          promptCount={promptCountFor(p1)}
+          promptTotal={promptTotal}
           lives={livesFor(p1)}
           maxLives={lastStanding ? maxLives : undefined}
           hitKey={hitFor(p1)}
@@ -178,6 +191,8 @@ export function ScoreBar({
             colorVar="var(--color-player2)"
             align="right"
             gauntlet={gauntlet}
+            promptCount={promptCountFor(p2)}
+            promptTotal={promptTotal}
             lives={livesFor(p2)}
             maxLives={lastStanding ? maxLives : undefined}
             hitKey={hitFor(p2)}

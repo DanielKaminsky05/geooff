@@ -370,7 +370,7 @@ describe("<Match> gauntlet", () => {
       settings: gSettings,
       turn: { currentPlayerId: "b", endsAt: Date.now() + 15_000 },
       lives: { a: 5, b: 5 },
-      prompt: { id: "landlocked", label: "Landlocked countries" },
+      prompt: { id: "landlocked", label: "Landlocked countries", total: 44 },
       ...over,
     });
 
@@ -393,7 +393,7 @@ describe("<Match> gauntlet", () => {
     socket.__server("room_state", gState());
     expect(screen.getByText("Landlocked countries")).toBeInTheDocument();
 
-    socket.__server("prompt_changed", { id: "island", label: "Island nations" });
+    socket.__server("prompt_changed", { id: "island", label: "Island nations", total: 46 });
     expect(screen.getByText("Island nations")).toBeInTheDocument();
     expect(screen.queryByText("Landlocked countries")).toBeNull();
   });
@@ -407,7 +407,7 @@ describe("<Match> gauntlet", () => {
     expect(screen.getByText("Japan")).toBeInTheDocument();
 
     // A fresh prompt is a clean slate — both players' claims clear.
-    socket.__server("prompt_changed", { id: "island", label: "Island nations" });
+    socket.__server("prompt_changed", { id: "island", label: "Island nations", total: 46 });
     expect(screen.queryByText("France")).toBeNull();
     expect(screen.queryByText("Japan")).toBeNull();
   });
