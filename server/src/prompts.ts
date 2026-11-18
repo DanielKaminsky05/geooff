@@ -18,6 +18,22 @@ import type { CategoryId } from "./protocol.js";
 import { normalizeAnswer } from "./protocol.js";
 import { countryAttributes } from "./data/countryAttributes.js";
 import { countries } from "./data/countries.js";
+import {
+  spanishSpeaking,
+  frenchSpeaking,
+  arabicSpeaking,
+  portugueseSpeaking,
+  euMembers,
+  eurozone,
+  opecMembers,
+  commonwealthMembers,
+  aseanMembers,
+  equatorCrossers,
+  southernHemisphere,
+  mediterraneanCoast,
+  drivesLeft,
+  monarchies,
+} from "./data/countryGroups.js";
 import { allIdsFor } from "./sets.js";
 
 /** A compiled prompt: label is shown to players; validIds stays server-side. */
@@ -207,6 +223,30 @@ function buildPrompts(): Prompt[] {
       countries.filter((c) => normalizeAnswer(c.name).endsWith("land")).map((c) => c.iso),
     ),
   });
+
+  // Categorical groupings (language, organisations, geography, misc) from the
+  // researched countryGroups data. Each only surfaces for a set where ≥ MIN_VALID
+  // of its members fall inside it — so e.g. "Spanish-speaking" shows up in the
+  // Americas and "Arabic-speaking" in the Middle East.
+  const groupPrompts: { id: string; label: string; ids: readonly string[] }[] = [
+    { id: "lang-spanish", label: "Name a Spanish-speaking country", ids: spanishSpeaking },
+    { id: "lang-french", label: "Name a French-speaking country", ids: frenchSpeaking },
+    { id: "lang-arabic", label: "Name an Arabic-speaking country", ids: arabicSpeaking },
+    { id: "lang-portuguese", label: "Name a Portuguese-speaking country", ids: portugueseSpeaking },
+    { id: "org-eu", label: "Name a European Union member", ids: euMembers },
+    { id: "org-euro", label: "Name a country that uses the euro", ids: eurozone },
+    { id: "org-opec", label: "Name an OPEC member", ids: opecMembers },
+    { id: "org-commonwealth", label: "Name a Commonwealth member", ids: commonwealthMembers },
+    { id: "org-asean", label: "Name an ASEAN member", ids: aseanMembers },
+    { id: "geo-equator", label: "Name a country the Equator passes through", ids: equatorCrossers },
+    { id: "geo-southern", label: "Name a country in the Southern Hemisphere", ids: southernHemisphere },
+    { id: "geo-mediterranean", label: "Name a country with a Mediterranean coastline", ids: mediterraneanCoast },
+    { id: "misc-drives-left", label: "Name a country that drives on the left", ids: drivesLeft },
+    { id: "misc-monarchy", label: "Name a country that is a monarchy", ids: monarchies },
+  ];
+  for (const g of groupPrompts) {
+    prompts.push({ id: g.id, label: g.label, validIds: new Set(g.ids) });
+  }
 
   return prompts;
 }

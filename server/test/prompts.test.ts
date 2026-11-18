@@ -97,6 +97,84 @@ describe("prompt spot-checks (within 'countries')", () => {
     expect(ids.has("ru")).toBe(true);
     expect(ids.has("br")).toBe(true);
   });
+
+  it("borders-a-country lists that country's neighbours only", () => {
+    const ru = within("borders-country-ru");
+    expect(ru.has("fi")).toBe(true); // Finland borders Russia
+    expect(ru.has("cn")).toBe(true); // China borders Russia
+    expect(ru.has("br")).toBe(false); // Brazil does not
+    expect(ru.has("ru")).toBe(false); // a country doesn't border itself
+  });
+
+  it("area/population tiers include the giants, exclude the tiny", () => {
+    const big = within("area-large");
+    expect(big.has("ru")).toBe(true);
+    expect(big.has("ca")).toBe(true);
+    expect(big.has("mc")).toBe(false);
+    const pop = within("population-100");
+    expect(pop.has("cn")).toBe(true);
+    expect(pop.has("in")).toBe(true);
+    expect(pop.has("mc")).toBe(false);
+  });
+
+  it("multi-word names include United States / South Africa, exclude France", () => {
+    const ids = within("name-multiword");
+    expect(ids.has("us")).toBe(true);
+    expect(ids.has("za")).toBe(true);
+    expect(ids.has("fr")).toBe(false);
+  });
+});
+
+describe("categorical group prompts (within 'countries')", () => {
+  const within = (id: string) => validIdsFor(get(id), "countries");
+
+  it("Spanish-speaking includes Mexico/Spain, excludes France/Brazil", () => {
+    const ids = within("lang-spanish");
+    expect(ids.has("mx")).toBe(true);
+    expect(ids.has("es")).toBe(true);
+    expect(ids.has("fr")).toBe(false);
+    expect(ids.has("br")).toBe(false);
+  });
+
+  it("Arabic-speaking includes Saudi/Egypt, excludes Iran (Persian) and Israel", () => {
+    const ids = within("lang-arabic");
+    expect(ids.has("sa")).toBe(true);
+    expect(ids.has("eg")).toBe(true);
+    expect(ids.has("ir")).toBe(false);
+    expect(ids.has("il")).toBe(false);
+  });
+
+  it("EU excludes the UK (left) and Switzerland (never joined)", () => {
+    const ids = within("org-eu");
+    expect(ids.has("de")).toBe(true);
+    expect(ids.has("gb")).toBe(false);
+    expect(ids.has("ch")).toBe(false);
+  });
+
+  it("euro users exclude Sweden (EU but not eurozone)", () => {
+    const ids = within("org-euro");
+    expect(ids.has("de")).toBe(true);
+    expect(ids.has("se")).toBe(false);
+  });
+
+  it("monarchy includes UK/Japan/Saudi, excludes the US and republic Barbados", () => {
+    const ids = within("misc-monarchy");
+    expect(ids.has("gb")).toBe(true);
+    expect(ids.has("jp")).toBe(true);
+    expect(ids.has("sa")).toBe(true);
+    expect(ids.has("us")).toBe(false);
+    expect(ids.has("bb")).toBe(false); // Barbados became a republic in 2021
+  });
+
+  it("Commonwealth includes Malta and Saint Kitts (both members)", () => {
+    const ids = within("org-commonwealth");
+    expect(ids.has("mt")).toBe(true);
+    expect(ids.has("kn")).toBe(true);
+  });
+
+  it("Arabic-speaking gives the Middle East a real prompt (>= MIN_VALID there)", () => {
+    expect(validIdsFor(get("lang-arabic"), "middle-east").size).toBeGreaterThanOrEqual(MIN_VALID);
+  });
 });
 
 describe("buildPromptPool", () => {
