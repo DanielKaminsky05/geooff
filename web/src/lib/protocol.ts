@@ -103,7 +103,7 @@ export interface RoomState {
 /* ------------------------------------------------------------------ */
 
 export interface ClientToServerEvents {
-  create_room: (payload: { playerName: string }) => void;
+  create_room: (payload: { playerName: string; solo?: boolean }) => void;
   join_room: (payload: { code: string; playerName: string; reconnectToken?: string }) => void;
   set_ready: (payload: { ready: boolean }) => void;
   /** Host only; server clamps timeLimitSeconds to the allowed range. */

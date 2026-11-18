@@ -84,6 +84,37 @@ async function startGame(ctx: Awaited<ReturnType<typeof makeRoom>>) {
   return { gsA, gsB };
 }
 
+describe("solo rooms", () => {
+  it("create_room with solo:true flags the room solo and non-joinable", async () => {
+    const a = client();
+    await awaitEvent(a, "connect");
+    a.emit("create_room", { playerName: "Alice", solo: true });
+    const joined = await awaitEvent<any>(a, "joined");
+    expect(joined.state.solo).toBe(true);
+
+    // A second player cannot join a solo room.
+    const b = client();
+    await awaitEvent(b, "connect");
+    const err = awaitEvent<any>(b, "error_msg");
+    b.emit("join_room", { code: joined.state.code, playerName: "Bob" });
+    expect((await err).code).toBe("not_joinable");
+  });
+
+  it("a solo host can start the round without a second player", async () => {
+    const a = client();
+    await awaitEvent(a, "connect");
+    a.emit("create_room", { playerName: "Alice", solo: true });
+    await awaitEvent(a, "joined");
+
+    const countdown = awaitEvent<any>(a, "countdown");
+    const started = awaitEvent<any>(a, "game_started", 8000);
+    a.emit("start_game");
+    await countdown;
+    const gs = await started;
+    expect(gs.total).toBeGreaterThan(0);
+  });
+});
+
 describe("create + join", () => {
   it("create_room responds with joined { playerId, slot:'p1', reconnectToken, state }", async () => {
     const a = client();

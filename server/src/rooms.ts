@@ -38,6 +38,8 @@ export interface Room {
   endsAt?: number;
   /** true when the current/last round was started with a single player. */
   solo?: boolean;
+  /** false for private solo sessions, which can never be joined by a second player. */
+  joinable: boolean;
   /** handle for the round-end timer. */
   roundTimer?: ReturnType<typeof setTimeout>;
   /** handle for the countdown sequence. */
@@ -93,6 +95,7 @@ export function createRoom(hostName: string): { room: Room; seat: Seat } {
       timeLimitSeconds: TIME_LIMIT_DEFAULT_SECONDS,
     },
     players: [seat],
+    joinable: true,
     graceTimers: new Map(),
   };
   rooms.set(code, room);

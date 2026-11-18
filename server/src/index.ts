@@ -274,12 +274,17 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
   io.on("connection", (socket: GameSocket) => {
     socket.on(
       "create_room",
-      safe(socket, (payload: { playerName: string }) => {
+      safe(socket, (payload: { playerName: string; solo?: boolean }) => {
         const name = (payload?.playerName ?? "Player 1").toString().slice(0, 40) || "Player 1";
         // A socket holds at most one seat: vacate any previous room first.
         const prev = seatForSocket(socket);
         if (prev) leaveRoom(socket, prev.room, prev.seat);
         const { room, seat } = createRoom(name);
+        if (payload?.solo) {
+          // Private solo room: flagged solo and never joinable by a second player.
+          room.solo = true;
+          room.joinable = false;
+        }
         seat.socketId = socket.id;
         socket.join(room.code);
         socket.emit("joined", {
@@ -349,6 +354,11 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           // Token did not match; fall through to normal join if space allows.
         }
 
+        // Private solo sessions are never joinable by a second player.
+        if (!room.joinable) {
+          emitError(socket, "not_joinable", "That game can't be joined.");
+          return;
+        }
         if (room.players.length >= 2) {
           emitError(socket, "room_full", "That room is already full.");
           return;
