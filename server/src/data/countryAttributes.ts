@@ -6,7 +6,10 @@
 //
 // Values are research estimates (populations and areas from recent public
 // sources; elevations are highest-point estimates). Borders are symmetric and
-// sorted; `island` is derived (no land borders AND not landlocked).
+// sorted. `island` means the country's territory is entirely island(s) — which
+// INCLUDES island nations that still have a single land border because they
+// share an island (UK/Ireland, Haiti/Dominican Republic, Timor-Leste, PNG,
+// Brunei), not just those with zero borders.
 //
 // Units: populationM = millions of people, areaKm2 = square kilometres,
 // elevationFtMax = feet (highest point).
@@ -32,7 +35,7 @@ export const countryAttributes: Record<string, CountryAttrs> = {
   fr: { iso: "fr", landlocked: false, island: false, borders: ["ad", "be", "ch", "de", "es", "it", "lu", "mc"], populationM: 68.2, areaKm2: 551695, elevationFtMax: 15781 },
   de: { iso: "de", landlocked: false, island: false, borders: ["at", "be", "ch", "cz", "dk", "fr", "lu", "nl", "pl"], populationM: 84.5, areaKm2: 357588, elevationFtMax: 9718 },
   is: { iso: "is", landlocked: false, island: true, borders: [], populationM: 0.4, areaKm2: 103000, elevationFtMax: 6923 },
-  ie: { iso: "ie", landlocked: false, island: false, borders: ["gb"], populationM: 5.3, areaKm2: 70273, elevationFtMax: 3406 },
+  ie: { iso: "ie", landlocked: false, island: true, borders: ["gb"], populationM: 5.3, areaKm2: 70273, elevationFtMax: 3406 },
   it: { iso: "it", landlocked: false, island: false, borders: ["at", "ch", "fr", "si", "sm", "va"], populationM: 58.9, areaKm2: 301340, elevationFtMax: 15777 },
   li: { iso: "li", landlocked: true, island: false, borders: ["at", "ch"], populationM: 0.04, areaKm2: 160, elevationFtMax: 8527 },
   lu: { iso: "lu", landlocked: true, island: false, borders: ["be", "de", "fr"], populationM: 0.66, areaKm2: 2586, elevationFtMax: 1837 },
@@ -44,7 +47,7 @@ export const countryAttributes: Record<string, CountryAttrs> = {
   es: { iso: "es", landlocked: false, island: false, borders: ["ad", "fr", "ma", "pt"], populationM: 48.4, areaKm2: 505990, elevationFtMax: 12198 },
   se: { iso: "se", landlocked: false, island: false, borders: ["fi", "no"], populationM: 10.5, areaKm2: 450295, elevationFtMax: 6903 },
   ch: { iso: "ch", landlocked: true, island: false, borders: ["at", "de", "fr", "it", "li"], populationM: 8.8, areaKm2: 41285, elevationFtMax: 15203 },
-  gb: { iso: "gb", landlocked: false, island: false, borders: ["ie"], populationM: 67.6, areaKm2: 243610, elevationFtMax: 4413 },
+  gb: { iso: "gb", landlocked: false, island: true, borders: ["ie"], populationM: 67.6, areaKm2: 243610, elevationFtMax: 4413 },
   va: { iso: "va", landlocked: true, island: false, borders: ["it"], populationM: 0.001, areaKm2: 0.49, elevationFtMax: 249 },
   mt: { iso: "mt", landlocked: false, island: true, borders: [], populationM: 0.54, areaKm2: 316, elevationFtMax: 830 },
   al: { iso: "al", landlocked: false, island: false, borders: ["gr", "me", "mk", "xk"], populationM: 2.8, areaKm2: 28748, elevationFtMax: 9068 },
@@ -96,7 +99,7 @@ export const countryAttributes: Record<string, CountryAttrs> = {
   af: { iso: "af", landlocked: true, island: false, borders: ["cn", "ir", "pk", "tj", "tm", "uz"], populationM: 41.5, areaKm2: 652230, elevationFtMax: 24580 },
   bd: { iso: "bd", landlocked: false, island: false, borders: ["in", "mm"], populationM: 171.5, areaKm2: 148460, elevationFtMax: 3488 },
   bt: { iso: "bt", landlocked: true, island: false, borders: ["cn", "in"], populationM: 0.8, areaKm2: 38394, elevationFtMax: 24840 },
-  bn: { iso: "bn", landlocked: false, island: false, borders: ["my"], populationM: 0.5, areaKm2: 5765, elevationFtMax: 6040 },
+  bn: { iso: "bn", landlocked: false, island: true, borders: ["my"], populationM: 0.5, areaKm2: 5765, elevationFtMax: 6040 },
   kh: { iso: "kh", landlocked: false, island: false, borders: ["la", "th", "vn"], populationM: 17.4, areaKm2: 181035, elevationFtMax: 5938 },
   cn: { iso: "cn", landlocked: false, island: false, borders: ["af", "bt", "in", "kg", "kp", "kz", "la", "mm", "mn", "np", "pk", "ru", "tj", "vn"], populationM: 1411, areaKm2: 9596960, elevationFtMax: 29032 },
   in: { iso: "in", landlocked: false, island: false, borders: ["bd", "bt", "cn", "mm", "np", "pk"], populationM: 1428.6, areaKm2: 3287263, elevationFtMax: 28169 },
@@ -116,7 +119,7 @@ export const countryAttributes: Record<string, CountryAttrs> = {
   lk: { iso: "lk", landlocked: false, island: true, borders: [], populationM: 21.9, areaKm2: 65610, elevationFtMax: 8281 },
   tw: { iso: "tw", landlocked: false, island: true, borders: [], populationM: 23.4, areaKm2: 36197, elevationFtMax: 12966 },
   th: { iso: "th", landlocked: false, island: false, borders: ["kh", "la", "mm", "my"], populationM: 71.8, areaKm2: 513120, elevationFtMax: 8415 },
-  tl: { iso: "tl", landlocked: false, island: false, borders: ["id"], populationM: 1.4, areaKm2: 14874, elevationFtMax: 9721 },
+  tl: { iso: "tl", landlocked: false, island: true, borders: ["id"], populationM: 1.4, areaKm2: 14874, elevationFtMax: 9721 },
   vn: { iso: "vn", landlocked: false, island: false, borders: ["cn", "kh", "la"], populationM: 98.9, areaKm2: 331212, elevationFtMax: 10312 },
   au: { iso: "au", landlocked: false, island: true, borders: [], populationM: 26.6, areaKm2: 7692024, elevationFtMax: 7310 },
   fj: { iso: "fj", landlocked: false, island: true, borders: [], populationM: 0.9, areaKm2: 18274, elevationFtMax: 4344 },
@@ -126,7 +129,7 @@ export const countryAttributes: Record<string, CountryAttrs> = {
   nr: { iso: "nr", landlocked: false, island: true, borders: [], populationM: 0.01, areaKm2: 21, elevationFtMax: 213 },
   nz: { iso: "nz", landlocked: false, island: true, borders: [], populationM: 5.2, areaKm2: 268021, elevationFtMax: 12218 },
   pw: { iso: "pw", landlocked: false, island: true, borders: [], populationM: 0.02, areaKm2: 459, elevationFtMax: 794 },
-  pg: { iso: "pg", landlocked: false, island: false, borders: ["id"], populationM: 10.3, areaKm2: 462840, elevationFtMax: 14793 },
+  pg: { iso: "pg", landlocked: false, island: true, borders: ["id"], populationM: 10.3, areaKm2: 462840, elevationFtMax: 14793 },
   ws: { iso: "ws", landlocked: false, island: true, borders: [], populationM: 0.2, areaKm2: 2842, elevationFtMax: 6093 },
   sb: { iso: "sb", landlocked: false, island: true, borders: [], populationM: 0.7, areaKm2: 28896, elevationFtMax: 7661 },
   to: { iso: "to", landlocked: false, island: true, borders: [], populationM: 0.1, areaKm2: 747, elevationFtMax: 3379 },
@@ -199,13 +202,13 @@ export const countryAttributes: Record<string, CountryAttrs> = {
   cr: { iso: "cr", landlocked: false, island: false, borders: ["ni", "pa"], populationM: 5.2, areaKm2: 51100, elevationFtMax: 12536 },
   cu: { iso: "cu", landlocked: false, island: true, borders: [], populationM: 11.2, areaKm2: 109884, elevationFtMax: 6476 },
   dm: { iso: "dm", landlocked: false, island: true, borders: [], populationM: 0.07, areaKm2: 751, elevationFtMax: 4747 },
-  do: { iso: "do", landlocked: false, island: false, borders: ["ht"], populationM: 11.2, areaKm2: 48671, elevationFtMax: 10164 },
+  do: { iso: "do", landlocked: false, island: true, borders: ["ht"], populationM: 11.2, areaKm2: 48671, elevationFtMax: 10164 },
   ec: { iso: "ec", landlocked: false, island: false, borders: ["co", "pe"], populationM: 18, areaKm2: 283561, elevationFtMax: 20548 },
   sv: { iso: "sv", landlocked: false, island: false, borders: ["gt", "hn"], populationM: 6.3, areaKm2: 21041, elevationFtMax: 8957 },
   gd: { iso: "gd", landlocked: false, island: true, borders: [], populationM: 0.1, areaKm2: 344, elevationFtMax: 2756 },
   gt: { iso: "gt", landlocked: false, island: false, borders: ["bz", "hn", "mx", "sv"], populationM: 17.6, areaKm2: 108889, elevationFtMax: 13845 },
   gy: { iso: "gy", landlocked: false, island: false, borders: ["br", "sr", "ve"], populationM: 0.8, areaKm2: 214969, elevationFtMax: 9301 },
-  ht: { iso: "ht", landlocked: false, island: false, borders: ["do"], populationM: 11.6, areaKm2: 27750, elevationFtMax: 8793 },
+  ht: { iso: "ht", landlocked: false, island: true, borders: ["do"], populationM: 11.6, areaKm2: 27750, elevationFtMax: 8793 },
   hn: { iso: "hn", landlocked: false, island: false, borders: ["gt", "ni", "sv"], populationM: 10.4, areaKm2: 112492, elevationFtMax: 9416 },
   jm: { iso: "jm", landlocked: false, island: true, borders: [], populationM: 2.8, areaKm2: 10991, elevationFtMax: 7402 },
   mx: { iso: "mx", landlocked: false, island: false, borders: ["bz", "gt", "us"], populationM: 128, areaKm2: 1964375, elevationFtMax: 18491 },

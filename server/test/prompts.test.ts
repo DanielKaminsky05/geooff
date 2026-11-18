@@ -65,10 +65,16 @@ describe("prompt spot-checks (within 'countries')", () => {
     expect(ids.has("fr")).toBe(false);
   });
 
-  it("island includes jp/is", () => {
+  it("island includes jp/is and island nations with one land border (gb/ie/do)", () => {
     const ids = within("island");
     expect(ids.has("jp")).toBe(true);
     expect(ids.has("is")).toBe(true);
+    // Island countries that share their island (a single land border) still count.
+    expect(ids.has("gb")).toBe(true);
+    expect(ids.has("ie")).toBe(true);
+    expect(ids.has("do")).toBe(true);
+    // A continental country is still excluded.
+    expect(ids.has("fr")).toBe(false);
   });
 
   it("'starts with b' includes brazil/belgium", () => {
