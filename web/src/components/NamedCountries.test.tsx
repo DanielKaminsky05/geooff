@@ -35,4 +35,15 @@ describe("NamedCountries", () => {
     expect(rows.length).toBe(CONTINENTS.Europe.length);
     expect(screen.getByRole("region", { name: "Your countries" })).toBeInTheDocument();
   });
+
+  it("flat mode lists named items in naming order with no grouping or blanks", () => {
+    render(<NamedCountries filled={new Set(["jp", "fr", "de"])} flat />);
+    // One plain list, items in insertion (naming) order — not alphabetised or
+    // grouped by continent, and no blank slots.
+    const list = screen.getByRole("list");
+    const rows = within(list).getAllByRole("listitem");
+    expect(rows.map((r) => r.textContent)).toEqual(["Japan", "France", "Germany"]);
+    expect(screen.queryByTestId("blank-row")).toBeNull();
+    expect(screen.queryByTestId("continent-Europe")).toBeNull();
+  });
 });

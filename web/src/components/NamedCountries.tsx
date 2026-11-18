@@ -31,6 +31,12 @@ export interface NamedCountriesProps {
    * per player. When set, this replaces the grouped solo view.
    */
   versus?: NamedPlayer[];
+  /**
+   * Flat: a single plain list of the named items in naming order, no grouping
+   * or blanks. Used by solo gauntlet, where the set resets each prompt so
+   * geographic grouping is meaningless.
+   */
+  flat?: boolean;
 }
 
 function itemName(categoryId: CategoryId, id: string): string {
@@ -140,8 +146,36 @@ function build(categoryId: CategoryId, filled: Set<string>): { heading: string; 
  * item slot — named items fill from the top (alphabetical), the rest stay blank
  * to show what's left.
  */
-function NamedCountriesInner({ filled, categoryId = "countries", versus }: NamedCountriesProps) {
+function NamedCountriesInner({ filled, categoryId = "countries", versus, flat }: NamedCountriesProps) {
   const { heading, columns } = useMemo(() => build(categoryId, filled), [categoryId, filled]);
+
+  // Flat: just the named items for the current prompt, in naming order.
+  if (flat) {
+    const noun = categoryId === "us-states" ? "states" : "countries";
+    const ids = [...filled];
+    return (
+      <section
+        id="your-countries"
+        aria-label={`Named ${noun}`}
+        className="mx-auto w-full max-w-md px-4 py-8"
+      >
+        <h2 className="flex items-baseline justify-between gap-2 text-xl font-bold">
+          <span>Named {noun}</span>
+          <span className="text-base tabular-nums text-muted">{ids.length}</span>
+        </h2>
+        <ol className="mt-4 border-x border-t border-border">
+          {ids.map((id) => (
+            <li key={id} className="truncate border-b border-border px-3 py-1 text-sm">
+              {itemName(categoryId, id)}
+            </li>
+          ))}
+          {ids.length === 0 && (
+            <li className="border-b border-border px-3 py-1 text-sm text-muted">Nothing yet</li>
+          )}
+        </ol>
+      </section>
+    );
+  }
 
   // Versus: per-player columns, items in naming order, no geographic grouping.
   if (versus) {

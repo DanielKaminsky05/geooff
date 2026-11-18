@@ -622,8 +622,15 @@ export default function Match() {
 
       </div>
 
-      {/* 4. Countries you've named, grouped by continent */}
-      <NamedCountries filled={myFilled} categoryId={categoryId} versus={namedPlayers} />
+      {/* 4. Countries you've named. Solo gauntlet uses a flat per-prompt list
+          (the set resets each prompt); versus shows per-player ordered columns;
+          otherwise grouped by continent/region. */}
+      <NamedCountries
+        filled={myFilled}
+        categoryId={categoryId}
+        versus={namedPlayers}
+        flat={solo && gauntlet}
+      />
 
       {/* Own connection lost: keep the user here while socket.io retries. */}
       {reconnecting && (
