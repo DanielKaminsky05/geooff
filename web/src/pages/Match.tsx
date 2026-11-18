@@ -401,6 +401,7 @@ export default function Match() {
           endsAt={endsAt}
           category={categoryLabel}
           lastStanding={lastStanding}
+          gauntlet={gauntlet}
           lives={lives}
           maxLives={maxLives}
           hits={hits}

@@ -42,6 +42,28 @@ describe("ScoreBar", () => {
     expect(screen.getByText("Countries")).toBeInTheDocument();
   });
 
+  it("in gauntlet shows countries left (total − score), not score/total", () => {
+    render(
+      <ScoreBar
+        p1={p1}
+        p2={p2}
+        scores={{ a: 12, b: 7 }}
+        total={196}
+        endsAt={Date.now() + 60_000}
+        category="Countries"
+        gauntlet
+        lastStanding
+        lives={{ a: 5, b: 5 }}
+        maxLives={5}
+      />,
+    );
+    // 196 − 12 = 184 left; 196 − 7 = 189 left. No "/ 196".
+    expect(screen.getByText("184")).toBeInTheDocument();
+    expect(screen.getByText("189")).toBeInTheDocument();
+    expect(screen.getAllByText("left")).toHaveLength(2);
+    expect(screen.queryByText("/ 196")).toBeNull();
+  });
+
   it("renders each player's name in their slot color", () => {
     render(
       <ScoreBar

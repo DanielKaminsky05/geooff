@@ -19,6 +19,8 @@ export interface ScoreBarProps {
   maxLives?: number;
   /** last_standing: per-player life-loss counters, to replay the hit FX. */
   hits?: Record<string, number>;
+  /** gauntlet: show "N left" (countries remaining in the set) instead of score/total. */
+  gauntlet?: boolean;
 }
 
 function fmt(ms: number): string {
@@ -49,6 +51,7 @@ function PlayerScore({
   lives,
   maxLives,
   hitKey = 0,
+  gauntlet = false,
 }: {
   player?: PlayerPublic;
   score: number;
@@ -60,6 +63,8 @@ function PlayerScore({
   maxLives?: number;
   /** Increments each time this player loses a life → replays the hit FX. */
   hitKey?: number;
+  /** Gauntlet: show "N left" (countries remaining in the set) instead of score/total. */
+  gauntlet?: boolean;
 }) {
   const right = align === "right";
   const showLives = lives != null && maxLives != null;
@@ -74,7 +79,15 @@ function PlayerScore({
           className="shrink-0 text-xl font-bold tabular-nums"
           style={{ color: colorVar }}
         >
-          {score} <span className="text-sm text-muted">/ {total}</span>
+          {gauntlet ? (
+            <>
+              {Math.max(0, total - score)} <span className="text-sm text-muted">left</span>
+            </>
+          ) : (
+            <>
+              {score} <span className="text-sm text-muted">/ {total}</span>
+            </>
+          )}
         </div>
         {showLives ? (
           // Re-key on the hit count so the group pops + "−1" replays on a loss.
@@ -115,6 +128,7 @@ export function ScoreBar({
   lives,
   maxLives,
   hits,
+  gauntlet,
 }: ScoreBarProps) {
   const remaining = useCountdown(endsAt);
   const p1Score = p1 ? (scores[p1.id] ?? p1.score ?? 0) : 0;
@@ -133,6 +147,7 @@ export function ScoreBar({
           total={total}
           colorVar="var(--color-player1)"
           align="left"
+          gauntlet={gauntlet}
           lives={livesFor(p1)}
           maxLives={lastStanding ? maxLives : undefined}
           hitKey={hitFor(p1)}
@@ -162,6 +177,7 @@ export function ScoreBar({
             total={total}
             colorVar="var(--color-player2)"
             align="right"
+            gauntlet={gauntlet}
             lives={livesFor(p2)}
             maxLives={lastStanding ? maxLives : undefined}
             hitKey={hitFor(p2)}
