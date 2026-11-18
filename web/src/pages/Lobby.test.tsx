@@ -138,10 +138,9 @@ describe("<Lobby>", () => {
     const user = userEvent.setup();
     renderLobby();
 
-    // One player → solo is offered instead of a versus start.
+    // One player → start is present but disabled (waiting for a player to join).
     socket.__server("room_state", roomState());
-    expect(screen.queryByRole("button", { name: "Start game" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Play solo" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /Waiting for a player/ })).toBeDisabled();
 
     // Two players but not both ready → still disabled.
     socket.__server("room_state", roomState({
@@ -165,42 +164,37 @@ describe("<Lobby>", () => {
     expect(socket.__emitted.some((e) => e.event === "start_game")).toBe(true);
   });
 
-  it("Play solo emits start_game when the host is alone", async () => {
-    const user = userEvent.setup();
+  it("never auto-starts on arrival", () => {
     renderLobby();
     socket.__server("room_state", roomState());
-    await user.click(screen.getByRole("button", { name: "Play solo" }));
-    expect(socket.__emitted.filter((e) => e.event === "start_game")).toHaveLength(1);
-  });
-
-  it("hides Play solo once an opponent has joined", () => {
-    renderLobby();
-    socket.__server("room_state", roomState({
-      players: [
-        player({ id: "a", slot: "p1", name: "Alice" }),
-        player({ id: "b", slot: "p2", name: "Bob" }),
-      ],
-    }));
-    expect(screen.queryByRole("button", { name: "Play solo" })).toBeNull();
-  });
-
-  it("never auto-starts; a lone player starts from the Play solo button", async () => {
-    const user = userEvent.setup();
-    renderLobby();
-    socket.__server("room_state", roomState());
-    // Arriving in the lobby does not start a round on its own.
     expect(socket.__emitted.some((e) => e.event === "start_game")).toBe(false);
-    // The lone host must press "Play solo" to begin.
-    await user.click(screen.getByRole("button", { name: "Play solo" }));
-    expect(socket.__emitted.filter((e) => e.event === "start_game")).toHaveLength(1);
   });
 
-  it("shows only your seat when alone — no phantom Player 2 waiting", () => {
+  it("renders a solo setup (Start, no seats/share/ready-up) for a solo room", () => {
+    renderLobby();
+    socket.__server("room_state", roomState({ solo: true }));
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(screen.queryByText("Room code")).toBeNull();
+    expect(screen.queryByText("Player 2")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Ready up" })).toBeNull();
+    // Time presets are still there (you're the host of your solo room).
+    expect(screen.getByRole("button", { name: "5 min" })).toBeEnabled();
+  });
+
+  it("solo Start emits start_game", async () => {
+    const user = userEvent.setup();
+    renderLobby();
+    socket.__server("room_state", roomState({ solo: true }));
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    expect(socket.__emitted.some((e) => e.event === "start_game")).toBe(true);
+  });
+
+  it("shows both seats, with the opponent seat waiting until they join", () => {
     renderLobby();
     socket.__server("room_state", roomState());
     expect(screen.getByText("Alice")).toBeInTheDocument();
-    expect(screen.queryByText("Player 2")).toBeNull();
-    expect(screen.queryByText("Waiting…")).toBeNull();
+    expect(screen.getByText("Player 2")).toBeInTheDocument();
+    expect(screen.getByText("Waiting…")).toBeInTheDocument();
   });
 
   it("navigates to the game on a countdown event", () => {

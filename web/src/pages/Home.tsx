@@ -24,9 +24,8 @@ export default function Home() {
         reconnectToken: payload.reconnectToken,
         roomCode: payload.state.code,
       });
-      // Both flows land in the lobby so the player can set the time limit (and,
-      // for versus, share the code) before starting. A lone player starts from
-      // the lobby's own "Play solo" button.
+      // Both flows land in /room/:code; the lobby renders a solo setup or the
+      // multiplayer lobby depending on the room's `solo` flag.
       navigate(`/room/${payload.state.code}`);
     }
     socket.on("joined", onJoined);
@@ -35,11 +34,11 @@ export default function Home() {
     };
   }, [socket, navigate, setIdentity]);
 
-  function handleCreate(solo = false) {
+  function handleCreate(solo: boolean) {
     const name = playerName.trim() || defaultName();
     setPlayerName(name);
     setCreating(solo ? "solo" : "versus");
-    socket.emit("create_room", { playerName: name });
+    socket.emit("create_room", { playerName: name, solo });
   }
 
   function handleJoin(e: React.FormEvent) {
@@ -94,7 +93,7 @@ export default function Home() {
 
         <button
           type="button"
-          onClick={() => handleCreate()}
+          onClick={() => handleCreate(false)}
           disabled={creating != null}
           className="rounded-xl bg-surface-raised px-6 py-4 text-lg font-semibold text-foreground transition hover:brightness-125 disabled:opacity-60"
         >

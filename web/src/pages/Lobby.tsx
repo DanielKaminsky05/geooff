@@ -115,6 +115,7 @@ export default function Lobby() {
   const bothReady =
     room != null && room.players.length === 2 && room.players.every((p) => p.ready);
   const alone = room != null && room.players.length === 1;
+  const solo = room?.solo === true;
 
   const [copied, setCopied] = useState(false);
   async function copyCode() {
@@ -158,7 +159,7 @@ export default function Lobby() {
       <header className="flex items-center justify-between">
         <h1 className="flex items-center gap-2 text-lg font-bold">
           <GlitchWordmark className="text-sm sm:text-base" />
-          <span className="font-semibold text-muted">lobby</span>
+          <span className="font-semibold text-muted">{solo ? "solo" : "lobby"}</span>
         </h1>
         <button
           onClick={leave}
@@ -168,31 +169,28 @@ export default function Lobby() {
         </button>
       </header>
 
-      {/* Room code / share */}
-      <section className="rounded-xl border border-border bg-surface p-5">
-        <p className="text-sm text-muted">Room code</p>
-        <div className="mt-1 flex items-center justify-between gap-3">
-          <span className="text-3xl font-bold tracking-widest">{code}</span>
-          <button
-            onClick={copyCode}
-            className="rounded-lg bg-surface-raised px-4 py-2 text-sm font-semibold transition hover:brightness-125"
-          >
-            {copied ? "Copied!" : "Share link"}
-          </button>
-        </div>
-      </section>
+      {/* Room code / share + seats are versus-only; solo has neither. */}
+      {!solo && (
+        <>
+          <section className="rounded-xl border border-border bg-surface p-5">
+            <p className="text-sm text-muted">Room code</p>
+            <div className="mt-1 flex items-center justify-between gap-3">
+              <span className="text-3xl font-bold tracking-widest">{code}</span>
+              <button
+                onClick={copyCode}
+                className="rounded-lg bg-surface-raised px-4 py-2 text-sm font-semibold transition hover:brightness-125"
+              >
+                {copied ? "Copied!" : "Share link"}
+              </button>
+            </div>
+          </section>
 
-      {/* Players — alone shows just your seat (no phantom "Player 2 · Waiting"). */}
-      <section className={alone ? "" : "grid grid-cols-2 gap-3"}>
-        <PlayerCard
-          player={p1}
-          colorVar="var(--color-player1)"
-          label={alone ? "You" : "Player 1"}
-        />
-        {!alone && (
-          <PlayerCard player={p2} colorVar="var(--color-player2)" label="Player 2" />
-        )}
-      </section>
+          <section className="grid grid-cols-2 gap-3">
+            <PlayerCard player={p1} colorVar="var(--color-player1)" label="Player 1" />
+            <PlayerCard player={p2} colorVar="var(--color-player2)" label="Player 2" />
+          </section>
+        </>
+      )}
 
       {/* Settings (host-only controls, read-only for guest) */}
       <section className="rounded-xl border border-border bg-surface p-5">
@@ -227,40 +225,43 @@ export default function Lobby() {
         )}
       </section>
 
-      {/* Ready + start */}
+      {/* Start */}
       <section className="mt-auto flex flex-col gap-3">
-        {/* Ready-up is a versus concept; a lone player just presses Play solo. */}
-        {!alone && (
-          <button
-            onClick={() => socket.emit("set_ready", { ready: !me?.ready })}
-            disabled={!me}
-            className={`rounded-xl border px-6 py-4 text-lg font-semibold transition disabled:opacity-50 ${
-              me?.ready
-                ? "border-border bg-surface text-muted hover:brightness-125"
-                : "border-foreground bg-surface-raised text-foreground hover:brightness-125"
-            }`}
-          >
-            {me?.ready ? "Not ready" : "Ready up"}
-          </button>
-        )}
-
-        {isHost && alone && (
+        {solo ? (
           <button
             onClick={() => socket.emit("start_game")}
-            className="rounded-xl border border-border bg-surface-raised px-6 py-4 text-lg font-semibold transition hover:brightness-125"
+            className="rounded-xl bg-accent px-6 py-4 text-lg font-semibold text-background transition hover:brightness-110"
           >
-            Play solo
+            Start
           </button>
-        )}
+        ) : (
+          <>
+            <button
+              onClick={() => socket.emit("set_ready", { ready: !me?.ready })}
+              disabled={!me}
+              className={`rounded-xl border px-6 py-4 text-lg font-semibold transition disabled:opacity-50 ${
+                me?.ready
+                  ? "border-border bg-surface text-muted hover:brightness-125"
+                  : "border-foreground bg-surface-raised text-foreground hover:brightness-125"
+              }`}
+            >
+              {me?.ready ? "Not ready" : "Ready up"}
+            </button>
 
-        {isHost && !alone && (
-          <button
-            onClick={() => socket.emit("start_game")}
-            disabled={!bothReady}
-            className="rounded-xl bg-accent px-6 py-4 text-lg font-semibold text-background transition hover:brightness-110 disabled:opacity-40"
-          >
-            {bothReady ? "Start game" : "Waiting for both players…"}
-          </button>
+            {isHost && (
+              <button
+                onClick={() => socket.emit("start_game")}
+                disabled={!bothReady}
+                className="rounded-xl bg-accent px-6 py-4 text-lg font-semibold text-background transition hover:brightness-110 disabled:opacity-40"
+              >
+                {bothReady
+                  ? "Start game"
+                  : alone
+                    ? "Waiting for a player…"
+                    : "Waiting for both players…"}
+              </button>
+            )}
+          </>
         )}
       </section>
     </main>
