@@ -478,8 +478,6 @@ function GameOverOverlay({
 }) {
   const myScore = me ? (gameOver.scores[me.id] ?? 0) : 0;
   const oppScore = opponent ? (gameOver.scores[opponent.id] ?? 0) : 0;
-  const myColor = slotColor(me?.slot);
-  const oppColor = slotColor(opponent?.slot ?? otherSlot(me?.slot));
   const result =
     gameOver.winnerId == null
       ? "It's a tie!"
@@ -495,18 +493,17 @@ function GameOverOverlay({
             {total > 0 && myScore >= total ? "You named them all!" : "Round over"}
           </h2>
           <p className="mt-6 text-sm text-muted">You named</p>
-          <p data-testid="my-final-score" className="text-5xl font-bold tabular-nums" style={{ color: myColor }}>
+          <p data-testid="my-final-score" className="text-5xl font-bold tabular-nums text-foreground">
             {myScore} <span className="text-2xl text-muted">/ {total}</span>
           </p>
           <div className="mt-3">
-            <ProgressBar value={myScore} max={total} colorVar={myColor} heightClass="h-3" label="Your progress" />
+            <ProgressBar value={myScore} max={total} colorVar="var(--color-foreground)" heightClass="h-3" label="Your progress" />
           </div>
           <div className="mt-8 flex flex-col gap-3">
             <button
               onClick={onRematch}
               disabled={myRematch}
-              className="rounded-xl px-6 py-3 font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
-              style={{ background: myColor }}
+              className="rounded-xl bg-foreground px-6 py-3 font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
             >
               {myRematch ? "Starting…" : "Play again"}
             </button>
@@ -531,29 +528,28 @@ function GameOverOverlay({
             name={me?.name ?? "You"}
             score={myScore}
             total={total}
-            colorVar={myColor}
+            colorVar="var(--color-foreground)"
             testId="my-final-score"
           />
           <FinalScore
             name={opponent?.name ?? "Opponent"}
             score={oppScore}
             total={total}
-            colorVar={oppColor}
+            colorVar="var(--color-muted)"
             testId="opp-final-score"
           />
         </div>
 
         <div className="mt-8 flex flex-col gap-3">
           {oppRematch && !myRematch && (
-            <p className="text-sm font-semibold" style={{ color: oppColor }}>
+            <p className="text-sm font-semibold text-muted">
               Opponent wants a rematch
             </p>
           )}
           <button
             onClick={onRematch}
             disabled={myRematch}
-            className="rounded-xl px-6 py-3 font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
-            style={{ background: myColor }}
+            className="rounded-xl bg-foreground px-6 py-3 font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
           >
             {myRematch ? "Waiting for opponent…" : oppRematch ? "Accept rematch" : "Rematch"}
           </button>

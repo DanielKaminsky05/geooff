@@ -207,8 +207,8 @@ export default function Lobby() {
                 onClick={() => socket.emit("update_settings", { timeLimitSeconds: p.seconds })}
                 className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
                   active
-                    ? "border-player1 bg-player1 text-background"
-                    : "border-border bg-surface-raised text-foreground hover:brightness-125"
+                    ? "border-foreground bg-surface-raised text-foreground"
+                    : "border-border bg-surface text-muted hover:text-foreground hover:brightness-125"
                 } disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 {p.label}
@@ -218,7 +218,7 @@ export default function Lobby() {
         </div>
         <p className="mt-4 text-sm font-semibold text-muted">Category</p>
         <div className="mt-2">
-          <span className="rounded-lg border border-player1 bg-player1 px-4 py-2 text-sm font-semibold text-background">
+          <span className="rounded-lg border border-foreground bg-surface-raised px-4 py-2 text-sm font-semibold text-foreground">
             Countries
           </span>
         </div>
@@ -234,10 +234,10 @@ export default function Lobby() {
           <button
             onClick={() => socket.emit("set_ready", { ready: !me?.ready })}
             disabled={!me}
-            className={`rounded-xl px-6 py-4 text-lg font-semibold transition disabled:opacity-50 ${
+            className={`rounded-xl border px-6 py-4 text-lg font-semibold transition disabled:opacity-50 ${
               me?.ready
-                ? "bg-surface-raised text-foreground hover:brightness-125"
-                : "bg-player1 text-background hover:brightness-110"
+                ? "border-border bg-surface text-muted hover:brightness-125"
+                : "border-foreground bg-surface-raised text-foreground hover:brightness-125"
             }`}
           >
             {me?.ready ? "Not ready" : "Ready up"}
@@ -291,7 +291,7 @@ function PlayerCard({
       <p className="mt-1 text-sm">
         {player ? (
           player.ready ? (
-            <span className="text-player1">Ready</span>
+            <span className="text-foreground">Ready</span>
           ) : (
             <span className="text-muted">Not ready</span>
           )

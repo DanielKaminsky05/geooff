@@ -194,7 +194,7 @@ describe("<Match>", () => {
     expect(screen.queryByText("Opponent wants a rematch")).not.toBeInTheDocument();
   });
 
-  it("colors game-over scores by slot for a p2 player", () => {
+  it("shows game-over scores in neutral colors (you vs opponent), not player green/amber", () => {
     identity = { playerId: "b", slot: "p2", reconnectToken: "tok" };
     renderMatch();
     socket.__server("room_state", roomState());
@@ -204,9 +204,9 @@ describe("<Match>", () => {
     const mine = screen.getByTestId("my-final-score");
     const theirs = screen.getByTestId("opp-final-score");
     expect(mine.textContent).toBe("10");
-    expect(mine.getAttribute("style")).toContain("var(--color-player2)");
+    expect(mine.getAttribute("style")).toContain("var(--color-foreground)");
     expect(theirs.textContent).toBe("4");
-    expect(theirs.getAttribute("style")).toContain("var(--color-player1)");
+    expect(theirs.getAttribute("style")).toContain("var(--color-muted)");
   });
 
   it("'Back to home' leaves the room, clears identity, and navigates home", async () => {
