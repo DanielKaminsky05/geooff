@@ -357,6 +357,73 @@ describe("<Match> last_standing", () => {
   });
 });
 
+describe("<Match> gauntlet", () => {
+  const gSettings = {
+    categoryId: "countries" as const,
+    mode: "gauntlet" as const,
+    timeLimitSeconds: 300,
+    turnSeconds: 15,
+    lives: 5,
+  };
+  const gState = (over: Partial<RoomState> = {}) =>
+    roomState({
+      settings: gSettings,
+      turn: { currentPlayerId: "b", endsAt: Date.now() + 15_000 },
+      lives: { a: 5, b: 5 },
+      prompt: { id: "landlocked", label: "Landlocked countries" },
+      ...over,
+    });
+
+  beforeEach(() => {
+    socket = createMockSocket();
+    identity = { playerId: "a", slot: "p1", reconnectToken: "tok" };
+    navigate.mockClear();
+    setIdentity.mockClear();
+  });
+
+  it("renders the prompt banner from room.prompt", () => {
+    renderMatch();
+    socket.__server("room_state", gState());
+    const banner = screen.getByTestId("prompt-banner");
+    expect(within(banner).getByText("Landlocked countries")).toBeInTheDocument();
+  });
+
+  it("updates the prompt banner on prompt_changed", () => {
+    renderMatch();
+    socket.__server("room_state", gState());
+    expect(screen.getByText("Landlocked countries")).toBeInTheDocument();
+
+    socket.__server("prompt_changed", { id: "island", label: "Island nations" });
+    expect(screen.getByText("Island nations")).toBeInTheDocument();
+    expect(screen.queryByText("Landlocked countries")).toBeNull();
+  });
+
+  it("gates input to my turn (disabled off-turn, enabled on turn_started naming me)", () => {
+    renderMatch();
+    socket.__server("room_state", gState());
+    expect(screen.getByLabelText("Country guess")).toBeDisabled();
+    expect(screen.getByText("Bob's turn")).toBeInTheDocument();
+
+    socket.__server("turn_started", { playerId: "a", endsAt: Date.now() + 15_000 });
+    expect(screen.getByLabelText("Country guess")).toBeEnabled();
+    expect(screen.getByText("Your turn")).toBeInTheDocument();
+  });
+
+  it("surfaces an off_prompt rejection gracefully", () => {
+    renderMatch();
+    socket.__server("room_state", gState());
+    socket.__server("answer_result", { accepted: false, reason: "off_prompt" });
+    expect(screen.getByText("Doesn't match the prompt")).toBeInTheDocument();
+  });
+
+  it("reuses the Last Standing shell: lives in the score bar + per-turn timer", () => {
+    renderMatch();
+    socket.__server("room_state", gState());
+    expect(screen.getByRole("img", { name: /^Bob:/ })).toHaveAttribute("data-lives", "5");
+    expect(screen.getByTestId("turn-timer")).toBeInTheDocument();
+  });
+});
+
 describe("<Match> solo", () => {
   const soloState = (over: Partial<RoomState> = {}) =>
     roomState({ solo: true, players: [player({ id: "a", slot: "p1", name: "Alice" })], ...over });

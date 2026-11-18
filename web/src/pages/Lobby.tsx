@@ -38,6 +38,7 @@ const LIVES_PRESETS = Array.from(
 const MODES: { value: GameMode; label: string }[] = [
   { value: "race", label: "Race" },
   { value: "last_standing", label: "Last Standing" },
+  { value: "gauntlet", label: "Gauntlet" },
 ];
 
 const CATEGORIES: { value: CategoryId; label: string }[] = [
@@ -150,6 +151,10 @@ export default function Lobby() {
   const mode = room?.settings.mode ?? "race";
   const effectiveMode = solo ? "race" : mode;
   const categoryId = room?.settings.categoryId ?? "countries";
+  // Gauntlet is country-sets only — US states have no prompt pool.
+  const gauntletAvailable = categoryId !== "us-states";
+  // Both Last Standing and Gauntlet use the per-turn clock + lives pickers.
+  const turnBased = effectiveMode === "last_standing" || effectiveMode === "gauntlet";
 
   const [copied, setCopied] = useState(false);
   async function copyCode() {
@@ -234,6 +239,8 @@ export default function Lobby() {
             <p className="mb-2 text-sm font-semibold text-muted">Mode</p>
             <div className="mb-4 flex flex-wrap gap-2">
               {MODES.map((m) => {
+                // Gauntlet needs a prompt pool, so hide it for US states.
+                if (m.value === "gauntlet" && !gauntletAvailable) return null;
                 const active = mode === m.value;
                 return (
                   <button
@@ -275,7 +282,7 @@ export default function Lobby() {
           })}
         </div>
 
-        {effectiveMode === "last_standing" ? (
+        {turnBased ? (
           <>
             <p className="mt-4 mb-2 text-sm font-semibold text-muted">Turn time</p>
             <div className="flex flex-wrap gap-2">

@@ -9,6 +9,7 @@ import CountryInput from "../components/CountryInput";
 import NamedCountries from "../components/NamedCountries";
 import ProgressBar from "../components/ProgressBar";
 import TurnTimer from "../components/TurnTimer";
+import PromptBanner from "../components/PromptBanner";
 
 interface GameOver {
   winnerId: string | null;
@@ -53,6 +54,8 @@ export default function Match() {
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [turnEndsAt, setTurnEndsAt] = useState<number | null>(null);
   const [lives, setLives] = useState<Record<string, number>>({});
+  // gauntlet: the active prompt (label only — the valid set is never sent).
+  const [prompt, setPrompt] = useState<{ id: string; label: string } | null>(null);
   // Per-player life-loss counters → replay the hearts hit FX + "−1" in the bar.
   const [hits, setHits] = useState<Record<string, number>>({});
   // Full-screen flash: red when I take a hit, green when the opponent does.
@@ -107,6 +110,8 @@ export default function Match() {
         setTurnEndsAt(state.turn.endsAt);
       }
       if (state.lives) setLives(state.lives);
+      // Rehydrate the gauntlet prompt from the snapshot if present.
+      if (state.prompt) setPrompt(state.prompt);
     }
     function onJoined(p: {
       playerId: string;
@@ -145,6 +150,7 @@ export default function Match() {
       setCurrentPlayerId(null);
       setTurnEndsAt(null);
       setLives({});
+      setPrompt(null);
     }
     function onAnswerResult(p: {
       accepted: boolean;
@@ -170,7 +176,9 @@ export default function Match() {
               ? "Not a match"
               : p.reason === "not_your_turn"
                 ? "Not your turn"
-                : null,
+                : p.reason === "off_prompt"
+                  ? "Doesn't match the prompt"
+                  : null,
         );
       }
     }
@@ -210,6 +218,11 @@ export default function Match() {
         setShaking(true);
         setTimeout(() => setShaking(false), 450);
       }
+    }
+    function onPromptChanged(p: { id: string; label: string }) {
+      setPrompt({ id: p.id, label: p.label });
+      // A fresh prompt clears any stale reject banner from the last turn.
+      setRejectMsg(null);
     }
     function onGameOver(p: GameOver) {
       setPhase("ended");
@@ -254,6 +267,7 @@ export default function Match() {
     socket.on("opponent_progress", onOpponentProgress);
     socket.on("turn_started", onTurnStarted);
     socket.on("life_lost", onLifeLost);
+    socket.on("prompt_changed", onPromptChanged);
     socket.on("game_over", onGameOver);
     socket.on("rematch_start", onRematchStart);
     socket.on("rematch_requested", onRematchRequested);
@@ -281,6 +295,7 @@ export default function Match() {
       socket.off("opponent_progress", onOpponentProgress);
       socket.off("turn_started", onTurnStarted);
       socket.off("life_lost", onLifeLost);
+      socket.off("prompt_changed", onPromptChanged);
       socket.off("game_over", onGameOver);
       socket.off("rematch_start", onRematchStart);
       socket.off("rematch_requested", onRematchRequested);
@@ -307,7 +322,10 @@ export default function Match() {
   const categoryLabel = CATEGORY_LABELS[categoryId] ?? "Countries";
   // Only US states use a different noun; regions are scoped country sets.
   const itemsNoun = categoryId === "us-states" ? "states" : "countries";
-  const lastStanding = mode === "last_standing";
+  const gauntlet = mode === "gauntlet";
+  // Gauntlet reuses the entire Last Standing shell (lives, per-turn timer,
+  // shared colour-by-claimer map, turn gating, hit/heartbreak FX).
+  const lastStanding = mode === "last_standing" || gauntlet;
   const maxLives = room?.settings.lives ?? 0;
 
   // Last Standing is one shared map: colour each claimed item by who took it.
@@ -384,6 +402,11 @@ export default function Match() {
           maxLives={maxLives}
           hits={hits}
         />
+
+        {/* 1a. Gauntlet: the active prompt that answers must satisfy. */}
+        {gauntlet && phase === "playing" && !gameOver && prompt && (
+          <PromptBanner label={prompt.label} />
+        )}
 
         {/* 1b. Last Standing: whose turn + the per-turn clock (lives live up in
             the score bar). */}

@@ -132,6 +132,43 @@ describe("<Lobby>", () => {
     expect(socket.__lastEmit("update_settings")).toEqual({ mode: "race" });
   });
 
+  it("offers Gauntlet for a country set and emits update_settings{mode:'gauntlet'}", async () => {
+    const user = userEvent.setup();
+    renderLobby();
+    socket.__server("room_state", roomState());
+
+    await user.click(screen.getByRole("button", { name: "Gauntlet" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ mode: "gauntlet" });
+  });
+
+  it("does NOT offer Gauntlet for the us-states set", () => {
+    renderLobby();
+    socket.__server("room_state", roomState({
+      settings: { categoryId: "us-states", mode: "race", timeLimitSeconds: 300, turnSeconds: 15, lives: 5 },
+    }));
+    // Race / Last Standing stay; Gauntlet is hidden (no prompt pool for states).
+    expect(screen.getByRole("button", { name: "Race" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Last Standing" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Gauntlet" })).toBeNull();
+  });
+
+  it("in gauntlet, shows the turn/lives pickers (same as last_standing)", async () => {
+    const user = userEvent.setup();
+    renderLobby();
+    socket.__server("room_state", roomState({
+      settings: { categoryId: "countries", mode: "gauntlet", timeLimitSeconds: 300, turnSeconds: 15, lives: 5 },
+    }));
+
+    // Round-length presets give way to the per-turn + lives pickers.
+    expect(screen.queryByRole("button", { name: "5 min" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "30s" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ turnSeconds: 30 });
+
+    await user.click(screen.getByRole("button", { name: "3" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ lives: 3 });
+  });
+
   it("the set picker emits update_settings with the chosen categoryId", async () => {
     const user = userEvent.setup();
     renderLobby();
