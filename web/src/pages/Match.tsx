@@ -71,6 +71,7 @@ export default function Match() {
   const [myRematch, setMyRematch] = useState(false);
   const [oppRematch, setOppRematch] = useState(false);
   const [showOpponent, setShowOpponent] = useState(false); // mobile toggle
+  const [showNamed, setShowNamed] = useState(false); // named-list slide-over
 
   /** 3-2-1 overlay: seconds left, "ready" (in countdown but no tick seen yet), or null. */
   const [countdown, setCountdown] = useState<number | "ready" | null>(null);
@@ -532,14 +533,14 @@ export default function Match() {
             </>
           )}
 
-          {/* The map captures the wheel for zoom, so offer a way down to the list. */}
+          {/* Open the named-list sheet. It's a slide-over (not below the fold)
+              so the match stays a single non-scrolling viewport — focusing the
+              input on mobile can't scroll the map away to reveal a list. */}
           <button
-            onClick={() =>
-              document.getElementById("your-countries")?.scrollIntoView({ behavior: "smooth" })
-            }
+            onClick={() => setShowNamed(true)}
             className="absolute bottom-3 right-3 z-10 rounded-lg bg-surface-raised px-3 py-2 text-sm font-semibold shadow transition hover:brightness-125"
           >
-            {solo ? "Your" : "Named"} {itemsNoun} ({solo ? myFilled.size : myFilled.size + oppFilled.size}) ↓
+            {solo ? "Your" : "Named"} {itemsNoun} ({solo ? myFilled.size : myFilled.size + oppFilled.size}) ↑
           </button>
 
           {/* Opponent disconnected banner */}
@@ -622,15 +623,32 @@ export default function Match() {
 
       </div>
 
-      {/* 4. Countries you've named. Solo gauntlet uses a flat per-prompt list
-          (the set resets each prompt); versus shows per-player ordered columns;
-          otherwise grouped by continent/region. */}
-      <NamedCountries
-        filled={myFilled}
-        categoryId={categoryId}
-        versus={namedPlayers}
-        flat={solo && gauntlet}
-      />
+      {/* 4. Named list — a slide-up sheet (always mounted, translated off-screen
+          when closed) rather than content below the fold, so the match stays a
+          single non-scrolling viewport. Solo gauntlet uses a flat per-prompt
+          list; versus shows per-player ordered columns; otherwise grouped. */}
+      <div
+        className={`fixed inset-0 z-30 flex flex-col bg-background transition-transform duration-300 ${
+          showNamed ? "translate-y-0" : "pointer-events-none translate-y-full"
+        }`}
+      >
+        <div className="flex justify-end border-b border-border px-4 py-2">
+          <button
+            onClick={() => setShowNamed(false)}
+            className="rounded-lg bg-surface-raised px-4 py-2 text-sm font-semibold transition hover:brightness-125"
+          >
+            Close ✕
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <NamedCountries
+            filled={myFilled}
+            categoryId={categoryId}
+            versus={namedPlayers}
+            flat={solo && gauntlet}
+          />
+        </div>
+      </div>
 
       {/* Own connection lost: keep the user here while socket.io retries. */}
       {reconnecting && (
