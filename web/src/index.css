@@ -40,6 +40,18 @@ html {
   font-size: 75%; /* 12px base */
 }
 
+/* iOS Safari zooms the page in (and leaves it off-centre) whenever a focused
+   input renders text below 16px. Our 75% root scale pushes the rem-based
+   fields under that threshold, so pin inputs to 16px on touch devices. Desktop
+   keeps the compact sizing. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 body {
   margin: 0;
   background: var(--color-background);
