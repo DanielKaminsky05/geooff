@@ -254,6 +254,34 @@ describe("<Match>", () => {
     );
   });
 
+  it("re-claims the seat with join_room on reconnect (so inputs keep working)", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.emit.mockClear();
+
+    socket.__server("disconnect", "transport close");
+    socket.__server("connect");
+
+    expect(socket.__lastEmit("join_room")).toMatchObject({
+      code: "ROOM01",
+      reconnectToken: "tok",
+    });
+  });
+
+  it("surfaces a fatal error and offers home when the room is gone", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", roomState());
+
+    socket.__server("error_msg", { code: "room_not_found", message: "No room with code ROOM01." });
+    expect(screen.getByText("Game unavailable")).toBeInTheDocument();
+    expect(screen.getByText("No room with code ROOM01.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Back to home" }));
+    expect(setIdentity).toHaveBeenCalledWith(null);
+    expect(navigate).toHaveBeenCalledWith("/");
+  });
+
   it("shows an opponent-disconnected banner with a countdown, hidden on reconnect", () => {
     renderMatch();
     socket.__server("room_state", roomState());

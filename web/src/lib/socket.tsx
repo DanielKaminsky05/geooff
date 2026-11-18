@@ -15,7 +15,11 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [socket] = useState<GameSocket>(() =>
     io(WS_URL, {
       autoConnect: false,
-      transports: ["websocket"],
+      // Prefer websocket, but keep polling as a fallback: iOS Safari drops
+      // websockets when the tab is backgrounded / the phone locks, and some
+      // mobile networks block the upgrade — without a fallback the client can
+      // fail to reconnect at all. (Single backend instance, so polling is safe.)
+      transports: ["websocket", "polling"],
     }),
   );
 

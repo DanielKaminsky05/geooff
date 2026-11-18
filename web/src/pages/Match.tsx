@@ -77,6 +77,8 @@ export default function Match() {
   const [countdown, setCountdown] = useState<number | "ready" | null>(null);
   /** Own socket dropped; waiting for socket.io to reconnect. */
   const [reconnecting, setReconnecting] = useState(false);
+  /** A (re)join failed unrecoverably (room gone, grace expired, …). */
+  const [fatalError, setFatalError] = useState<string | null>(null);
   /** Epoch ms when the opponent's reconnect grace runs out; null = connected. */
   const [oppGraceEndsAt, setOppGraceEndsAt] = useState<number | null>(null);
 
@@ -315,6 +317,29 @@ export default function Match() {
     }
     function onConnect() {
       setReconnecting(false);
+      // The server sees a brand-new socket after a transport reconnect, so it no
+      // longer associates this connection with our seat. Re-claim it with the
+      // reconnect token (idempotent if we're already seated) — otherwise
+      // submit_answer would be silently dropped.
+      socket.emit("join_room", {
+        code,
+        playerName: playerName || "Player",
+        reconnectToken: identityRef.current?.reconnectToken,
+      });
+    }
+    function onErrorMsg(p: { code: string; message: string }) {
+      // A failed (re)join is unrecoverable from this page — the room is gone
+      // (server restart or grace expired) or can't be re-entered. Surface it
+      // instead of leaving a dead game that silently drops every input.
+      if (
+        p.code === "room_not_found" ||
+        p.code === "in_progress" ||
+        p.code === "not_joinable" ||
+        p.code === "room_full"
+      ) {
+        setReconnecting(false);
+        setFatalError(p.message || "This game is no longer available.");
+      }
     }
 
     socket.on("room_state", onRoomState);
@@ -334,6 +359,7 @@ export default function Match() {
     socket.on("opponent_reconnected", onOpponentReconnected);
     socket.on("disconnect", onDisconnect);
     socket.on("connect", onConnect);
+    socket.on("error_msg", onErrorMsg);
 
     // Ensure we're subscribed (covers hard refresh onto /game/:code).
     if (!room) {
@@ -362,6 +388,7 @@ export default function Match() {
       socket.off("opponent_reconnected", onOpponentReconnected);
       socket.off("disconnect", onDisconnect);
       socket.off("connect", onConnect);
+      socket.off("error_msg", onErrorMsg);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, code]);
@@ -686,13 +713,34 @@ export default function Match() {
       </div>
 
       {/* Own connection lost: keep the user here while socket.io retries. */}
-      {reconnecting && (
+      {reconnecting && !fatalError && (
         <div
           role="alert"
           className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-background/90"
         >
           <p className="text-2xl font-bold">Reconnecting…</p>
           <p className="text-sm text-muted">Hang tight — your seat is saved.</p>
+        </div>
+      )}
+
+      {/* Re-join failed for good (room gone / grace expired): offer a way out
+          instead of a dead game that drops every input. */}
+      {fatalError && (
+        <div
+          role="alert"
+          className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-background/95 px-6 text-center"
+        >
+          <p className="text-2xl font-bold">Game unavailable</p>
+          <p className="max-w-sm text-sm text-muted">{fatalError}</p>
+          <button
+            onClick={() => {
+              setIdentity(null);
+              navigate("/");
+            }}
+            className="rounded-xl bg-foreground px-6 py-3 font-semibold text-background transition hover:brightness-110"
+          >
+            Back to home
+          </button>
         </div>
       )}
     </main>
