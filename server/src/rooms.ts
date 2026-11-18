@@ -18,7 +18,7 @@ import {
 // sets.ts has no dependency on rooms.ts, so this import is cycle-free.
 import { totalFor } from "./sets.js";
 // prompts.ts does not depend on rooms.ts either, so this is cycle-free.
-import { promptById } from "./prompts.js";
+import { promptById, validIdsFor } from "./prompts.js";
 
 export interface Seat {
   id: string; // stable per-seat id (playerId)
@@ -182,7 +182,13 @@ export function roomStateOf(room: Room, total: number = totalFor(room.settings.c
   // sent) so a reconnecting client rehydrates the banner.
   if (room.currentPromptId !== undefined) {
     const prompt = promptById(room.currentPromptId);
-    if (prompt) state.prompt = { id: prompt.id, label: prompt.label };
+    if (prompt) {
+      state.prompt = {
+        id: prompt.id,
+        label: prompt.label,
+        total: validIdsFor(prompt, room.settings.categoryId).size,
+      };
+    }
   }
   return state;
 }

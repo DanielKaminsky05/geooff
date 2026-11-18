@@ -122,7 +122,7 @@ describe("gauntlet — prompt setup", () => {
     expect((prompt as any).validIds).toBeUndefined();
   });
 
-  it("room_state carries the prompt { id, label }", async () => {
+  it("room_state carries the prompt { id, label, total }", async () => {
     const ctx = await makeGauntletRoom();
     const { prompt } = await startGauntlet(ctx);
 
@@ -130,7 +130,11 @@ describe("gauntlet — prompt setup", () => {
     const stateP = awaitEvent<any>(ctx.a, "room_state");
     ctx.a.emit("set_ready", { ready: true }); // any state-broadcasting no-op works
     const state = await stateP;
-    expect(state.prompt).toEqual({ id: prompt.id, label: prompt.label });
+    const expectedTotal = validIdsFor(promptById(prompt.id)!, CATEGORY).size;
+    expect(state.prompt).toEqual({ id: prompt.id, label: prompt.label, total: expectedTotal });
+    expect(expectedTotal).toBeGreaterThan(0);
+    // The prompt_changed payload carries the same count.
+    expect(prompt.total).toBe(expectedTotal);
   });
 });
 

@@ -131,7 +131,8 @@ function pickPrompt(room: Room, excludeId?: string): Prompt | undefined {
 function setPrompt(deps: LastStandingDeps, room: Room, prompt: Prompt): void {
   room.currentPromptId = prompt.id;
   room.claimedThisPrompt = new Set<string>();
-  deps.io.to(room.code).emit("prompt_changed", { id: prompt.id, label: prompt.label });
+  const total = validIdsFor(prompt, room.settings.categoryId).size;
+  deps.io.to(room.code).emit("prompt_changed", { id: prompt.id, label: prompt.label, total });
 }
 
 /** Cycle to a fresh prompt (different id when possible), resetting its pool. */

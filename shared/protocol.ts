@@ -137,8 +137,9 @@ export interface RoomState {
   turn?: { currentPlayerId: string; endsAt: number };
   /** last_standing: remaining lives by playerId (for rehydrate). */
   lives?: Record<string, number>;
-  /** gauntlet: the active prompt (label only — the valid set is never sent). */
-  prompt?: { id: string; label: string };
+  /** gauntlet: the active prompt — label + how many answers it has in the set
+   *  (for the "named / total" progress). The valid set itself is never sent. */
+  prompt?: { id: string; label: string; total: number };
 }
 
 /* ------------------------------------------------------------------ */
@@ -192,8 +193,8 @@ export interface ServerToClientEvents {
   turn_started: (payload: { playerId: string; endsAt: number }) => void;
   /** last_standing: `playerId` lost a life (timeout); `livesLeft` remain. */
   life_lost: (payload: { playerId: string; livesLeft: number }) => void;
-  /** gauntlet: a new prompt cycled in (label only — never the valid set). */
-  prompt_changed: (p: { id: string; label: string }) => void;
+  /** gauntlet: a new prompt cycled in — label + answer count (never the set). */
+  prompt_changed: (p: { id: string; label: string; total: number }) => void;
   /** Result of YOUR guess only. canonical/isoCode present when accepted. */
   answer_result: (payload: {
     accepted: boolean;
