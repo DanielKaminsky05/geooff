@@ -445,9 +445,9 @@ export default function Match() {
   const myTurn = !lastStanding || (myId != null && currentPlayerId === myId);
   const currentPlayer = room?.players.find((p) => p.id === currentPlayerId);
 
-  // Only accept guesses while the round is running; in last_standing, also gate
-  // on it being my turn.
-  const inputDisabled = gameOver != null || phase !== "playing" || !myTurn;
+  // The field stays usable whenever the round is live so players can pre-type
+  // off-turn; submission itself is gated on it being my turn (see handleSubmit).
+  const inputDisabled = gameOver != null || phase !== "playing";
 
   const effectiveScores = useMemo(() => {
     const s = { ...scores };
@@ -458,6 +458,10 @@ export default function Match() {
   }, [scores, room]);
 
   function handleSubmit(text: string) {
+    // Turn-based modes: a player may type ahead off-turn, but a guess is only
+    // sent on their turn (keeps the typed text so they can fire it when it's
+    // theirs). Race mode is always "my turn".
+    if (!myTurn) return;
     socket.emit("submit_answer", { text });
   }
 

@@ -348,20 +348,32 @@ describe("<Match> last_standing", () => {
     setIdentity.mockClear();
   });
 
-  it("disables input when it is not my turn and shows whose turn it is", () => {
+  it("keeps the input usable off-turn but does not submit, and shows whose turn it is", async () => {
+    const user = userEvent.setup();
     renderMatch();
     socket.__server("room_state", lsState());
-    expect(screen.getByLabelText("Country guess")).toBeDisabled();
+    const input = screen.getByLabelText("Country guess");
+    expect(input).toBeEnabled();
     expect(screen.getByText("Bob's turn")).toBeInTheDocument();
+
+    await user.type(input, "France{Enter}");
+    // Off-turn: no submit, and the typed text is retained to fire later.
+    expect(socket.__emitted.some((e) => e.event === "submit_answer")).toBe(false);
+    expect(input).toHaveValue("France");
   });
 
-  it("enables input on a turn_started naming me", () => {
+  it("submits only once it is my turn (turn_started naming me)", async () => {
+    const user = userEvent.setup();
     renderMatch();
     socket.__server("room_state", lsState());
-    expect(screen.getByLabelText("Country guess")).toBeDisabled();
+    const input = screen.getByLabelText("Country guess");
+
+    await user.type(input, "France{Enter}");
+    expect(socket.__emitted.some((e) => e.event === "submit_answer")).toBe(false);
 
     socket.__server("turn_started", { playerId: "a", endsAt: Date.now() + 15_000 });
-    expect(screen.getByLabelText("Country guess")).toBeEnabled();
+    await user.type(input, "{Enter}");
+    expect(socket.__emitted.some((e) => e.event === "submit_answer")).toBe(true);
     expect(screen.getByText("Your turn")).toBeInTheDocument();
   });
 
@@ -440,14 +452,20 @@ describe("<Match> gauntlet", () => {
     expect(screen.queryByText("Japan")).toBeNull();
   });
 
-  it("gates input to my turn (disabled off-turn, enabled on turn_started naming me)", () => {
+  it("gates submission to my turn (usable off-turn, submits on my turn)", async () => {
+    const user = userEvent.setup();
     renderMatch();
     socket.__server("room_state", gState());
-    expect(screen.getByLabelText("Country guess")).toBeDisabled();
+    const input = screen.getByLabelText("Country guess");
+    expect(input).toBeEnabled();
     expect(screen.getByText("Bob's turn")).toBeInTheDocument();
 
+    await user.type(input, "France{Enter}");
+    expect(socket.__emitted.some((e) => e.event === "submit_answer")).toBe(false);
+
     socket.__server("turn_started", { playerId: "a", endsAt: Date.now() + 15_000 });
-    expect(screen.getByLabelText("Country guess")).toBeEnabled();
+    await user.type(input, "{Enter}");
+    expect(socket.__emitted.some((e) => e.event === "submit_answer")).toBe(true);
     expect(screen.getByText("Your turn")).toBeInTheDocument();
   });
 
