@@ -141,6 +141,19 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
     socket.emit("error_msg", { code, message });
   }
 
+  /**
+   * Run a timer/deferred callback so a throw can't escape to the top level and
+   * crash the whole process (which would drop EVERY connected player at once,
+   * not just this room). Errors are logged and contained.
+   */
+  function guard(label: string, fn: () => void): void {
+    try {
+      fn();
+    } catch (err) {
+      console.error(`timer error (${label}):`, err);
+    }
+  }
+
   /** Delete the room if no seat has a live connection (prevents leaks). */
   function deleteIfAbandoned(room: Room): boolean {
     if (room.players.some((p) => p.connected)) return false;
@@ -196,7 +209,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
     let remaining = COUNTDOWN_SECONDS;
     io.to(room.code).emit("countdown", { seconds: remaining });
 
-    room.countdownTimer = setInterval(() => {
+    room.countdownTimer = setInterval(() => guard("countdown", () => {
       remaining -= 1;
       if (remaining > 0) {
         io.to(room.code).emit("countdown", { seconds: remaining });
@@ -221,11 +234,12 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         broadcastRoomState(room);
       } else {
         broadcastRoomState(room);
-        room.roundTimer = setTimeout(() => {
-          endGame(room);
-        }, room.settings.timeLimitSeconds * 1000);
+        room.roundTimer = setTimeout(
+          () => guard("roundTimer", () => endGame(room)),
+          room.settings.timeLimitSeconds * 1000,
+        );
       }
-    }, countdownTickMs);
+    }), countdownTickMs);
   }
 
   /** Reset seats for a rematch back to lobby. */
@@ -655,7 +669,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
             graceSeconds,
           });
         }
-        const timer = setTimeout(() => {
+        const timer = setTimeout(() => guard("grace", () => {
           room.graceTimers.delete(seat.id);
           if (seat.connected) return; // reconnected in time
           if (room.phase === "playing" || room.phase === "countdown") {
@@ -666,7 +680,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           } else {
             deleteIfAbandoned(room);
           }
-        }, graceMs);
+        }), graceMs);
         room.graceTimers.set(seat.id, timer);
       } catch (err) {
         console.error("disconnect error:", err);
@@ -692,6 +706,16 @@ function isMainModule(): boolean {
 }
 
 if (isMainModule()) {
+  // Last-resort safety net: a single stray throw / rejection must NOT take down
+  // the whole server (which would drop every connected player at once). Log it
+  // loudly and keep serving; per-room timers are already individually guarded.
+  process.on("uncaughtException", (err) => {
+    console.error("[uncaughtException] keeping server alive:", err);
+  });
+  process.on("unhandledRejection", (reason) => {
+    console.error("[unhandledRejection] keeping server alive:", reason);
+  });
+
   const { httpServer } = createServer();
   httpServer.listen(PORT, () => {
     console.log(

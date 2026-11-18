@@ -85,6 +85,20 @@ function clearTurnTimer(room: Room): void {
 }
 
 /**
+ * Arm the per-turn timeout so a throw inside onTurnTimeout can't escape to the
+ * top level and crash the process (dropping every connected player at once).
+ */
+function scheduleTurnTimeout(deps: LastStandingDeps, room: Room, ms: number): ReturnType<typeof setTimeout> {
+  return setTimeout(() => {
+    try {
+      onTurnTimeout(deps, room);
+    } catch (err) {
+      console.error("turn timeout error:", err);
+    }
+  }, ms);
+}
+
+/**
  * Start turn 1 after the countdown: seed lives + the shared pool, pick the host
  * as first player, emit turn_started and arm the per-turn timeout.
  */
@@ -151,7 +165,7 @@ function armTurn(deps: LastStandingDeps, room: Room, playerId: string): void {
     playerId,
     endsAt: room.turnEndsAt,
   });
-  room.turnTimer = setTimeout(() => onTurnTimeout(deps, room), durationMs);
+  room.turnTimer = scheduleTurnTimeout(deps, room, durationMs);
 }
 
 /** The id of the opponent who should act next. */
@@ -369,5 +383,5 @@ export function resumeTurnOnReconnect(deps: LastStandingDeps, room: Room, seat: 
     playerId: seat.id,
     endsAt: room.turnEndsAt,
   });
-  room.turnTimer = setTimeout(() => onTurnTimeout(deps, room), remaining);
+  room.turnTimer = scheduleTurnTimeout(deps, room, remaining);
 }
