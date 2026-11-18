@@ -1,5 +1,5 @@
 /**
- * geooff game server — Express HTTP + typed Socket.IO.
+ * geofight game server — Express HTTP + typed Socket.IO.
  *
  * The server is authoritative: it validates answers, owns the countdown and the
  * round timer (via `endsAt`), and never sends the answer list to clients.
@@ -54,7 +54,7 @@ export interface CreateServerOptions {
   graceMs?: number;
 }
 
-export interface GeooffServer {
+export interface GeofightServer {
   app: Express;
   io: Server<ClientToServerEvents, ServerToClientEvents>;
   httpServer: HttpServer;
@@ -65,7 +65,7 @@ export interface GeooffServer {
  * handler. Does NOT call `.listen()` — the caller decides when/where to bind.
  * This lets tests spin the whole stack up on an ephemeral port.
  */
-export function createServer(options: CreateServerOptions = {}): GeooffServer {
+export function createServer(options: CreateServerOptions = {}): GeofightServer {
   const countdownTickMs = options.countdownTickMs ?? 1000;
   const graceMs = options.graceMs ?? RECONNECT_GRACE_SECONDS * 1000;
   const graceSeconds = Math.max(1, Math.ceil(graceMs / 1000));
@@ -592,6 +592,6 @@ function isMainModule(): boolean {
 if (isMainModule()) {
   const { httpServer } = createServer();
   httpServer.listen(PORT, () => {
-    console.log(`geooff server listening on http://localhost:${PORT} (${total} countries loaded)`);
+    console.log(`geofight server listening on http://localhost:${PORT} (${total} countries loaded)`);
   });
 }

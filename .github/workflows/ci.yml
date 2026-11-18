@@ -62,7 +62,7 @@ jobs:
 
   # Deploys the game server to EC2 after CI passes on main. Disabled until the
   # repo variable DEPLOY_SERVER=true and the EC2_HOST / EC2_USER / EC2_SSH_KEY
-  # secrets are set. Expects the repo cloned at ~/geooff and pm2 installed.
+  # secrets are set. Expects the repo cloned at ~/geofight and pm2 installed.
   deploy-server:
     name: Deploy server (EC2)
     needs: [protocol, server, web]
@@ -77,10 +77,10 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
-            cd ~/geooff
+            cd ~/geofight
             git fetch origin main
             git reset --hard origin/main
             cd server
             npm ci
             npm run build
-            pm2 restart geooff-server || pm2 start dist/index.js --name geooff-server
+            pm2 restart geofight-server || pm2 start dist/index.js --name geofight-server

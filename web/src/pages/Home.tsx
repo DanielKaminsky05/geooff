@@ -55,7 +55,7 @@ export default function Home() {
       <header className="text-center">
         <h1 className="text-5xl font-bold tracking-tight sm:text-6xl">
           geo
-          <span className="text-player1">off</span>
+          <span className="text-player1">fight</span>
         </h1>
         <p className="mt-3 max-w-md text-muted">
           Two players, one map. Race to name more countries of the world and see

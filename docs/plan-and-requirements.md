@@ -1,10 +1,10 @@
-# geooff — Plan & Requirements
+# geofight — Plan & Requirements
 
 _As of 2026-11-17_
 
 ## Overview
 
-geooff is a two-player head-to-head lobby for geography naming games: two
+geofight is a two-player head-to-head lobby for geography naming games: two
 players join a room and race to name more items in a category (countries of the
 world, capitals, US states, flags) before a shared timer runs out. Each player
 sees the other's live score, and a winner is declared at the end with a rematch
@@ -214,7 +214,7 @@ Redis-backed rooms so the single → multi-instance move stays clean.
 Reference: the classic "name all the countries" quiz layout (see `world.png`
 and `world_completed.png`) — a timer, an "Enter country's name here" input, a
 give-up button, a live `X / 196 guessed` counter, and a world map where each
-correct country fills in. geooff keeps that familiar layout but renders two
+correct country fills in. geofight keeps that familiar layout but renders two
 players racing on the same map at once.
 
 **Direction:** take that light blue-ocean / yellow-land scheme and move it to a

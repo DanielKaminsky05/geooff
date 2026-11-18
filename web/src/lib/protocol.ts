@@ -1,5 +1,5 @@
 /**
- * geooff — shared wire protocol (canonical source of truth).
+ * geofight — shared wire protocol (canonical source of truth).
  *
  * Both the frontend (web/) and the backend (server/) build against THIS file.
  * It is mirrored into each package so they can build independently:

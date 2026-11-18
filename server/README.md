@@ -1,6 +1,6 @@
-# geooff — game server
+# geofight — game server
 
-Real-time backend for **geooff**, a two-player geography face-off. Authoritative
+Real-time backend for **geofight**, a two-player geography face-off. Authoritative
 Node + TypeScript server using Express (HTTP) and typed Socket.IO (WebSocket).
 
 The server owns all game state: it validates answers against a server-side

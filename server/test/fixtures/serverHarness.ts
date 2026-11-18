@@ -1,9 +1,9 @@
 import { type AddressInfo } from "node:net";
 import { io as ioClient, type Socket } from "socket.io-client";
-import { createServer, type CreateServerOptions, type GeooffServer } from "../../src/index.js";
+import { createServer, type CreateServerOptions, type GeofightServer } from "../../src/index.js";
 import { rooms } from "../../src/rooms.js";
 
-export interface TestServer extends GeooffServer {
+export interface TestServer extends GeofightServer {
   url: string;
   close: () => Promise<void>;
 }

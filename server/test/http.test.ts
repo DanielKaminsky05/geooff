@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import request from "supertest";
-import { createServer, type GeooffServer } from "../src/index.js";
+import { createServer, type GeofightServer } from "../src/index.js";
 import { createRoom, rooms } from "../src/rooms.js";
 
 describe("HTTP API", () => {
-  let server: GeooffServer;
+  let server: GeofightServer;
 
   beforeEach(() => {
     server = createServer();

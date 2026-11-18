@@ -21,8 +21,8 @@ interface SessionValue {
 
 const SessionContext = createContext<SessionValue | null>(null);
 
-const NAME_KEY = "geooff:name";
-export const IDENTITY_KEY = "geooff:identity";
+const NAME_KEY = "geofight:name";
+export const IDENTITY_KEY = "geofight:identity";
 
 function readName(): string {
   try {

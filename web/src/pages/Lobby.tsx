@@ -156,7 +156,7 @@ export default function Lobby() {
     <main className="mx-auto flex min-h-screen w-full max-w-lg flex-col gap-6 px-6 py-10">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">
-          geo<span className="text-player1">off</span> lobby
+          geo<span className="text-player1">fight</span> lobby
         </h1>
         <button
           onClick={leave}

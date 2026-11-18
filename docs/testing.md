@@ -1,8 +1,8 @@
-# geooff — Test Plan
+# geofight — Test Plan
 
 _As of 2026-11-17_
 
-This document is the **test plan** for geooff. It describes _what_ we test, _why_,
+This document is the **test plan** for geofight. It describes _what_ we test, _why_,
 and the concrete `describe`/`it` blocks to write. It does not contain test code —
 it is the blueprint the implementation PRs follow. It is derived directly from
 `shared/protocol.ts` (the wire contract) and `docs/plan-and-requirements.md` (the
@@ -17,7 +17,7 @@ and frontend (`web/`).
 
 ### What we test and why
 
-geooff has one defining property that shapes every test: **the server is
+geofight has one defining property that shapes every test: **the server is
 authoritative, and the client is untrusted.** The correctness of the game and its
 anti-cheat guarantee both live on the server. Our test strategy follows:
 
