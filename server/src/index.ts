@@ -15,8 +15,11 @@ import {
   COUNTDOWN_SECONDS,
   RECONNECT_GRACE_SECONDS,
   clampTimeLimit,
+  clampTurnSeconds,
+  clampLives,
   type CategoryId,
   type ClientToServerEvents,
+  type GameMode,
   type GamePhase,
   type ServerToClientEvents,
 } from "./protocol.js";
@@ -28,23 +31,29 @@ import {
   seatToPublic,
   scoresOf,
   clearRoomTimers,
+  clearTurnRuntime,
   deleteRoom,
   type Room,
   type Seat,
 } from "./rooms.js";
+import { scoreGuess, determineWinner } from "./matching.js";
 import {
-  buildLookup,
-  buildCanonicalNames,
-  scoreGuess,
-  determineWinner,
-  allIsoCodes,
-  total,
-} from "./matching.js";
+  isLastStanding,
+  beginFirstTurn,
+  handleSubmit as lastStandingSubmit,
+  pauseTurnForDisconnect,
+  resumeTurnOnReconnect,
+  type LastStandingDeps,
+} from "./lastStanding.js";
+import {
+  KNOWN_CATEGORIES,
+  lookupFor,
+  canonicalFor,
+  totalFor,
+  allIdsFor,
+} from "./sets.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
-
-/** Known answer categories (keep in sync with protocol `CategoryId`). */
-const KNOWN_CATEGORIES: readonly CategoryId[] = ["countries"];
 
 /** Timing overrides, mainly so tests don't have to wait on real-world timers. */
 export interface CreateServerOptions {
@@ -52,6 +61,8 @@ export interface CreateServerOptions {
   countdownTickMs?: number;
   /** Reconnect grace window in milliseconds (default RECONNECT_GRACE_SECONDS * 1000). */
   graceMs?: number;
+  /** last_standing per-turn timeout in ms (default settings.turnSeconds * 1000). */
+  turnMsOverride?: number;
 }
 
 export interface GeofightServer {
@@ -69,10 +80,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
   const countdownTickMs = options.countdownTickMs ?? 1000;
   const graceMs = options.graceMs ?? RECONNECT_GRACE_SECONDS * 1000;
   const graceSeconds = Math.max(1, Math.ceil(graceMs / 1000));
-
-  // Build lookups once per server.
-  const lookup = buildLookup();
-  const canonicalNames = buildCanonicalNames();
+  const turnMsOverride = options.turnMsOverride;
 
   /* ---------------------------------------------------------------- */
   /* HTTP (Express)                                                    */
@@ -141,18 +149,23 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
    * `forcedWinnerId` overrides the score-based winner (forfeits). Deletes the
    * room afterwards if nobody is connected any more.
    */
-  function endGame(room: Room, forcedWinnerId?: string): void {
+  function endGame(room: Room, forcedWinnerId?: string | null): void {
     clearRoomTimers(room);
+    clearTurnRuntime(room);
     room.phase = "ended";
     room.endsAt = undefined;
 
+    // `undefined` → score-based winner; an explicit `null` → no winner (e.g.
+    // solo survival over), which must not fall through to determineWinner.
     const winnerId =
-      forcedWinnerId ??
-      determineWinner(room.players.map((p) => ({ playerId: p.id, score: p.score })));
+      forcedWinnerId !== undefined
+        ? forcedWinnerId
+        : determineWinner(room.players.map((p) => ({ playerId: p.id, score: p.score })));
 
+    const allIds = allIdsFor(room.settings.categoryId);
     const missedByPlayer: Record<string, string[]> = {};
     for (const seat of room.players) {
-      missedByPlayer[seat.id] = allIsoCodes.filter((iso) => !seat.filled.has(iso));
+      missedByPlayer[seat.id] = allIds.filter((iso) => !seat.filled.has(iso));
     }
 
     io.to(room.code).emit("game_over", {
@@ -163,6 +176,14 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
 
     deleteIfAbandoned(room);
   }
+
+  /** Dependencies passed to the last_standing turn machinery. */
+  const lsDeps: LastStandingDeps = {
+    io,
+    endGame,
+    otherSeat,
+    turnDurationMs: (room) => turnMsOverride ?? room.settings.turnSeconds * 1000,
+  };
 
   function startCountdownAndGame(room: Room): void {
     room.phase = "countdown";
@@ -185,20 +206,27 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
       room.endsAt = Date.now() + room.settings.timeLimitSeconds * 1000;
       io.to(room.code).emit("game_started", {
         categoryId: room.settings.categoryId,
-        total,
+        mode: room.settings.mode,
+        total: totalFor(room.settings.categoryId),
         endsAt: room.endsAt,
       });
-      broadcastRoomState(room);
-
-      room.roundTimer = setTimeout(() => {
-        endGame(room);
-      }, room.settings.timeLimitSeconds * 1000);
+      if (isLastStanding(room)) {
+        // Turn-based: no shared round clock — begin turn 1 (lives + first turn).
+        beginFirstTurn(lsDeps, room);
+        broadcastRoomState(room);
+      } else {
+        broadcastRoomState(room);
+        room.roundTimer = setTimeout(() => {
+          endGame(room);
+        }, room.settings.timeLimitSeconds * 1000);
+      }
     }, countdownTickMs);
   }
 
   /** Reset seats for a rematch back to lobby. */
   function resetForRematch(room: Room): void {
     clearRoomTimers(room);
+    clearTurnRuntime(room);
     room.phase = "lobby";
     room.endsAt = undefined;
     room.solo = false;
@@ -348,6 +376,8 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
             if (other?.socketId) {
               io.to(other.socketId).emit("opponent_reconnected", { playerId: seat.id });
             }
+            // last_standing: resume a paused turn clock for the returning player.
+            resumeTurnOnReconnect(lsDeps, room, seat);
             broadcastRoomState(room);
             return;
           }
@@ -399,7 +429,13 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
 
     socket.on(
       "update_settings",
-      safe(socket, (payload: { timeLimitSeconds?: number; categoryId?: "countries" }) => {
+      safe(socket, (payload: {
+        timeLimitSeconds?: number;
+        categoryId?: CategoryId;
+        mode?: GameMode;
+        turnSeconds?: number;
+        lives?: number;
+      }) => {
         const ctx = seatForSocket(socket);
         if (!ctx) return;
         const { room, seat } = ctx;
@@ -418,11 +454,29 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           emitError(socket, "bad_category", "Unknown category.");
           return;
         }
+        if (payload?.mode !== undefined && payload.mode !== "race" && payload.mode !== "last_standing") {
+          emitError(socket, "bad_mode", "Unknown mode.");
+          return;
+        }
+        // Last Standing is multiplayer-only; a private solo room can never host it.
+        if (payload?.mode === "last_standing" && room.solo) {
+          emitError(socket, "needs_two", "Last Standing needs a second player.");
+          return;
+        }
         if (payload?.timeLimitSeconds !== undefined) {
           room.settings.timeLimitSeconds = clampTimeLimit(payload.timeLimitSeconds);
         }
         if (payload?.categoryId) {
           room.settings.categoryId = payload.categoryId;
+        }
+        if (payload?.mode) {
+          room.settings.mode = payload.mode;
+        }
+        if (payload?.turnSeconds !== undefined) {
+          room.settings.turnSeconds = clampTurnSeconds(payload.turnSeconds);
+        }
+        if (payload?.lives !== undefined) {
+          room.settings.lives = clampLives(payload.lives);
         }
         broadcastRoomState(room);
       }),
@@ -444,6 +498,11 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         }
         // A lone host starts a solo round straight away (no ready-up needed).
         const solo = room.players.length === 1;
+        // Last Standing is multiplayer-only — it needs a real opponent to alternate turns.
+        if (room.settings.mode === "last_standing" && solo) {
+          emitError(socket, "needs_two", "Last Standing needs a second player.");
+          return;
+        }
         if (!solo && !room.players.every((p) => p.ready)) {
           emitError(socket, "not_ready", "Both players must be ready.");
           return;
@@ -463,7 +522,17 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           socket.emit("answer_result", { accepted: false, reason: "not_playing" });
           return;
         }
-        const outcome = scoreGuess(payload?.text ?? "", seat.filled, lookup, canonicalNames);
+        if (isLastStanding(room)) {
+          lastStandingSubmit(lsDeps, room, seat, socket, payload?.text ?? "");
+          return;
+        }
+        const categoryId = room.settings.categoryId;
+        const outcome = scoreGuess(
+          payload?.text ?? "",
+          seat.filled,
+          lookupFor(categoryId),
+          canonicalFor(categoryId),
+        );
         switch (outcome.kind) {
           case "accepted": {
             seat.score += 1;
@@ -480,8 +549,8 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
                 isoCode: outcome.iso,
               });
             }
-            // End early if this player named every country.
-            if (seat.filled.size >= total) {
+            // End early if this player named every item in the set.
+            if (seat.filled.size >= totalFor(categoryId)) {
               endGame(room);
             }
             break;
@@ -556,6 +625,9 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         }
 
         // Live match: keep the game running, start a grace timer.
+        // last_standing: if the CURRENT player left, pause their turn clock so
+        // no life bleeds while they are inside the reconnect grace window.
+        pauseTurnForDisconnect(room, seat);
         const other = otherSeat(room, seat);
         if (other?.socketId) {
           io.to(other.socketId).emit("opponent_disconnected", {
@@ -602,6 +674,8 @@ function isMainModule(): boolean {
 if (isMainModule()) {
   const { httpServer } = createServer();
   httpServer.listen(PORT, () => {
-    console.log(`geofight server listening on http://localhost:${PORT} (${total} countries loaded)`);
+    console.log(
+      `geofight server listening on http://localhost:${PORT} (${totalFor("countries")} countries loaded)`,
+    );
   });
 }

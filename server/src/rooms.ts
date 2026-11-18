@@ -7,14 +7,16 @@ import { randomBytes, randomUUID } from "node:crypto";
 import {
   ROOM_CODE_LENGTH,
   TIME_LIMIT_DEFAULT_SECONDS,
+  TURN_SECONDS_DEFAULT,
+  LIVES_DEFAULT,
   type GamePhase,
   type PlayerPublic,
   type PlayerSlot,
   type RoomSettings,
   type RoomState,
 } from "./protocol.js";
-// matching.ts has no dependency on rooms.ts, so this import is cycle-free.
-import { total as categoryTotal } from "./matching.js";
+// sets.ts has no dependency on rooms.ts, so this import is cycle-free.
+import { totalFor } from "./sets.js";
 
 export interface Seat {
   id: string; // stable per-seat id (playerId)
@@ -46,6 +48,20 @@ export interface Room {
   countdownTimer?: ReturnType<typeof setInterval>;
   /** per-seat disconnect grace timers, keyed by playerId. */
   graceTimers: Map<string, ReturnType<typeof setTimeout>>;
+
+  /* ---- last_standing runtime (additive; unused in race mode) ---- */
+  /** whose turn it is right now. */
+  currentPlayerId?: string;
+  /** epoch ms when the current turn's clock expires. */
+  turnEndsAt?: number;
+  /** remaining lives by playerId. */
+  lives?: Record<string, number>;
+  /** handle for the active per-turn timeout. */
+  turnTimer?: ReturnType<typeof setTimeout>;
+  /** shared claimed-item pool: an id named by either player is gone. */
+  claimed?: Set<string>;
+  /** paused turn's remaining ms, stored when the current player disconnects. */
+  pausedTurnMs?: number;
 }
 
 const CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -92,7 +108,10 @@ export function createRoom(hostName: string): { room: Room; seat: Seat } {
     phase: "lobby",
     settings: {
       categoryId: "countries",
+      mode: "race",
       timeLimitSeconds: TIME_LIMIT_DEFAULT_SECONDS,
+      turnSeconds: TURN_SECONDS_DEFAULT,
+      lives: LIVES_DEFAULT,
     },
     players: [seat],
     joinable: true,
@@ -130,7 +149,7 @@ export function seatToPublic(seat: Seat): PlayerPublic {
   };
 }
 
-export function roomStateOf(room: Room, total: number = categoryTotal): RoomState {
+export function roomStateOf(room: Room, total: number = totalFor(room.settings.categoryId)): RoomState {
   const filled: Record<string, string[]> = {};
   for (const seat of room.players) {
     filled[seat.id] = [...seat.filled];
@@ -146,6 +165,11 @@ export function roomStateOf(room: Room, total: number = categoryTotal): RoomStat
   };
   if (room.endsAt !== undefined) state.endsAt = room.endsAt;
   if (room.solo) state.solo = true;
+  // last_standing: surface turn + lives so a reconnecting client rehydrates.
+  if (room.currentPlayerId !== undefined && room.turnEndsAt !== undefined) {
+    state.turn = { currentPlayerId: room.currentPlayerId, endsAt: room.turnEndsAt };
+  }
+  if (room.lives !== undefined) state.lives = { ...room.lives };
   return state;
 }
 
@@ -158,10 +182,23 @@ export function scoresOf(room: Room): Record<string, number> {
 export function clearRoomTimers(room: Room): void {
   if (room.roundTimer) clearTimeout(room.roundTimer);
   if (room.countdownTimer) clearInterval(room.countdownTimer);
+  if (room.turnTimer) clearTimeout(room.turnTimer);
   for (const t of room.graceTimers.values()) clearTimeout(t);
   room.graceTimers.clear();
   room.roundTimer = undefined;
   room.countdownTimer = undefined;
+  room.turnTimer = undefined;
+}
+
+/** Wipe last_standing turn/lives runtime so no state leaks between rounds. */
+export function clearTurnRuntime(room: Room): void {
+  if (room.turnTimer) clearTimeout(room.turnTimer);
+  room.turnTimer = undefined;
+  room.currentPlayerId = undefined;
+  room.turnEndsAt = undefined;
+  room.lives = undefined;
+  room.claimed = undefined;
+  room.pausedTurnMs = undefined;
 }
 
 export function deleteRoom(room: Room): void {

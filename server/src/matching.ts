@@ -6,7 +6,18 @@
  */
 
 import { normalizeAnswer } from "./protocol.js";
-import { countries, type Country } from "./data/countries.js";
+import { countries } from "./data/countries.js";
+
+/**
+ * One answerable entry in a set (country, state…) with a canonical name +
+ * aliases. `id` doubles as the map key. Structurally compatible with Country
+ * (whose `iso` becomes `id` in the set registry).
+ */
+export interface AnswerItem {
+  id: string;
+  name: string;
+  aliases: string[];
+}
 
 export interface MatchResult {
   /** true when the input resolved to a country in the list. */
@@ -17,22 +28,29 @@ export interface MatchResult {
   canonical?: string;
 }
 
-/** Build the normalized-lookup Map from a country list. */
-export function buildLookup(list: Country[] = countries): Map<string, string> {
+/** Countries as AnswerItems (iso → id), the default set for the helpers below. */
+const countryItems: AnswerItem[] = countries.map((c) => ({
+  id: c.iso,
+  name: c.name,
+  aliases: c.aliases,
+}));
+
+/** Build the normalized-lookup Map from a list of answer items. */
+export function buildLookup(list: AnswerItem[] = countryItems): Map<string, string> {
   const map = new Map<string, string>();
   for (const c of list) {
-    map.set(normalizeAnswer(c.name), c.iso);
+    map.set(normalizeAnswer(c.name), c.id);
     for (const alias of c.aliases) {
-      map.set(normalizeAnswer(alias), c.iso);
+      map.set(normalizeAnswer(alias), c.id);
     }
   }
   return map;
 }
 
-/** Map of iso → canonical name, for echoing the accepted display name back. */
-export function buildCanonicalNames(list: Country[] = countries): Map<string, string> {
+/** Map of id → canonical name, for echoing the accepted display name back. */
+export function buildCanonicalNames(list: AnswerItem[] = countryItems): Map<string, string> {
   const map = new Map<string, string>();
-  for (const c of list) map.set(c.iso, c.name);
+  for (const c of list) map.set(c.id, c.name);
   return map;
 }
 

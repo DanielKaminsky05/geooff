@@ -35,6 +35,28 @@ export function clampTimeLimit(seconds: number): number {
   return Math.min(TIME_LIMIT_MAX_SECONDS, Math.max(TIME_LIMIT_MIN_SECONDS, Math.round(seconds)));
 }
 
+/** Per-turn clock for last_standing, clamped server-side to this range. */
+export const TURN_SECONDS_MIN = 5;
+export const TURN_SECONDS_MAX = 60;
+export const TURN_SECONDS_DEFAULT = 15;
+
+/** Clamp any requested per-turn time to the allowed range (server enforces this). */
+export function clampTurnSeconds(seconds: number): number {
+  if (!Number.isFinite(seconds)) return TURN_SECONDS_DEFAULT;
+  return Math.min(TURN_SECONDS_MAX, Math.max(TURN_SECONDS_MIN, Math.round(seconds)));
+}
+
+/** Lives for last_standing, clamped server-side to this range. */
+export const LIVES_MIN = 1;
+export const LIVES_MAX = 10;
+export const LIVES_DEFAULT = 5;
+
+/** Clamp any requested lives count to the allowed range (server enforces this). */
+export function clampLives(n: number): number {
+  if (!Number.isFinite(n)) return LIVES_DEFAULT;
+  return Math.min(LIVES_MAX, Math.max(LIVES_MIN, Math.round(n)));
+}
+
 /**
  * Normalize a guessed answer for matching: lowercase, trim, collapse spaces,
  * strip diacritics and punctuation. Backend and tests share this so the
@@ -55,13 +77,15 @@ export function normalizeAnswer(input: string): string {
 /* Core types                                                          */
 /* ------------------------------------------------------------------ */
 
-export type CategoryId = "countries"; // more categories later (capitals, states…)
+export type GameMode = "race" | "last_standing";
+
+export type CategoryId = "countries" | "us-states"; // more categories later (capitals…)
 
 export type PlayerSlot = "p1" | "p2";
 
 export type GamePhase = "lobby" | "countdown" | "playing" | "ended";
 
-export type RejectReason = "wrong" | "duplicate" | "empty" | "not_playing";
+export type RejectReason = "wrong" | "duplicate" | "empty" | "not_playing" | "not_your_turn";
 
 /** A player as seen by everyone (no secrets). */
 export interface PlayerPublic {
@@ -75,7 +99,10 @@ export interface PlayerPublic {
 
 export interface RoomSettings {
   categoryId: CategoryId;
-  timeLimitSeconds: number; // always within [MIN, MAX]
+  mode: GameMode;
+  timeLimitSeconds: number; // always within [MIN, MAX]; used by race
+  turnSeconds: number; // always within [TURN_SECONDS_MIN, MAX]; used by last_standing
+  lives: number; // always within [LIVES_MIN, MAX]; used by last_standing
 }
 
 /** Full room snapshot — sent on join and whenever anything changes. */
@@ -93,6 +120,10 @@ export interface RoomState {
   filled?: Record<string, string[]>;
   /** true when the current/last round was started by a lone player (solo mode). */
   solo?: boolean;
+  /** last_standing: whose turn it is and when their per-turn clock expires. */
+  turn?: { currentPlayerId: string; endsAt: number };
+  /** last_standing: remaining lives by playerId (for rehydrate). */
+  lives?: Record<string, number>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -107,7 +138,13 @@ export interface ClientToServerEvents {
   join_room: (payload: { code: string; playerName: string; reconnectToken?: string }) => void;
   set_ready: (payload: { ready: boolean }) => void;
   /** Host only; server clamps timeLimitSeconds to the allowed range. */
-  update_settings: (payload: { timeLimitSeconds?: number; categoryId?: CategoryId }) => void;
+  update_settings: (payload: {
+    timeLimitSeconds?: number;
+    categoryId?: CategoryId;
+    mode?: GameMode;
+    turnSeconds?: number;
+    lives?: number;
+  }) => void;
   start_game: () => void;
   submit_answer: (payload: { text: string }) => void;
   give_up: () => void;
@@ -130,7 +167,16 @@ export interface ServerToClientEvents {
   opponent_disconnected: (payload: { playerId: string; graceSeconds: number }) => void;
   opponent_reconnected: (payload: { playerId: string }) => void;
   countdown: (payload: { seconds: number }) => void;
-  game_started: (payload: { categoryId: CategoryId; total: number; endsAt: number }) => void;
+  game_started: (payload: {
+    categoryId: CategoryId;
+    mode: GameMode;
+    total: number;
+    endsAt: number;
+  }) => void;
+  /** last_standing: a new turn began for `playerId`, ending at `endsAt` (epoch ms). */
+  turn_started: (payload: { playerId: string; endsAt: number }) => void;
+  /** last_standing: `playerId` lost a life (timeout); `livesLeft` remain. */
+  life_lost: (payload: { playerId: string; livesLeft: number }) => void;
   /** Result of YOUR guess only. canonical/isoCode present when accepted. */
   answer_result: (payload: {
     accepted: boolean;
