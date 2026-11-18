@@ -73,11 +73,67 @@ const REGION_ISO: Record<string, string[]> = {
 };
 
 /**
+ * Walk an SVG path, emitting each ABSOLUTE point. The @svg-maps/world paths are
+ * relative (lowercase `m` + implicit relative linetos, `z`), so we must
+ * accumulate deltas — treating the raw numbers as absolute coords collapses the
+ * box toward the origin. Handles M/L/H/V (absolute + relative) and Z; this
+ * dataset uses no curves/arcs.
+ */
+function walkPath(d: string, emit: (x: number, y: number) => void): void {
+  const tok = d.match(/[a-zA-Z]|-?(?:\d*\.\d+|\d+)(?:[eE]-?\d+)?/g);
+  if (!tok) return;
+  let cx = 0, cy = 0; // current point
+  let sx = 0, sy = 0; // current subpath start (for Z)
+  let cmd = "";
+  let i = 0;
+  const n = () => Number(tok[i++]);
+  while (i < tok.length) {
+    const t = tok[i];
+    if (/[a-zA-Z]/.test(t)) {
+      cmd = t;
+      i++;
+      continue;
+    }
+    const c = cmd.toLowerCase();
+    const rel = cmd === cmd.toLowerCase();
+    if (c === "m" || c === "l") {
+      let x = n();
+      let y = n();
+      if (rel) {
+        x += cx;
+        y += cy;
+      }
+      cx = x;
+      cy = y;
+      if (c === "m") {
+        sx = cx;
+        sy = cy;
+        cmd = rel ? "l" : "L"; // extra coord pairs after a moveto are linetos
+      }
+      emit(cx, cy);
+    } else if (c === "h") {
+      let x = n();
+      if (rel) x += cx;
+      cx = x;
+      emit(cx, cy);
+    } else if (c === "v") {
+      let y = n();
+      if (rel) y += cy;
+      cy = y;
+      emit(cx, cy);
+    } else if (c === "z") {
+      cx = sx;
+      cy = sy;
+    } else {
+      i++; // unknown command — skip a token to avoid stalling
+    }
+  }
+}
+
+/**
  * Compute a "minX minY width height" viewBox fitted to the given locations'
- * paths: pull every numeric token from each `path`, treat them as alternating
- * x/y pairs, take the bounding box and pad it ~4%. Guards against a degenerate
- * (zero-area) box by falling back to a 1-unit span so the result is always
- * finite and positive.
+ * paths (bounding box of their absolute points), padded ~4%. Guards against a
+ * degenerate (zero-area) box by falling back to a 1-unit span.
  */
 export function fitViewBox(locations: MapLocation[]): string {
   let minX = Infinity;
@@ -85,17 +141,12 @@ export function fitViewBox(locations: MapLocation[]): string {
   let maxX = -Infinity;
   let maxY = -Infinity;
   for (const loc of locations) {
-    const nums = loc.path.match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/gi);
-    if (!nums) continue;
-    for (let i = 0; i + 1 < nums.length; i += 2) {
-      const x = Number(nums[i]);
-      const y = Number(nums[i + 1]);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    walkPath(loc.path, (x, y) => {
       if (x < minX) minX = x;
       if (y < minY) minY = y;
       if (x > maxX) maxX = x;
       if (y > maxY) maxY = y;
-    }
+    });
   }
   // Degenerate / empty: fall back to a safe unit box.
   if (!Number.isFinite(minX) || !Number.isFinite(minY) || maxX <= minX || maxY <= minY) {
