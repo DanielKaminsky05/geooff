@@ -73,12 +73,20 @@ export default function Lobby() {
     const name = playerName.trim() || defaultName();
     if (!playerName.trim()) setPlayerName(name);
 
+    function joinTokenFor() {
+      const current = identityRef.current;
+      // Only offer a reconnect token that belongs to this room.
+      return current && (!current.roomCode || current.roomCode === code)
+        ? current.reconnectToken
+        : undefined;
+    }
     function onJoined(payload: {
       playerId: string;
       slot: "p1" | "p2";
       reconnectToken: string;
       state: RoomState;
     }) {
+      setError(null);
       setIdentity({
         playerId: payload.playerId,
         slot: payload.slot,
@@ -89,7 +97,14 @@ export default function Lobby() {
       setRoom(payload.state);
     }
     function onRoomState(state: RoomState) {
+      setError(null);
       setRoom(state);
+    }
+    function onConnect() {
+      // (Re)claim our seat whenever the socket (re)connects — covers an initial
+      // join_room that was emitted before the connection was ready, or a socket
+      // reconnect, so joining by code works without needing a manual refresh.
+      socket.emit("join_room", { code, playerName: name, reconnectToken: joinTokenFor() });
     }
     function onError(payload: { code: string; message: string }) {
       // A duplicate join (e.g. a stray re-emit) can bounce off our own seat as
@@ -106,17 +121,12 @@ export default function Lobby() {
     socket.on("error_msg", onError);
     socket.on("countdown", goToGame);
     socket.on("game_started", goToGame);
+    socket.on("connect", onConnect);
 
     const sent = joinSentRef.current;
     if (!sent || sent.socket !== socket || sent.code !== code) {
       joinSentRef.current = { socket, code };
-      const current = identityRef.current;
-      // Only offer a reconnect token that belongs to this room.
-      const reconnectToken =
-        current && (!current.roomCode || current.roomCode === code)
-          ? current.reconnectToken
-          : undefined;
-      socket.emit("join_room", { code, playerName: name, reconnectToken });
+      socket.emit("join_room", { code, playerName: name, reconnectToken: joinTokenFor() });
     }
 
     return () => {
@@ -125,6 +135,7 @@ export default function Lobby() {
       socket.off("error_msg", onError);
       socket.off("countdown", goToGame);
       socket.off("game_started", goToGame);
+      socket.off("connect", onConnect);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, code]);

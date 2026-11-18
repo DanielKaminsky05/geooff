@@ -81,6 +81,26 @@ describe("<Lobby>", () => {
     expect(screen.getByText("ROOM01")).toBeInTheDocument();
   });
 
+  it("re-emits join_room on (re)connect so joining doesn't need a refresh", () => {
+    renderLobby();
+    expect(joinEmits()).toHaveLength(1);
+    // A socket (re)connect after the initial emit re-claims the seat.
+    socket.__server("connect");
+    expect(joinEmits()).toHaveLength(2);
+    expect(socket.__lastEmit("join_room")).toMatchObject({ code: "ROOM01" });
+  });
+
+  it("clears a transient error once the room state finally arrives", () => {
+    renderLobby();
+    socket.__server("error_msg", { code: "room_not_found", message: "No room with code ROOM01." });
+    expect(screen.getByText("No room with code ROOM01.")).toBeInTheDocument();
+
+    // A later successful (re)join resolves the error without a manual refresh.
+    socket.__server("room_state", roomState());
+    expect(screen.queryByText("No room with code ROOM01.")).toBeNull();
+    expect(screen.getByText("ROOM01")).toBeInTheDocument();
+  });
+
   it("the Ready button emits set_ready with the toggled value", async () => {
     const user = userEvent.setup();
     renderLobby();
