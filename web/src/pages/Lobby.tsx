@@ -180,10 +180,16 @@ export default function Lobby() {
         </div>
       </section>
 
-      {/* Players */}
-      <section className="grid grid-cols-2 gap-3">
-        <PlayerCard player={p1} colorVar="var(--color-player1)" label="Player 1" />
-        <PlayerCard player={p2} colorVar="var(--color-player2)" label="Player 2" />
+      {/* Players — alone shows just your seat (no phantom "Player 2 · Waiting"). */}
+      <section className={alone ? "" : "grid grid-cols-2 gap-3"}>
+        <PlayerCard
+          player={p1}
+          colorVar="var(--color-player1)"
+          label={alone ? "You" : "Player 1"}
+        />
+        {!alone && (
+          <PlayerCard player={p2} colorVar="var(--color-player2)" label="Player 2" />
+        )}
       </section>
 
       {/* Settings (host-only controls, read-only for guest) */}
@@ -221,17 +227,20 @@ export default function Lobby() {
 
       {/* Ready + start */}
       <section className="mt-auto flex flex-col gap-3">
-        <button
-          onClick={() => socket.emit("set_ready", { ready: !me?.ready })}
-          disabled={!me}
-          className={`rounded-xl px-6 py-4 text-lg font-semibold transition disabled:opacity-50 ${
-            me?.ready
-              ? "bg-surface-raised text-foreground hover:brightness-125"
-              : "bg-player1 text-background hover:brightness-110"
-          }`}
-        >
-          {me?.ready ? "Not ready" : "Ready up"}
-        </button>
+        {/* Ready-up is a versus concept; a lone player just presses Play solo. */}
+        {!alone && (
+          <button
+            onClick={() => socket.emit("set_ready", { ready: !me?.ready })}
+            disabled={!me}
+            className={`rounded-xl px-6 py-4 text-lg font-semibold transition disabled:opacity-50 ${
+              me?.ready
+                ? "bg-surface-raised text-foreground hover:brightness-125"
+                : "bg-player1 text-background hover:brightness-110"
+            }`}
+          >
+            {me?.ready ? "Not ready" : "Ready up"}
+          </button>
+        )}
 
         {isHost && alone && (
           <button

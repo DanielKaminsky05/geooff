@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StrictMode } from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { createMockSocket, type MockSocket } from "../test/mockSocket";
@@ -84,14 +84,23 @@ describe("<Lobby>", () => {
   it("the Ready button emits set_ready with the toggled value", async () => {
     const user = userEvent.setup();
     renderLobby();
-    socket.__server("room_state", roomState());
+    // Ready-up only appears in versus (2 players) — solo has no opponent.
+    socket.__server("room_state", roomState({
+      players: [
+        player({ id: "a", slot: "p1", name: "Alice" }),
+        player({ id: "b", slot: "p2", name: "Bob" }),
+      ],
+    }));
 
     await user.click(screen.getByRole("button", { name: "Ready up" }));
     expect(socket.__lastEmit("set_ready")).toEqual({ ready: true });
 
     // Reflect ready → button toggles, next click sets false.
     socket.__server("room_state", roomState({
-      players: [player({ id: "a", slot: "p1", name: "Alice", ready: true })],
+      players: [
+        player({ id: "a", slot: "p1", name: "Alice", ready: true }),
+        player({ id: "b", slot: "p2", name: "Bob" }),
+      ],
     }));
     await user.click(screen.getByRole("button", { name: "Not ready" }));
     expect(socket.__lastEmit("set_ready")).toEqual({ ready: false });
@@ -186,14 +195,12 @@ describe("<Lobby>", () => {
     expect(socket.__emitted.filter((e) => e.event === "start_game")).toHaveLength(1);
   });
 
-  it("renders only one player when the opponent hasn't joined", () => {
+  it("shows only your seat when alone — no phantom Player 2 waiting", () => {
     renderLobby();
     socket.__server("room_state", roomState());
-    const seats = screen.getAllByText(/Player [12]/);
-    expect(seats).toHaveLength(2);
-    expect(screen.getByText("Waiting…")).toBeInTheDocument();
-    // host-only — avoid lint on unused import
-    expect(within(document.body).getByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("Alice")).toBeInTheDocument();
+    expect(screen.queryByText("Player 2")).toBeNull();
+    expect(screen.queryByText("Waiting…")).toBeNull();
   });
 
   it("navigates to the game on a countdown event", () => {
