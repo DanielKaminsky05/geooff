@@ -147,12 +147,16 @@ export default function Lobby() {
     room != null && room.players.length === 2 && room.players.every((p) => p.ready);
   const alone = room != null && room.players.length === 1;
   const solo = room?.solo === true;
-  // Last Standing is multiplayer-only, so a solo room is always Race.
   const mode = room?.settings.mode ?? "race";
-  const effectiveMode = solo ? "race" : mode;
   const categoryId = room?.settings.categoryId ?? "countries";
   // Gauntlet is country-sets only — US states have no prompt pool.
   const gauntletAvailable = categoryId !== "us-states";
+  // Modes this room can pick: Last Standing is versus-only; Gauntlet works solo
+  // too but needs a prompt pool; Race is always available.
+  const availableModes = MODES.filter((m) =>
+    m.value === "last_standing" ? !solo : m.value === "gauntlet" ? gauntletAvailable : true,
+  );
+  const effectiveMode = availableModes.some((m) => m.value === mode) ? mode : "race";
   // Both Last Standing and Gauntlet use the per-turn clock + lives pickers.
   const turnBased = effectiveMode === "last_standing" || effectiveMode === "gauntlet";
 
@@ -233,15 +237,14 @@ export default function Lobby() {
 
       {/* Settings (host-only controls, read-only for guest) */}
       <section className="rounded-xl border border-border bg-surface p-5">
-        {/* Mode is versus-only — Last Standing needs a second player. */}
-        {!solo && (
+        {/* Mode picker — shown when the room has a real choice (solo offers
+            Race + Gauntlet; versus adds Last Standing). */}
+        {availableModes.length > 1 && (
           <>
             <p className="mb-2 text-sm font-semibold text-muted">Mode</p>
             <div className="mb-4 flex flex-wrap gap-2">
-              {MODES.map((m) => {
-                // Gauntlet needs a prompt pool, so hide it for US states.
-                if (m.value === "gauntlet" && !gauntletAvailable) return null;
-                const active = mode === m.value;
+              {availableModes.map((m) => {
+                const active = effectiveMode === m.value;
                 return (
                   <button
                     key={m.value}

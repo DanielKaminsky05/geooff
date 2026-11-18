@@ -570,6 +570,7 @@ export default function Match() {
           <GameOverOverlay
             gameOver={gameOver}
             solo={solo}
+            gauntlet={gauntlet}
             total={total}
             me={me}
             opponent={opponent}
@@ -649,6 +650,7 @@ function OpponentDisconnectedBanner({ endsAt }: { endsAt: number }) {
 function GameOverOverlay({
   gameOver,
   solo,
+  gauntlet,
   total,
   me,
   opponent,
@@ -659,6 +661,7 @@ function GameOverOverlay({
 }: {
   gameOver: GameOver;
   solo: boolean;
+  gauntlet?: boolean;
   total: number;
   me?: PlayerPublic;
   opponent?: PlayerPublic;
@@ -681,15 +684,18 @@ function GameOverOverlay({
       <div className="fade-in absolute inset-0 z-20 flex items-center justify-center bg-background/90 px-6">
         <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 text-center">
           <h2 className="text-3xl font-bold">
-            {total > 0 && myScore >= total ? "You named them all!" : "Round over"}
+            {gauntlet ? "Run over" : total > 0 && myScore >= total ? "You named them all!" : "Round over"}
           </h2>
-          <p className="mt-6 text-sm text-muted">You named</p>
+          <p className="mt-6 text-sm text-muted">{gauntlet ? "You answered" : "You named"}</p>
           <p data-testid="my-final-score" className="text-5xl font-bold tabular-nums text-foreground">
-            {myScore} <span className="text-2xl text-muted">/ {total}</span>
+            {myScore}
+            {!gauntlet && <span className="text-2xl text-muted"> / {total}</span>}
           </p>
-          <div className="mt-3">
-            <ProgressBar value={myScore} max={total} colorVar="var(--color-foreground)" heightClass="h-3" label="Your progress" />
-          </div>
+          {!gauntlet && (
+            <div className="mt-3">
+              <ProgressBar value={myScore} max={total} colorVar="var(--color-foreground)" heightClass="h-3" label="Your progress" />
+            </div>
+          )}
           <div className="mt-8 flex flex-col gap-3">
             <button
               onClick={onRematch}

@@ -213,20 +213,28 @@ describe("<Lobby>", () => {
     expect(socket.__lastEmit("update_settings")).toEqual({ lives: 3 });
   });
 
-  it("a solo room has no Mode toggle and stays on Race (time limit, not turns)", () => {
+  it("a solo room offers Race + Gauntlet (not Last Standing)", async () => {
+    const user = userEvent.setup();
     renderLobby();
-    // Even if a stale solo room reports last_standing, the UI forces Race.
+    socket.__server("room_state", roomState({ solo: true }));
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    // Last Standing is multiplayer-only; Gauntlet works solo.
+    expect(screen.queryByRole("button", { name: "Last Standing" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Race" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Gauntlet" }));
+    expect(socket.__lastEmit("update_settings")).toEqual({ mode: "gauntlet" });
+  });
+
+  it("a solo us-states room has no Mode toggle (Gauntlet needs a prompt pool)", () => {
+    renderLobby();
     socket.__server("room_state", roomState({
       solo: true,
-      settings: { categoryId: "countries", mode: "last_standing", timeLimitSeconds: 300, turnSeconds: 15, lives: 5 },
+      settings: { categoryId: "us-states", mode: "race", timeLimitSeconds: 300, turnSeconds: 15, lives: 5 },
     }));
     expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
-    // No mode toggle in solo.
-    expect(screen.queryByRole("button", { name: "Last Standing" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Gauntlet" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Race" })).toBeNull();
-    // Race pickers (time limit), not turn/lives.
     expect(screen.getByRole("button", { name: "5 min" })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: "15s" })).toBeNull();
   });
 
   it("non-host sees settings presets disabled (read-only)", () => {
