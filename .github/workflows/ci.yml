@@ -60,27 +60,19 @@ jobs:
           name: web-dist
           path: web/dist
 
-  # Deploys the game server to EC2 after CI passes on main. Disabled until the
-  # repo variable DEPLOY_SERVER=true and the EC2_HOST / EC2_USER / EC2_SSH_KEY
-  # secrets are set. Expects the repo cloned at ~/geofight and pm2 installed.
+  # Deploys the game server to Fly.io after CI passes on main. Dormant until the
+  # repo variable DEPLOY_FLY=true and the FLY_API_TOKEN secret are set. Builds on
+  # Fly's remote builders (no local Docker), using server/fly.toml + Dockerfile.
   deploy-server:
-    name: Deploy server (EC2)
+    name: Deploy server (Fly.io)
     needs: [protocol, server, web]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.DEPLOY_SERVER == 'true'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.DEPLOY_FLY == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Pull, build and restart via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            set -e
-            cd ~/geofight
-            git fetch origin main
-            git reset --hard origin/main
-            cd server
-            npm ci
-            npm run build
-            pm2 restart geofight-server || pm2 start dist/index.js --name geofight-server
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy to Fly
+        run: flyctl deploy --remote-only
+        working-directory: server
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
