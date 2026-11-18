@@ -46,7 +46,7 @@ const REGION_ISO: Record<string, string[]> = {
     "al", "ad", "at", "by", "be", "ba", "bg", "hr", "cy", "cz", "dk", "ee", "fi",
     "fr", "de", "gr", "hu", "is", "ie", "it", "xk", "lv", "li", "lt", "lu", "mt",
     "md", "mc", "me", "nl", "mk", "no", "pl", "pt", "ro", "ru", "sm", "rs", "sk",
-    "si", "es", "se", "ch", "ua", "gb", "va",
+    "si", "es", "se", "ch", "tr", "ua", "gb", "va",
   ],
   africa: [
     "dz", "ao", "bj", "bw", "bf", "bi", "cv", "cm", "cf", "td", "km", "cg", "cd",

@@ -45,7 +45,7 @@ const REGIONS: { id: CategoryId; label: string; isoCodes: string[] }[] = [
       "dk", "ee", "fi", "fr", "de", "gr", "hu", "is", "ie", "it",
       "xk", "lv", "li", "lt", "lu", "mt", "md", "mc", "me", "nl",
       "mk", "no", "pl", "pt", "ro", "ru", "sm", "rs", "sk", "si",
-      "es", "se", "ch", "ua", "gb", "va",
+      "es", "se", "ch", "tr", "ua", "gb", "va",
     ],
   },
   {

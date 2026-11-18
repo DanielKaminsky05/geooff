@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import NamedCountries from "./NamedCountries";
 import { CONTINENTS } from "../lib/continents";
+import { mapFor } from "../lib/maps";
 
 describe("NamedCountries", () => {
   it("lists named countries under their continent with counts", () => {
@@ -30,9 +31,10 @@ describe("NamedCountries", () => {
     render(<NamedCountries filled={new Set(["de", "fr", "al"])} categoryId="europe" />);
     const list = screen.getByTestId("region-list-europe");
     const rows = within(list).getAllByRole("listitem", { hidden: true });
-    // Named items lead, alphabetically; the rest are blank slots.
+    // Named items lead, alphabetically; the rest are blank slots. The list
+    // length tracks the europe region's membership (incl. transcontinental tr).
     expect(rows.slice(0, 3).map((r) => r.textContent)).toEqual(["Albania", "France", "Germany"]);
-    expect(rows.length).toBe(CONTINENTS.Europe.length);
+    expect(rows.length).toBe(mapFor("europe").locations.length);
     expect(screen.getByRole("region", { name: "Your countries" })).toBeInTheDocument();
   });
 

@@ -89,7 +89,7 @@ const REGIONS: { id: string; label: string; mapId: string; isoCodes: string[] }[
       "dk", "ee", "fi", "fr", "de", "gr", "hu", "is", "ie", "it",
       "xk", "lv", "li", "lt", "lu", "mt", "md", "mc", "me", "nl",
       "mk", "no", "pl", "pt", "ro", "ru", "sm", "rs", "sk", "si",
-      "es", "se", "ch", "ua", "gb", "va",
+      "es", "se", "ch", "tr", "ua", "gb", "va",
     ],
   },
   {
@@ -198,7 +198,7 @@ describe("regional sets", () => {
     for (const id of ["ge", "am", "az"]) expect(ids.has(id)).toBe(false);
   });
 
-  it("europe excludes tr", () => {
-    expect(new Set(allIdsFor("europe")).has("tr")).toBe(false);
+  it("europe includes tr (transcontinental — has European territory)", () => {
+    expect(new Set(allIdsFor("europe")).has("tr")).toBe(true);
   });
 });
