@@ -105,6 +105,41 @@ export default function Match() {
     };
   }, []);
 
+  // Pin the window so it physically cannot scroll during a match. Otherwise iOS
+  // scrolls the whole document up when the input is focused (to lift it above
+  // the keyboard), dragging the map off the top of the screen. With the body
+  // fixed there's nothing to scroll, and the visual-viewport height above keeps
+  // the input just above the keyboard.
+  useEffect(() => {
+    const { body } = document;
+    const html = document.documentElement;
+    const prev = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      width: body.style.width,
+      height: body.style.height,
+      overflow: body.style.overflow,
+      htmlOverflow: html.style.overflow,
+    };
+    body.style.position = "fixed";
+    body.style.top = "0";
+    body.style.left = "0";
+    body.style.width = "100%";
+    body.style.height = "100%";
+    body.style.overflow = "hidden";
+    html.style.overflow = "hidden";
+    return () => {
+      body.style.position = prev.position;
+      body.style.top = prev.top;
+      body.style.left = prev.left;
+      body.style.width = prev.width;
+      body.style.height = prev.height;
+      body.style.overflow = prev.overflow;
+      html.style.overflow = prev.htmlOverflow;
+    };
+  }, []);
+
   useEffect(() => {
     function onRoomState(state: RoomState) {
       setRoom(state);
