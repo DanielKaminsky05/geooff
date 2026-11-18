@@ -57,6 +57,8 @@ body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
+  /* Stop iOS rubber-band / overscroll from revealing chrome behind the app. */
+  overscroll-behavior: none;
 }
 
 /* Shake/flash for rejected or duplicate country guesses. */

@@ -83,6 +83,27 @@ export default function Match() {
   const myIdRef = useRef<string | null>(myId);
   myIdRef.current = myId;
 
+  // Size the match to the *visible* viewport (above the keyboard and the Safari
+  // toolbars) rather than 100vh. On iOS, focusing the input otherwise pops the
+  // keyboard and scrolls the whole page up, hiding the map. Mirroring the
+  // visual-viewport height keeps the input pinned just above the keyboard with
+  // the map still in view, and no page scroll.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const apply = () => {
+      document.documentElement.style.setProperty("--app-h", `${vv.height}px`);
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => {
+      vv.removeEventListener("resize", apply);
+      vv.removeEventListener("scroll", apply);
+      document.documentElement.style.removeProperty("--app-h");
+    };
+  }, []);
+
   useEffect(() => {
     function onRoomState(state: RoomState) {
       setRoom(state);
@@ -422,7 +443,7 @@ export default function Match() {
         </div>
       )}
       <div
-        className={`relative flex h-screen flex-col overflow-hidden ${
+        className={`relative flex h-[var(--app-h,100dvh)] flex-col overflow-hidden ${
           breaking ? "screen-shake-violent" : shaking ? "screen-shake" : ""
         }`}
       >
@@ -528,7 +549,7 @@ export default function Match() {
         </section>
 
         {/* 3. Input */}
-        <section className="relative border-t border-border bg-surface px-4 py-3">
+        <section className="relative border-t border-border bg-surface px-4 pt-3 pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]">
           {/* Floated above the bar (out of flow) so it never pushes the layout
               up/down when it appears on a rejected guess. */}
           {rejectMsg && (
