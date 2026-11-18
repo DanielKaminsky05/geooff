@@ -398,6 +398,20 @@ describe("<Match> gauntlet", () => {
     expect(screen.queryByText("Landlocked countries")).toBeNull();
   });
 
+  it("clears the board (claimed countries) on a new prompt", () => {
+    renderMatch();
+    socket.__server("room_state", gState());
+    socket.__server("answer_result", { accepted: true, isoCode: "fr", canonical: "France" });
+    socket.__server("opponent_progress", { playerId: "b", isoCode: "jp" });
+    expect(screen.getByText("France")).toBeInTheDocument();
+    expect(screen.getByText("Japan")).toBeInTheDocument();
+
+    // A fresh prompt is a clean slate — both players' claims clear.
+    socket.__server("prompt_changed", { id: "island", label: "Island nations" });
+    expect(screen.queryByText("France")).toBeNull();
+    expect(screen.queryByText("Japan")).toBeNull();
+  });
+
   it("gates input to my turn (disabled off-turn, enabled on turn_started naming me)", () => {
     renderMatch();
     socket.__server("room_state", gState());

@@ -221,7 +221,10 @@ export default function Match() {
     }
     function onPromptChanged(p: { id: string; label: string }) {
       setPrompt({ id: p.id, label: p.label });
-      // A fresh prompt clears any stale reject banner from the last turn.
+      // A fresh prompt is a clean slate: clear the board (both players' claimed
+      // countries) and any stale reject banner from the last turn.
+      setMyFilled(new Set());
+      setOppFilled(new Set());
       setRejectMsg(null);
     }
     function onGameOver(p: GameOver) {
