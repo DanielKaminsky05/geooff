@@ -26,9 +26,16 @@ export interface WorldMapProps {
  */
 function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries", className }: WorldMapProps) {
   const { viewBox, locations } = mapFor(categoryId);
+  // Pin absolutely to fill the pane without contributing an intrinsic size.
+  // A portrait region viewBox (the Americas run Arctic→Patagonia) gave the
+  // <svg height="100%"> an aspect-ratio-derived intrinsic height that blew out
+  // its grid/flex track far past the viewport, so the map rendered stuck
+  // scrolled to the top with South America below the fold. Taking it out of
+  // flow (inset-0 over the `relative` pane) makes it track the pane's real box;
+  // `xMidYMid meet` then fits the whole region, portrait or wide.
   return (
-    <div className={className} data-testid="world-map">
-      <TransformWrapper minScale={1} maxScale={8} centerOnInit doubleClick={{ mode: "zoomIn" }}>
+    <div className={`${className ?? ""} absolute inset-0`} data-testid="world-map">
+      <TransformWrapper minScale={1} maxScale={8} centerOnInit disablePadding doubleClick={{ mode: "zoomIn" }}>
         <TransformComponent
           wrapperStyle={{ width: "100%", height: "100%" }}
           contentStyle={{ width: "100%", height: "100%" }}
@@ -40,6 +47,7 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
             role="img"
             aria-label="World map"
             preserveAspectRatio="xMidYMid meet"
+            style={{ display: "block" }}
           >
             {locations.map((loc) => {
               // A dependent territory fills with its sovereign (Greenland→dk, …).
