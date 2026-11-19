@@ -242,7 +242,9 @@ describe("submit_answer", () => {
     const oppB = awaitEvent<any>(b, "opponent_progress");
     a.emit("submit_answer", { text: CORRECT.text });
     const prog = await oppB;
-    expect(prog).toEqual({ playerId: ctx.aId, isoCode: CORRECT.iso });
+    // Self-healing payload: isoCode + the guesser's FULL named set so far (here
+    // just the one iso). Both are already-named public facts — still no name.
+    expect(prog).toEqual({ playerId: ctx.aId, isoCode: CORRECT.iso, filled: [CORRECT.iso] });
     expect(JSON.stringify(prog)).not.toContain("France");
   }, 10000);
 

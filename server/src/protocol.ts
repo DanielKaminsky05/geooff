@@ -204,8 +204,10 @@ export interface ServerToClientEvents {
   }) => void;
   /** Both players' counts after any correct answer, keyed by playerId. */
   score_update: (payload: { scores: Record<string, number> }) => void;
-  /** An ISO code the opponent just filled — enough to color their map. */
-  opponent_progress: (payload: { playerId: string; isoCode: string }) => void;
+  /** An ISO code the opponent just filled — enough to color their map.
+   *  `filled` (when present) is the guesser's FULL named set, so a client that
+   *  missed an earlier event self-heals by replacing rather than appending. */
+  opponent_progress: (payload: { playerId: string; isoCode: string; filled?: string[] }) => void;
   game_over: (payload: {
     winnerId: string | null; // null = tie
     scores: Record<string, number>;

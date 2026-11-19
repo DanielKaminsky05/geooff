@@ -581,6 +581,9 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
               io.to(other.socketId).emit("opponent_progress", {
                 playerId: seat.id,
                 isoCode: outcome.iso,
+                // Self-healing: send the FULL named set so a client that missed
+                // an earlier event repairs by replacing rather than appending.
+                filled: [...seat.filled],
               });
             }
             // End early if this player named every item in the set.
