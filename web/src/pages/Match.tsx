@@ -9,6 +9,7 @@ import CountryInput from "../components/CountryInput";
 import NamedCountries from "../components/NamedCountries";
 import ProgressBar from "../components/ProgressBar";
 import PromptBanner from "../components/PromptBanner";
+import { countryName } from "../lib/continents";
 
 interface GameOver {
   winnerId: string | null;
@@ -72,6 +73,10 @@ export default function Match() {
   const [oppRematch, setOppRematch] = useState(false);
   const [showOpponent, setShowOpponent] = useState(false); // mobile toggle
   const [showNamed, setShowNamed] = useState(false); // named-list slide-over
+  // gauntlet: brief toast when the opponent names a country, so you don't repeat
+  // it. `key` re-triggers the fade each time; auto-dismisses after ~2s.
+  const [oppToast, setOppToast] = useState<{ text: string; key: number } | null>(null);
+  const toastSeq = useRef(0);
 
   /** 3-2-1 overlay: seconds left, "ready" (in countdown but no tick seen yet), or null. */
   const [countdown, setCountdown] = useState<number | "ready" | null>(null);
@@ -85,6 +90,11 @@ export default function Match() {
   const myId = identity?.playerId ?? null;
   const myIdRef = useRef<string | null>(myId);
   myIdRef.current = myId;
+
+  // The socket handlers live in a mount-only effect, so they'd close over stale
+  // `mode`/`phase`/`gameOver`. Mirror the "show the gauntlet opponent-named
+  // toast right now" condition into a ref the handler can read live.
+  const gauntletToastActiveRef = useRef(false);
 
   // Size the match to the *visible* viewport (above the keyboard and the Safari
   // toolbars) rather than 100vh. On iOS, focusing the input otherwise pops the
@@ -243,13 +253,27 @@ export default function Match() {
     function onScoreUpdate(p: { scores: Record<string, number> }) {
       setScores(p.scores);
     }
-    function onOpponentProgress(p: { playerId: string; isoCode: string }) {
+    function onOpponentProgress(p: { playerId: string; isoCode: string; filled?: string[] }) {
       if (p.playerId === myIdRef.current) return;
-      setOppFilled((prev) => {
-        const next = new Set(prev);
-        next.add(p.isoCode);
-        return next;
-      });
+      // Self-healing: when the server sends the opponent's FULL set, replace
+      // ours with it so a single dropped event can't leave a country stuck grey.
+      // Fall back to appending the one iso if `filled` is absent (gauntlet path).
+      if (p.filled) {
+        setOppFilled(new Set(p.filled));
+      } else {
+        setOppFilled((prev) => {
+          const next = new Set(prev);
+          next.add(p.isoCode);
+          return next;
+        });
+      }
+      // gauntlet only: flash a brief "Opponent named …" toast so you don't retry
+      // what they just took. Not shown in race / last_standing.
+      if (gauntletToastActiveRef.current) {
+        const key = (toastSeq.current += 1);
+        setOppToast({ text: `Opponent named ${countryName(p.isoCode)}`, key });
+        setTimeout(() => setOppToast((cur) => (cur && cur.key === key ? null : cur)), 2000);
+      }
     }
     function onTurnStarted(p: { playerId: string; endsAt: number }) {
       setCurrentPlayerId(p.playerId);
@@ -409,6 +433,8 @@ export default function Match() {
   // Only US states use a different noun; regions are scoped country sets.
   const itemsNoun = categoryId === "us-states" ? "states" : "countries";
   const gauntlet = mode === "gauntlet";
+  // Only show the "Opponent named …" toast in a live gauntlet versus match.
+  gauntletToastActiveRef.current = gauntlet && !solo && phase === "playing" && gameOver == null;
   // Gauntlet reuses the entire Last Standing shell (lives, per-turn timer,
   // shared colour-by-claimer map, turn gating, hit/heartbreak FX).
   const lastStanding = mode === "last_standing" || gauntlet;
@@ -664,6 +690,19 @@ export default function Match() {
           </div>
         )}
 
+        {/* gauntlet: brief "Opponent named …" toast (auto-dismisses ~2s) so you
+            don't retry what they just took. Unobtrusive, centered above the
+            input; pointer-events off so it never blocks typing. */}
+        {oppToast && (
+          <div
+            key={oppToast.key}
+            role="status"
+            className="pointer-events-none absolute bottom-24 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-surface-raised px-4 py-2 text-sm font-semibold shadow"
+          >
+            {oppToast.text}
+          </div>
+        )}
+
         {/* Game over overlay */}
         {gameOver && !breaking && (
           <GameOverOverlay
@@ -710,7 +749,11 @@ export default function Match() {
           <NamedCountries
             filled={myFilled}
             categoryId={categoryId}
-            versus={namedPlayers}
+            // In a RACE, hide the opponent's list until game over so it can't be
+            // watched live; other versus modes (last_standing/gauntlet) share one
+            // pool and stay revealed. When versus is undefined, NamedCountries
+            // falls back to the grouped solo view of your own `filled`.
+            versus={!solo && (gameOver != null || mode !== "race") ? namedPlayers : undefined}
             flat={solo && gauntlet}
           />
         </div>

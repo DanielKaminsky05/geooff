@@ -97,7 +97,7 @@ describe("<Match>", () => {
     socket.__server("room_state", roomState());
 
     socket.__server("answer_result", { accepted: true, isoCode: "fr", canonical: "France" });
-    socket.__server("opponent_progress", { playerId: "b", isoCode: "us" });
+    socket.__server("opponent_progress", { playerId: "b", isoCode: "us", filled: ["us"] });
 
     const maps = screen.getAllByTestId("world-map");
     // Desktop layout: [mine, opponent].
@@ -105,19 +105,43 @@ describe("<Match>", () => {
     expect(maps[1].getAttribute("data-filled")).toContain("us");
   });
 
-  it("lists each player's named countries in naming order, one column per player (versus)", () => {
+  it("self-heals the opponent map by replacing from `filled` (a dropped event can't strand a country)", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+
+    // First opponent fill arrives.
+    socket.__server("opponent_progress", { playerId: "b", isoCode: "us", filled: ["us"] });
+    // Pretend the "jp" event was dropped: the NEXT event carries the full set,
+    // so the opponent map repairs to include both without ever seeing jp alone.
+    socket.__server("opponent_progress", { playerId: "b", isoCode: "br", filled: ["us", "jp", "br"] });
+
+    const oppMap = screen.getAllByTestId("world-map")[1];
+    const filled = oppMap.getAttribute("data-filled");
+    expect(filled).toContain("us");
+    expect(filled).toContain("jp");
+    expect(filled).toContain("br");
+  });
+
+  it("race: hides the opponent's named list during play, reveals both columns at game over", () => {
     renderMatch();
     socket.__server("room_state", roomState());
     socket.__server("answer_result", { accepted: true, isoCode: "fr", canonical: "France" });
-    socket.__server("opponent_progress", { playerId: "b", isoCode: "jp" });
+    socket.__server("opponent_progress", { playerId: "b", isoCode: "jp", filled: ["jp"] });
 
+    // During a RACE, only my own (grouped) list shows — the opponent's columns
+    // are withheld so they can't be watched live.
+    expect(screen.queryByTestId("named-Bob")).toBeNull();
+    expect(screen.getByText("France")).toBeInTheDocument();
+    expect(screen.queryByText("Japan")).toBeNull();
+
+    // At game over the per-player columns are revealed.
+    socket.__server("game_over", { winnerId: "a", scores: { a: 1, b: 1 } });
     const list = screen.getByRole("region", { name: "Named countries" });
     const alice = within(list).getByTestId("named-Alice");
     const bob = within(list).getByTestId("named-Bob");
     expect(within(alice).getByText("France")).toBeInTheDocument();
     expect(within(alice).queryByText("Japan")).toBeNull();
     expect(within(bob).getByText("Japan")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Named countries \(2\)/ })).toBeInTheDocument();
   });
 
   it("updates scores on score_update", () => {
@@ -161,7 +185,7 @@ describe("<Match>", () => {
     renderMatch();
     socket.__server("room_state", roomState());
     socket.__server("answer_result", { accepted: true, isoCode: "fr" });
-    socket.__server("opponent_progress", { playerId: "b", isoCode: "us" });
+    socket.__server("opponent_progress", { playerId: "b", isoCode: "us", filled: ["us"] });
 
     // Mobile map is the 3rd world-map (desktop grid has 2).
     const mobileMap = () => screen.getAllByTestId("world-map")[2];
@@ -450,6 +474,13 @@ describe("<Match> gauntlet", () => {
     socket.__server("prompt_changed", { id: "island", label: "Island nations", total: 46 });
     expect(screen.queryByText("France")).toBeNull();
     expect(screen.queryByText("Japan")).toBeNull();
+  });
+
+  it("shows a brief 'Opponent named …' toast when the opponent names a country", () => {
+    renderMatch();
+    socket.__server("room_state", gState());
+    socket.__server("opponent_progress", { playerId: "b", isoCode: "jp" });
+    expect(screen.getByText("Opponent named Japan")).toBeInTheDocument();
   });
 
   it("gates submission to my turn (usable off-turn, submits on my turn)", async () => {
