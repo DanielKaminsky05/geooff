@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 import { groupByContinent, countryName, type Continent } from "../lib/continents";
 import { groupByRegion, stateName, type UsRegion } from "../lib/usStates";
 import { mapFor } from "../lib/maps";
+import { SUB_REGIONS, subRegionOf } from "../lib/subRegions";
 import type { CategoryId } from "../lib/protocol";
 
 /** A region set is any mapped category that isn't countries or us-states. */
@@ -87,22 +88,59 @@ const REGION_COLUMNS: UsRegion[][] = [["Northeast"], ["Midwest"], ["South"], ["W
 /** Build the heading + column sections for the active set. */
 function build(categoryId: CategoryId, filled: Set<string>): { heading: string; columns: Section[][] } {
   if (isRegion(categoryId)) {
-    // Region sets: one simple alphabetical list (named first, then blanks).
+    // Region sets: group the region's items by geographic sub-region, mirroring
+    // how the global set groups by continent — a colored, columnar list per
+    // sub-region, named items filling each from the top alphabetically.
     const names = regionNames(categoryId);
-    const all = [...names.values()].sort((a, b) => a.localeCompare(b));
-    const have = [...names.entries()]
-      .filter(([id]) => filled.has(id))
-      .map(([, name]) => name)
-      .sort((a, b) => a.localeCompare(b));
-    const section: Section = {
-      key: categoryId,
-      testId: `region-list-${categoryId}`,
-      label: "Countries",
-      color: "#3355cc",
-      names: have,
-      total: all.length,
-    };
-    return { heading: "Your countries", columns: [[section]] };
+    const config = SUB_REGIONS[categoryId];
+    if (!config) {
+      // No sub-region table: fall back to one flat alphabetical list.
+      const have = [...names.entries()]
+        .filter(([id]) => filled.has(id))
+        .map(([, name]) => name)
+        .sort((a, b) => a.localeCompare(b));
+      const section: Section = {
+        key: categoryId,
+        testId: `region-list-${categoryId}`,
+        label: "Countries",
+        color: "#3355cc",
+        names: have,
+        total: names.size,
+      };
+      return { heading: "Your countries", columns: [[section]] };
+    }
+
+    const groupOf = subRegionOf(config);
+    // Bucket every region id into its sub-region group (named + totals).
+    const byGroup = new Map<string, { names: string[]; total: number }>(
+      Object.keys(config.groups).map((label) => [label, { names: [], total: 0 }]),
+    );
+    for (const [id, name] of names) {
+      // Every region id is covered by the table; fall back to "Other" if not.
+      const label = groupOf.get(id) ?? "Other";
+      const bucket = byGroup.get(label) ?? { names: [], total: 0 };
+      bucket.total += 1;
+      if (filled.has(id)) bucket.names.push(name);
+      byGroup.set(label, bucket);
+    }
+    for (const bucket of byGroup.values()) {
+      bucket.names.sort((a, b) => a.localeCompare(b));
+    }
+
+    const columns = config.columns.map((col) =>
+      col.map((label) => {
+        const g = byGroup.get(label)!;
+        return {
+          key: label,
+          testId: `sub-region-${label}`,
+          label,
+          color: config.colors[label],
+          names: g.names,
+          total: g.total,
+        };
+      }),
+    );
+    return { heading: "Your countries", columns };
   }
 
   if (categoryId === "us-states") {

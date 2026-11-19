@@ -27,14 +27,22 @@ describe("NamedCountries", () => {
     expect(screen.getAllByTestId("blank-row")).toHaveLength(197);
   });
 
-  it("renders a region set as a single alphabetical list (named first, then blanks)", () => {
+  it("groups a region set by sub-region, each named-first then blanks", () => {
     render(<NamedCountries filled={new Set(["de", "fr", "al"])} categoryId="europe" />);
-    const list = screen.getByTestId("region-list-europe");
-    const rows = within(list).getAllByRole("listitem", { hidden: true });
-    // Named items lead, alphabetically; the rest are blank slots. The list
-    // length tracks the europe region's membership (incl. transcontinental tr).
-    expect(rows.slice(0, 3).map((r) => r.textContent)).toEqual(["Albania", "France", "Germany"]);
-    expect(rows.length).toBe(mapFor("europe").locations.length);
+    // Germany → Central, France → Western, Albania → Southern. Each lands in
+    // its own colored sub-region section (not one flat list).
+    const central = screen.getByTestId("sub-region-Central");
+    expect(within(central).getByText("Germany")).toBeInTheDocument();
+    expect(within(screen.getByTestId("sub-region-Western")).getByText("France")).toBeInTheDocument();
+    expect(within(screen.getByTestId("sub-region-Southern")).getByText("Albania")).toBeInTheDocument();
+    // Named items fill from the top alphabetically, the rest stay blank.
+    const rows = within(central).getAllByRole("listitem", { hidden: true });
+    expect(rows[0].textContent).toBe("Germany");
+    // Every region id is bucketed: summed group totals equal the region size.
+    const totals = screen
+      .getAllByText(/^\d+ \/ \d+$/)
+      .map((el) => Number(el.textContent!.split("/")[1].trim()));
+    expect(totals.reduce((a, b) => a + b, 0)).toBe(mapFor("europe").locations.length);
     expect(screen.getByRole("region", { name: "Your countries" })).toBeInTheDocument();
   });
 
