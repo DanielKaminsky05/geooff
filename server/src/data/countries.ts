@@ -103,7 +103,7 @@ export const countries: Country[] = [
   { iso: "jm", name: "Jamaica", aliases: [] },
   { iso: "jp", name: "Japan", aliases: ["nippon"] },
   { iso: "jo", name: "Jordan", aliases: [] },
-  { iso: "kz", name: "Kazakhstan", aliases: [] },
+  { iso: "kz", name: "Kazakhstan", aliases: ["kazakstan", "kazak", "kz"] },
   { iso: "ke", name: "Kenya", aliases: [] },
   { iso: "ki", name: "Kiribati", aliases: [] },
   { iso: "kp", name: "North Korea", aliases: ["dprk", "democratic peoples republic of korea", "n korea"] },
