@@ -54,6 +54,9 @@ const REGION_ISO: Record<string, string[]> = {
     "ls", "lr", "ly", "mg", "mw", "ml", "mr", "mu", "ma", "mz", "na", "ne", "ng",
     "rw", "st", "sn", "sc", "sl", "so", "za", "ss", "sd", "tz", "tg", "tn", "ug",
     "zm", "zw",
+    // Western Sahara carries its own shape but isn't answerable; it auto-fills
+    // with Morocco via TERRITORY_PARENT (eh→ma).
+    "eh",
   ],
   asia: [
     "af", "am", "az", "bh", "bd", "bt", "bn", "kh", "cn", "cy", "ge", "in", "id",

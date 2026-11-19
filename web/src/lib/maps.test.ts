@@ -5,7 +5,7 @@ import type { CategoryId } from "./protocol";
 // Region membership (validated upstream): id → expected location count.
 const REGIONS: { id: CategoryId; isoCount: number }[] = [
   { id: "europe", isoCount: 47 },
-  { id: "africa", isoCount: 54 },
+  { id: "africa", isoCount: 55 },
   { id: "asia", isoCount: 49 },
   { id: "middle-east", isoCount: 16 },
   { id: "americas", isoCount: 35 },
