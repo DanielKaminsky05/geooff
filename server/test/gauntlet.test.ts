@@ -104,6 +104,84 @@ async function startGauntlet(ctx: Awaited<ReturnType<typeof makeGauntletRoom>>) 
   return { prompt, turn: t };
 }
 
+/** Create a 3-player gauntlet room (Alice host + Bob + Cara). */
+async function makeGauntletRoom3(lives = 3) {
+  const a = client();
+  await awaitEvent(a, "connect");
+  a.emit("create_room", { playerName: "Alice" });
+  const joinedA = await awaitEvent<any>(a, "joined");
+  const code = joinedA.state.code as string;
+  const stateModed = awaitEvent<any>(a, "room_state");
+  a.emit("update_settings", { mode: "gauntlet", lives });
+  await stateModed;
+
+  const b = client();
+  await awaitEvent(b, "connect");
+  let pj = awaitEvent<any>(a, "player_joined");
+  b.emit("join_room", { code, playerName: "Bob" });
+  const joinedB = await awaitEvent<any>(b, "joined");
+  await pj;
+
+  const c = client();
+  await awaitEvent(c, "connect");
+  pj = awaitEvent<any>(a, "player_joined");
+  c.emit("join_room", { code, playerName: "Cara" });
+  const joinedC = await awaitEvent<any>(c, "joined");
+  await pj;
+
+  return {
+    a, b, c, code,
+    aId: joinedA.playerId as string,
+    bId: joinedB.playerId as string,
+    cId: joinedC.playerId as string,
+  };
+}
+
+describe("gauntlet — 3 players", () => {
+  beforeEach(async () => {
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 60_000 });
+  });
+
+  it("rotates turns p1 → p2 → p3 → p1 on correct answers", async () => {
+    const ctx = await makeGauntletRoom3();
+    const { a, b, c, aId, bId, cId } = ctx;
+
+    // Ready up all three deterministically (await each ack before the next).
+    a.emit("set_ready", { ready: true });
+    await awaitEvent(a, "player_ready");
+    b.emit("set_ready", { ready: true });
+    await awaitEvent(b, "player_ready");
+    c.emit("set_ready", { ready: true });
+    await awaitEvent(c, "player_ready");
+
+    const promptP = awaitEvent<any>(a, "prompt_changed", 8000);
+    const turn1 = awaitEvent<any>(a, "turn_started", 8000);
+    a.emit("start_game");
+    const prompt = await promptP;
+    expect((await turn1).playerId).toBe(aId); // host (p1) first
+
+    const valid = [...validIdsFor(promptById(prompt.id)!, CATEGORY)];
+    const nameOf = (iso: string) => isoToName.get(iso)!;
+
+    // Drain every turn_started on the host socket (it receives all broadcasts in
+    // order) to avoid racing a stale per-socket copy of an earlier transition.
+    // p1 answers → p2's turn.
+    let next = awaitEvent<any>(a, "turn_started", 8000);
+    a.emit("submit_answer", { text: nameOf(valid[0]) });
+    expect((await next).playerId).toBe(bId);
+
+    // p2 answers → p3's turn.
+    next = awaitEvent<any>(a, "turn_started", 8000);
+    b.emit("submit_answer", { text: nameOf(valid[1]) });
+    expect((await next).playerId).toBe(cId);
+
+    // p3 answers → wraps back to p1.
+    next = awaitEvent<any>(a, "turn_started", 8000);
+    c.emit("submit_answer", { text: nameOf(valid[2]) });
+    expect((await next).playerId).toBe(aId);
+  }, 15000);
+});
+
 describe("gauntlet — prompt setup", () => {
   beforeEach(async () => {
     server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 60_000 });

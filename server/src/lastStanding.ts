@@ -178,13 +178,31 @@ function armTurn(deps: LastStandingDeps, room: Room, playerId: string): void {
   room.turnTimer = scheduleTurnTimeout(deps, room, durationMs);
 }
 
-/** The id of the opponent who should act next. */
-function nextPlayerId(room: Room): string {
-  const other = room.players.find((p) => p.id !== room.currentPlayerId);
-  return other?.id ?? room.currentPlayerId ?? room.hostId;
+/** Players still in the game (lives > 0), in stable seat order (p1..p4). */
+function aliveSeats(room: Room): Seat[] {
+  return [...room.players]
+    .sort((a, b) => a.slot.localeCompare(b.slot))
+    .filter((p) => (room.lives?.[p.id] ?? 0) > 0);
 }
 
-/** Pass play to the other player with a fresh clock. */
+/**
+ * The id of the next player to act: the next LIVING seat after the current one
+ * in seat order (wrapping). Skips eliminated players. Works for 2-4 players and
+ * for a lone solo player (returns themselves).
+ */
+function nextPlayerId(room: Room): string {
+  const order = [...room.players].sort((a, b) => a.slot.localeCompare(b.slot));
+  const n = order.length;
+  const curIdx = order.findIndex((p) => p.id === room.currentPlayerId);
+  for (let step = 1; step <= n; step++) {
+    const cand = order[(curIdx + step) % n];
+    if (cand && (room.lives?.[cand.id] ?? 0) > 0) return cand.id;
+  }
+  // No other living seat → the current player keeps the turn (solo survival).
+  return room.currentPlayerId ?? room.hostId;
+}
+
+/** Pass play to the next living player with a fresh clock. */
 function passTurn(deps: LastStandingDeps, room: Room): void {
   armTurn(deps, room, nextPlayerId(room));
 }
@@ -204,14 +222,17 @@ function onTurnTimeout(deps: LastStandingDeps, room: Room): void {
   deps.io.to(room.code).emit("life_lost", { playerId: current.id, livesLeft });
 
   if (livesLeft === 0) {
-    // Eliminated → the OTHER player wins (multiplayer). Solo gauntlet has no
-    // opponent, so the run just ends with no winner (score = items named).
-    const other = deps.otherSeat(room, current);
-    deps.endGame(room, other ? other.id : null);
-    return;
+    // This player is out. Last one standing wins; if nobody's left (solo), the
+    // run just ends with no winner (score = items named).
+    const alive = aliveSeats(room);
+    if (alive.length <= 1) {
+      deps.endGame(room, alive[0]?.id ?? null);
+      return;
+    }
+    // 3+ players: eliminated, but the game goes on with the survivors.
   }
   // Gauntlet: a timeout means "can't answer" — cycle in a fresh prompt (new id,
-  // reset claimed pool) before the next player's turn begins.
+  // reset claimed pool) before the next (living) player's turn begins.
   if (isGauntlet(room)) cyclePrompt(deps, room);
   passTurn(deps, room);
 }
@@ -255,13 +276,13 @@ export function handleSubmit(
         isoCode: outcome.iso,
       });
       deps.io.to(room.code).emit("score_update", { scores: scoresOf(room) });
-      const other = deps.otherSeat(room, seat);
-      if (other?.socketId) {
-        deps.io.to(other.socketId).emit("opponent_progress", {
-          playerId: seat.id,
-          isoCode: outcome.iso,
-        });
-      }
+      // Broadcast to everyone (shared pool): each client colors the claim by its
+      // claimer. Full filled set is self-healing against a dropped event.
+      deps.io.to(room.code).emit("opponent_progress", {
+        playerId: seat.id,
+        isoCode: outcome.iso,
+        filled: [...seat.filled],
+      });
       // Pool exhausted → end the game (decided by score, as elsewhere).
       if (pool.size >= totalFor(categoryId)) {
         deps.endGame(room);
@@ -343,13 +364,11 @@ export function handleGauntletSubmit(
     isoCode: iso,
   });
   deps.io.to(room.code).emit("score_update", { scores: scoresOf(room) });
-  const other = deps.otherSeat(room, seat);
-  if (other?.socketId) {
-    deps.io.to(other.socketId).emit("opponent_progress", {
-      playerId: seat.id,
-      isoCode: iso,
-    });
-  }
+  deps.io.to(room.code).emit("opponent_progress", {
+    playerId: seat.id,
+    isoCode: iso,
+    filled: [...seat.filled],
+  });
 
   // Prompt exhausted (every valid answer named) → cycle a fresh prompt, NO life
   // lost, then pass the turn.
@@ -394,4 +413,24 @@ export function resumeTurnOnReconnect(deps: LastStandingDeps, room: Room, seat: 
     endsAt: room.turnEndsAt,
   });
   room.turnTimer = scheduleTurnTimeout(deps, room, remaining);
+}
+
+/**
+ * A player left / was removed from a turn-based game mid-match (voluntary leave
+ * or grace expiry). If 1 or fewer players remain, end the match (last survivor
+ * wins). Otherwise, if the leaver held the turn, advance play to the next living
+ * player with a fresh clock. Call AFTER the seat has been removed from
+ * room.players. No-op outside a live turn-based match.
+ */
+export function resolveAfterLeave(deps: LastStandingDeps, room: Room, leftId: string): void {
+  if (!isTurnBased(room) || room.phase !== "playing") return;
+  const alive = aliveSeats(room);
+  if (alive.length <= 1) {
+    deps.endGame(room, alive[0]?.id ?? null);
+    return;
+  }
+  if (room.currentPlayerId === leftId) {
+    if (isGauntlet(room)) cyclePrompt(deps, room);
+    armTurn(deps, room, nextPlayerId(room));
+  }
 }

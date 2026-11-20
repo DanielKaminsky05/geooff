@@ -47,6 +47,7 @@ import {
   handleGauntletSubmit,
   pauseTurnForDisconnect,
   resumeTurnOnReconnect,
+  resolveAfterLeave,
   type LastStandingDeps,
 } from "./lastStanding.js";
 import {
@@ -309,17 +310,23 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
    */
   function leaveRoom(socket: GameSocket, room: Room, seat: Seat): void {
     const live = room.phase === "countdown" || room.phase === "playing";
-    // A duel (2 seats) or a turn-based match forfeits to the remaining player.
-    // A Race with 3+ seats just loses one racer and plays on.
-    if (live && (isTurnBased(room) || room.players.length <= 2)) {
+    // A 2-player duel (race or turn-based) forfeits to the remaining player.
+    if (live && room.players.length <= 2) {
       // Stop the leaver from receiving the old room's game_over.
       socket.leave(room.code);
       seat.connected = false;
       seat.socketId = null;
       const other = otherSeat(room, seat);
       endGame(room, other?.id);
+      handleLeave(socket, room, seat);
+      return;
     }
+    // 3+ players: drop the seat and play on. Turn-based games then re-resolve
+    // (advance the turn / end if only one survivor remains).
+    const turnBasedLive = live && isTurnBased(room);
+    const leftId = seat.id;
     handleLeave(socket, room, seat);
+    if (turnBasedLive && rooms.has(room.code)) resolveAfterLeave(lsDeps, room, leftId);
   }
 
   io.on("connection", (socket: GameSocket) => {
@@ -529,12 +536,6 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           emitError(socket, "needs_two", "Last Standing needs a second player.");
           return;
         }
-        // Turn-based modes are 2-player for now (round-robin for >2 is Phase 2);
-        // Race supports the full lobby.
-        if (isTurnBased(room) && room.players.length > 2) {
-          emitError(socket, "too_many", "Last Standing and Gauntlet are 2-player for now — use Race for more.");
-          return;
-        }
         // Gauntlet needs a prompt pool (country sets only).
         if (room.settings.mode === "gauntlet" && buildPromptPool(room.settings.categoryId).length === 0) {
           emitError(socket, "no_prompts", "Gauntlet isn't available for this set.");
@@ -680,12 +681,16 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           room.graceTimers.delete(seat.id);
           if (seat.connected) return; // reconnected in time
           if (room.phase === "playing" || room.phase === "countdown") {
-            if (!isTurnBased(room) && room.players.length > 2) {
-              // Race with 3+ seats: drop the no-show and keep the race going.
+            if (room.players.length > 2) {
+              // 3+ seats: drop the no-show. Race plays on; a turn-based game
+              // re-resolves (advance the turn, or end if one survivor remains).
+              const turnBasedLive = isTurnBased(room);
+              const leftId = seat.id;
               handleLeave(socket, room, seat);
+              if (turnBasedLive && rooms.has(room.code)) resolveAfterLeave(lsDeps, room, leftId);
             } else {
-              // Duel / turn-based → the present (connected) player wins,
-              // regardless of score. If nobody is present, fall back to score.
+              // Duel → the present (connected) player wins, regardless of score.
+              // If nobody is present, fall back to score.
               const present = room.players.find((p) => p.id !== seat.id && p.connected);
               endGame(room, present?.id);
             }
