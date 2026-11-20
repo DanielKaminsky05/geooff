@@ -697,3 +697,68 @@ describe("<Match> solo", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 });
+
+describe("<Match> showdown", () => {
+  const sdState = (over: Partial<RoomState> = {}) =>
+    roomState({
+      settings: { categoryId: "countries", mode: "showdown", timeLimitSeconds: 300, turnSeconds: 30, lives: 3 },
+      players: THREE,
+      lives: { a: 3, b: 3, c: 3 },
+      endsAt: Date.now() + 30_000,
+      prompt: { id: "island", label: "Island nations", total: 46 },
+      ...over,
+    });
+
+  beforeEach(() => {
+    socket = createMockSocket();
+    identity = { playerId: "a", slot: "p1", reconnectToken: "tok" };
+    navigate.mockClear();
+    setIdentity.mockClear();
+  });
+
+  it("shows every player's live count and the prompt", () => {
+    renderMatch();
+    socket.__server("room_state", sdState());
+    socket.__server("round_started", { endsAt: Date.now() + 30_000, round: 1 });
+    socket.__server("score_update", { scores: { a: 2, b: 5, c: 1 } });
+    expect(screen.getByTestId("lives-a")).toHaveTextContent("2");
+    expect(screen.getByTestId("lives-b")).toHaveTextContent("5");
+    expect(screen.getByText("Island nations")).toBeInTheDocument();
+  });
+
+  it("shows the round-result overlay marking who lost a heart", () => {
+    renderMatch();
+    socket.__server("room_state", sdState());
+    socket.__server("round_started", { endsAt: Date.now() + 30_000, round: 1 });
+    socket.__server("round_result", {
+      counts: { a: 5, b: 5, c: 1 },
+      losers: ["c"],
+      eliminated: [],
+      tie: false,
+      nextInMs: 3000,
+    });
+    expect(screen.getByText("Round over")).toBeInTheDocument();
+    expect(screen.getByTestId("round-row-c")).toHaveTextContent("♥"); // "−1 ♥"
+  });
+
+  it("disables the input between rounds and re-enables it on a new round", () => {
+    renderMatch();
+    socket.__server("room_state", sdState());
+    socket.__server("round_started", { endsAt: Date.now() + 30_000, round: 1 });
+    expect(screen.getByLabelText("Country guess")).toBeEnabled();
+
+    // Round ends → pause → input off.
+    socket.__server("round_result", {
+      counts: { a: 1, b: 1, c: 1 },
+      losers: [],
+      eliminated: [],
+      tie: true,
+      nextInMs: 3000,
+    });
+    expect(screen.getByLabelText("Country guess")).toBeDisabled();
+
+    // Next round → input back on.
+    socket.__server("round_started", { endsAt: Date.now() + 30_000, round: 2 });
+    expect(screen.getByLabelText("Country guess")).toBeEnabled();
+  });
+});

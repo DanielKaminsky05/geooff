@@ -14,6 +14,10 @@ export interface LivesBarPlayer {
   eliminated: boolean;
   /** Increments on each life lost → replays the hit FX. */
   hitKey: number;
+  /** showdown: this player's tally this round (omitted for turn-based modes). */
+  count?: number;
+  /** showdown: tied for the fewest right now → shown in the danger color. */
+  inDanger?: boolean;
 }
 
 /**
@@ -42,9 +46,19 @@ export default function LivesBar({
               p.isCurrent ? "border-foreground bg-surface-raised" : "border-border bg-surface/70"
             } ${p.eliminated ? "opacity-40" : ""}`}
           >
-            <div className="truncate text-xs font-semibold" style={{ color }}>
-              {p.name}
-              {p.eliminated ? " · out" : ""}
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="truncate text-xs font-semibold" style={{ color }}>
+                {p.name}
+                {p.eliminated ? " · out" : ""}
+              </span>
+              {p.count != null && (
+                <span
+                  className="shrink-0 text-base font-bold tabular-nums"
+                  style={{ color: p.inDanger && !p.eliminated ? "var(--color-accent)" : color }}
+                >
+                  {p.count}
+                </span>
+              )}
             </div>
             {showHearts && (
               <span key={p.hitKey} className="hearts-hit mt-0.5 inline-flex">

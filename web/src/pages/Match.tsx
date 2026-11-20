@@ -9,6 +9,7 @@ import CountryInput from "../components/CountryInput";
 import NamedCountries from "../components/NamedCountries";
 import ProgressBar from "../components/ProgressBar";
 import PromptBanner from "../components/PromptBanner";
+import TurnTimer from "../components/TurnTimer";
 import Leaderboard, { type LeaderboardRow } from "../components/Leaderboard";
 import LivesBar, { type LivesBarPlayer } from "../components/LivesBar";
 import { countryName } from "../lib/continents";
@@ -65,6 +66,15 @@ export default function Match() {
   const [lives, setLives] = useState<Record<string, number>>({});
   // gauntlet: the active prompt (label only — the valid set is never sent).
   const [prompt, setPrompt] = useState<{ id: string; label: string; total: number } | null>(null);
+  // showdown: the current round's deadline + number, and the between-round result.
+  const [roundEndsAt, setRoundEndsAt] = useState<number | null>(null);
+  const [roundNum, setRoundNum] = useState<number>(0);
+  const [roundResult, setRoundResult] = useState<{
+    counts: Record<string, number>;
+    losers: string[];
+    eliminated: string[];
+    tie: boolean;
+  } | null>(null);
   // Per-player life-loss counters → replay the hearts hit FX + "−1" in the bar.
   const [hits, setHits] = useState<Record<string, number>>({});
   // Full-screen flash: red when I take a hit, green when the opponent does.
@@ -175,6 +185,11 @@ export default function Match() {
       }
       if (state.total != null) setTotal(state.total);
       if (state.endsAt != null && state.phase === "playing") setEndsAt(state.endsAt);
+      // showdown: the round deadline rides on endsAt; restore it (null during the
+      // between-round pause) so a reconnecting client's round clock is in sync.
+      if (state.settings?.mode === "showdown") {
+        setRoundEndsAt(state.phase === "playing" ? state.endsAt ?? null : null);
+      }
       // Rehydrate filled maps from snapshot if present.
       if (state.filled && myIdRef.current) {
         const mine = state.filled[myIdRef.current];
@@ -325,12 +340,35 @@ export default function Match() {
       setOthersFilled({});
       setRejectMsg(null);
     }
+    function onRoundStarted(p: { endsAt: number; round: number }) {
+      // A new showdown round: clean board + input, start the round clock.
+      setRoundEndsAt(p.endsAt);
+      setRoundNum(p.round);
+      setRoundResult(null);
+      setMyFilled(new Set());
+      setScores({});
+      setRejectMsg(null);
+      setClearSignal((n) => n + 1);
+    }
+    function onRoundResult(p: {
+      counts: Record<string, number>;
+      losers: string[];
+      eliminated: string[];
+      tie: boolean;
+      nextInMs: number;
+    }) {
+      setScores(p.counts);
+      setRoundEndsAt(null); // round's over → input off during the pause
+      setRoundResult({ counts: p.counts, losers: p.losers, eliminated: p.eliminated, tie: p.tie });
+    }
     function onGameOver(p: GameOver) {
       setPhase("ended");
       setCountdown(null);
       setGameOver({ winnerId: p.winnerId, scores: p.scores });
       setScores(p.scores);
       setEndsAt(null);
+      setRoundEndsAt(null);
+      setRoundResult(null);
       setOppGraceEndsAt(null);
     }
     function onRematchStart() {
@@ -392,6 +430,8 @@ export default function Match() {
     socket.on("turn_started", onTurnStarted);
     socket.on("life_lost", onLifeLost);
     socket.on("prompt_changed", onPromptChanged);
+    socket.on("round_started", onRoundStarted);
+    socket.on("round_result", onRoundResult);
     socket.on("game_over", onGameOver);
     socket.on("rematch_start", onRematchStart);
     socket.on("rematch_requested", onRematchRequested);
@@ -421,6 +461,8 @@ export default function Match() {
       socket.off("turn_started", onTurnStarted);
       socket.off("life_lost", onLifeLost);
       socket.off("prompt_changed", onPromptChanged);
+      socket.off("round_started", onRoundStarted);
+      socket.off("round_result", onRoundResult);
       socket.off("game_over", onGameOver);
       socket.off("rematch_start", onRematchStart);
       socket.off("rematch_requested", onRematchRequested);
@@ -463,6 +505,7 @@ export default function Match() {
   // Gauntlet reuses the entire Last Standing shell (lives, per-turn timer,
   // shared colour-by-claimer map, turn gating, hit/heartbreak FX).
   const lastStanding = mode === "last_standing" || gauntlet;
+  const showdown = mode === "showdown";
   const maxLives = room?.settings.lives ?? 0;
 
   // Last Standing is one shared map: colour each claimed item by who took it
@@ -505,7 +548,12 @@ export default function Match() {
 
   // The field stays usable whenever the round is live so players can pre-type
   // off-turn; submission itself is gated on it being my turn (see handleSubmit).
-  const inputDisabled = gameOver != null || phase !== "playing";
+  // Showdown disables it between rounds and once you're eliminated.
+  const iAmEliminated = showdown && myId != null && (lives[myId] ?? maxLives) <= 0;
+  const inputDisabled =
+    gameOver != null ||
+    phase !== "playing" ||
+    (showdown && (roundEndsAt == null || iAmEliminated));
 
   const effectiveScores = useMemo(() => {
     const s = { ...scores };
@@ -515,7 +563,7 @@ export default function Match() {
     return s;
   }, [scores, room]);
 
-  const race = !solo && !lastStanding; // mode === "race", non-solo
+  const race = !solo && !lastStanding && !showdown; // mode === "race", non-solo
   const playerCount = room?.players.length ?? 1;
   // 2-player race keeps the classic side-by-side (you | opponent) UI; 3-4 players
   // use the focused-map + leaderboard view.
@@ -542,6 +590,35 @@ export default function Match() {
       });
   }, [multiTurnBased, room?.players, myId, lives, maxLives, currentPlayerId, hits]);
 
+  // Showdown status strip: each player's live round count + hearts, with the
+  // player(s) tied for the current fewest (among the living) flagged as in danger.
+  const showdownPlayers = useMemo<LivesBarPlayer[]>(() => {
+    if (!showdown || !room) return [];
+    const countOf = (id: string) => scores[id] ?? 0;
+    const aliveCounts = room.players
+      .filter((p) => (lives[p.id] ?? maxLives) > 0)
+      .map((p) => countOf(p.id));
+    const min = aliveCounts.length ? Math.min(...aliveCounts) : 0;
+    const allEqual = aliveCounts.length > 0 && Math.max(...aliveCounts) === min;
+    return [...room.players]
+      .sort((a, b) => a.slot.localeCompare(b.slot))
+      .map((p) => {
+        const lv = lives[p.id] ?? maxLives;
+        return {
+          id: p.id,
+          name: p.id === myId ? "You" : p.name,
+          slot: p.slot,
+          lives: lv,
+          maxLives,
+          isCurrent: false,
+          eliminated: lv <= 0,
+          hitKey: hits[p.id] ?? 0,
+          count: countOf(p.id),
+          inDanger: lv > 0 && !allEqual && countOf(p.id) === min,
+        };
+      });
+  }, [showdown, room, myId, lives, maxLives, hits, scores]);
+
   // Race leaderboard rows: every player, ranked by count (desc), seat order as
   // the stable tie-break. Count prefers the server score, falling back to the
   // filled-set size we track locally.
@@ -563,7 +640,9 @@ export default function Match() {
   // the per-player sets is equivalent).
   // Whether the named view reveals everyone (shared-pool modes, or race at game
   // over) vs. just the local player (a live race hides opponents' lists — #8).
-  const revealAllNamed = !solo && (gameOver != null || mode !== "race");
+  // Showdown never reveals opponents' named countries (you only see counts), so
+  // its sheet stays your-own-list even at game over.
+  const revealAllNamed = !solo && !showdown && (gameOver != null || mode !== "race");
   const namedCount = revealAllNamed
     ? myFilled.size + Object.values(othersFilled).reduce((n, s) => n + s.size, 0)
     : myFilled.size;
@@ -638,7 +717,20 @@ export default function Match() {
             score row (with whose-turn + per-turn clock folded into its center)
             and the prompt row share one top-fading gradient, so the two rows
             read as one HUD rather than three stacked bars. */}
-        {lastStanding ? (
+        {showdown ? (
+          // Showdown: a floating HUD over a full-height map — every player's live
+          // count + hearts, the active prompt, and the round clock.
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-1 bg-gradient-to-b from-background via-background/90 to-transparent pb-10">
+            <LivesBar players={showdownPlayers} showHearts />
+            {prompt && phase === "playing" && !gameOver && <PromptBanner bare label={prompt.label} />}
+            {roundEndsAt != null && (
+              <div className="flex items-center justify-center gap-2 text-xs text-muted">
+                <span>Round {roundNum}</span>
+                <TurnTimer endsAt={roundEndsAt} />
+              </div>
+            )}
+          </div>
+        ) : lastStanding ? (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col bg-gradient-to-b from-background via-background/90 to-transparent pb-12">
             {multiTurnBased && <LivesBar players={livesBarPlayers} showHearts={gauntlet} />}
             {scoreBar}
@@ -666,6 +758,17 @@ export default function Match() {
               filled={myFilled}
               categoryId={categoryId}
               hideTitle={lastStanding}
+            />
+          )}
+
+          {/* Showdown: your own board (you race the prompt on your own map). */}
+          {showdown && (
+            <MapPane
+              title=""
+              colorVar={myColor}
+              filled={myFilled}
+              categoryId={categoryId}
+              hideTitle
             />
           )}
 
@@ -842,6 +945,45 @@ export default function Match() {
             className="pointer-events-none absolute bottom-24 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-surface-raised px-4 py-2 text-sm font-semibold shadow"
           >
             {oppToast.text}
+          </div>
+        )}
+
+        {/* Showdown between-round result: counts + who lost a heart. */}
+        {showdown && roundResult && !gameOver && (
+          <div className="fade-in absolute inset-0 z-20 flex items-center justify-center bg-background/80 px-6">
+            <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 text-center">
+              <h3 className="text-xl font-bold">
+                {roundResult.tie ? "Tie — everyone safe" : "Round over"}
+              </h3>
+              <ol className="mt-4 flex flex-col gap-1.5 text-left">
+                {[...(room?.players ?? [])]
+                  .sort(
+                    (a, b) =>
+                      (roundResult.counts[b.id] ?? 0) - (roundResult.counts[a.id] ?? 0) ||
+                      a.slot.localeCompare(b.slot),
+                  )
+                  .map((p) => {
+                    const lost = roundResult.losers.includes(p.id);
+                    const out = roundResult.eliminated.includes(p.id);
+                    return (
+                      <li
+                        key={p.id}
+                        data-testid={`round-row-${p.id}`}
+                        className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-1.5 ${
+                          lost ? "border-accent/50 bg-accent/10" : "border-border bg-surface-raised"
+                        }`}
+                      >
+                        <span className="truncate font-semibold" style={{ color: slotColor(p.slot) }}>
+                          {p.id === myId ? "You" : p.name}
+                          {out ? " · out" : lost ? " · −1 ♥" : ""}
+                        </span>
+                        <span className="tabular-nums">{roundResult.counts[p.id] ?? 0}</span>
+                      </li>
+                    );
+                  })}
+              </ol>
+              <p className="mt-4 text-sm text-muted">Next round…</p>
+            </div>
           </div>
         )}
 

@@ -44,6 +44,7 @@ const MODES: { value: GameMode; label: string }[] = [
   { value: "race", label: "Race" },
   { value: "last_standing", label: "Last Standing" },
   { value: "gauntlet", label: "Gauntlet" },
+  { value: "showdown", label: "Showdown" },
 ];
 
 const CATEGORIES: { value: CategoryId; label: string }[] = [
@@ -163,16 +164,26 @@ export default function Lobby() {
   const solo = room?.solo === true;
   const mode = room?.settings.mode ?? "race";
   const categoryId = room?.settings.categoryId ?? "countries";
-  // Gauntlet is country-sets only — US states have no prompt pool.
-  const gauntletAvailable = categoryId !== "us-states";
-  // Modes this room can pick: Last Standing is versus-only; Gauntlet works solo
-  // too but needs a prompt pool; Race is always available.
+  // Gauntlet/Showdown are country-sets only — US states have no prompt pool.
+  const promptAvailable = categoryId !== "us-states";
+  // Modes this room can pick: Last Standing + Showdown are versus-only (and
+  // Showdown also needs a prompt pool); Gauntlet works solo but needs a pool;
+  // Race is always available.
   const availableModes = MODES.filter((m) =>
-    m.value === "last_standing" ? !solo : m.value === "gauntlet" ? gauntletAvailable : true,
+    m.value === "last_standing"
+      ? !solo
+      : m.value === "gauntlet"
+        ? promptAvailable
+        : m.value === "showdown"
+          ? !solo && promptAvailable
+          : true,
   );
   const effectiveMode = availableModes.some((m) => m.value === mode) ? mode : "race";
-  // Both Last Standing and Gauntlet use the per-turn clock + lives pickers.
-  const turnBased = effectiveMode === "last_standing" || effectiveMode === "gauntlet";
+  // Last Standing, Gauntlet, and Showdown all use the per-turn/round clock.
+  const turnBased =
+    effectiveMode === "last_standing" ||
+    effectiveMode === "gauntlet" ||
+    effectiveMode === "showdown";
   // All versus modes now seat up to MAX_PLAYERS.
   const seatCount = MAX_PLAYERS;
 
@@ -309,7 +320,9 @@ export default function Lobby() {
 
         {turnBased ? (
           <>
-            <p className="mt-4 mb-2 text-sm font-semibold text-muted">Turn time</p>
+            <p className="mt-4 mb-2 text-sm font-semibold text-muted">
+              {effectiveMode === "showdown" ? "Round time" : "Turn time"}
+            </p>
             <div className="flex flex-wrap gap-2">
               {TURN_PRESETS.map((s) => {
                 const active = room?.settings.turnSeconds === s;
@@ -330,8 +343,8 @@ export default function Lobby() {
               })}
             </div>
 
-            {/* Lives are Gauntlet-only; Last Standing is sudden death. */}
-            {effectiveMode === "gauntlet" && (
+            {/* Lives: Gauntlet and Showdown use hearts; Last Standing is sudden death. */}
+            {(effectiveMode === "gauntlet" || effectiveMode === "showdown") && (
               <>
                 <p className="mt-4 mb-2 text-sm font-semibold text-muted">Lives</p>
                 <div className="flex flex-wrap gap-2">
