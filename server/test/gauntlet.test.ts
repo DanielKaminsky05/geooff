@@ -7,8 +7,9 @@ import {
   type TestServer,
   type Socket,
 } from "./fixtures/serverHarness.js";
-import { rooms } from "../src/rooms.js";
-import { promptById, validIdsFor } from "../src/prompts.js";
+import { rooms, type Room } from "../src/rooms.js";
+import { promptById, validIdsFor, buildPromptPool } from "../src/prompts.js";
+import { pickPrompt } from "../src/lastStanding.js";
 import { countries } from "../src/data/countries.js";
 
 /**
@@ -237,6 +238,32 @@ describe("gauntlet — timeout cycles the prompt", () => {
     // Play passed to B for the new prompt.
     expect(room.currentPlayerId).toBe(bId);
   }, 10000);
+});
+
+describe("gauntlet — prompts don't repeat until the pool is exhausted", () => {
+  it("draws the whole pool before any prompt repeats, then reshuffles", () => {
+    const pool = buildPromptPool("countries");
+    expect(pool.length).toBeGreaterThan(1);
+    // Minimal room shape pickPrompt needs: the category + a fresh used-bag.
+    const room = { settings: { categoryId: "countries" }, usedPromptIds: new Set<string>() } as unknown as Room;
+
+    // One full bag: every draw is unique and covers the entire pool.
+    const firstBag: string[] = [];
+    let last: string | undefined;
+    for (let i = 0; i < pool.length; i++) {
+      const p = pickPrompt(room, last);
+      expect(p).toBeDefined();
+      firstBag.push(p!.id);
+      last = p!.id;
+    }
+    expect(new Set(firstBag).size).toBe(pool.length); // no repeats within the bag
+    expect(new Set(firstBag)).toEqual(new Set(pool.map((p) => p.id))); // covers all
+
+    // The bag is now empty → the next draw reshuffles, and must not immediately
+    // repeat the just-finished prompt.
+    const afterReset = pickPrompt(room, last);
+    expect(afterReset!.id).not.toBe(last);
+  });
 });
 
 describe("gauntlet — elimination", () => {

@@ -70,6 +70,8 @@ export interface Room {
   currentPromptId?: string;
   /** isos already claimed under the CURRENT prompt (reset on each cycle). */
   claimedThisPrompt?: Set<string>;
+  /** prompt ids already shown this game — no repeats until the pool is exhausted. */
+  usedPromptIds?: Set<string>;
 }
 
 const CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -221,6 +223,7 @@ export function clearTurnRuntime(room: Room): void {
   room.pausedTurnMs = undefined;
   room.currentPromptId = undefined;
   room.claimedThisPrompt = undefined;
+  room.usedPromptIds = undefined;
 }
 
 export function deleteRoom(room: Room): void {

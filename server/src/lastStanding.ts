@@ -112,6 +112,7 @@ export function beginFirstTurn(deps: LastStandingDeps, room: Room): void {
   if (isGauntlet(room)) {
     room.currentPromptId = undefined;
     room.claimedThisPrompt = undefined;
+    room.usedPromptIds = new Set<string>();
     const first = pickPrompt(room);
     if (first) setPrompt(deps, room, first);
   }
@@ -123,19 +124,28 @@ export function beginFirstTurn(deps: LastStandingDeps, room: Room): void {
 /* ------------------------------------------------------------------ */
 
 /**
- * Pick a prompt at random from the category's pool, optionally excluding one id
- * (so a cycle lands on a DIFFERENT prompt). Falls back to any pool member if
- * the exclusion would leave nothing. Returns undefined only for an empty pool.
+ * Pick a prompt at random, never repeating one until the whole pool has been
+ * shown (a shuffle-bag): track used ids on the room and draw only from the
+ * unused remainder. When the bag empties we reset it, keeping the just-finished
+ * prompt (excludeId) out of the first draw so it can't immediately repeat across
+ * the reshuffle boundary. Returns undefined only for an empty pool.
  */
-function pickPrompt(room: Room, excludeId?: string): Prompt | undefined {
+export function pickPrompt(room: Room, excludeId?: string): Prompt | undefined {
   const pool = buildPromptPool(room.settings.categoryId);
   if (pool.length === 0) return undefined;
-  const candidates =
-    excludeId !== undefined && pool.length > 1
-      ? pool.filter((p) => p.id !== excludeId)
-      : pool;
-  const choice = candidates[Math.floor(Math.random() * candidates.length)];
-  return choice ?? pool[0];
+  const used = (room.usedPromptIds ??= new Set<string>());
+
+  let candidates = pool.filter((p) => !used.has(p.id));
+  if (candidates.length === 0) {
+    // Whole pool seen — reshuffle. Avoid repeating excludeId first if we can.
+    used.clear();
+    candidates = pool.filter((p) => p.id !== excludeId);
+    if (candidates.length === 0) candidates = pool; // pool of one
+  }
+
+  const choice = candidates[Math.floor(Math.random() * candidates.length)] ?? pool[0];
+  used.add(choice.id);
+  return choice;
 }
 
 /**
