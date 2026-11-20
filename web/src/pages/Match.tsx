@@ -9,12 +9,20 @@ import CountryInput from "../components/CountryInput";
 import NamedCountries from "../components/NamedCountries";
 import ProgressBar from "../components/ProgressBar";
 import PromptBanner from "../components/PromptBanner";
+import Leaderboard, { type LeaderboardRow } from "../components/Leaderboard";
 import { countryName } from "../lib/continents";
+import { slotColor } from "../lib/colors";
 
 interface GameOver {
   winnerId: string | null;
   scores: Record<string, number>;
 }
+
+/** Stable empty set so memos reading "this player's filled" keep a stable ref. */
+const EMPTY: Set<string> = new Set();
+
+/** Slot order for ranking/columns: p1 → p4. */
+const SLOT_ORDER: Record<PlayerSlot, number> = { p1: 0, p2: 1, p3: 2, p4: 3 };
 
 /** Display label per set, shown in the score bar / toggles. */
 const CATEGORY_LABELS: Record<CategoryId, string> = {
@@ -26,10 +34,6 @@ const CATEGORY_LABELS: Record<CategoryId, string> = {
   "middle-east": "Middle East",
   americas: "Americas",
 };
-
-function slotColor(slot: PlayerSlot | undefined): string {
-  return slot === "p2" ? "var(--color-player2)" : "var(--color-player1)";
-}
 
 function otherSlot(slot: PlayerSlot | undefined): PlayerSlot {
   return slot === "p2" ? "p1" : "p2";
@@ -48,7 +52,11 @@ export default function Match() {
   const [scores, setScores] = useState<Record<string, number>>({});
 
   const [myFilled, setMyFilled] = useState<Set<string>>(() => new Set());
-  const [oppFilled, setOppFilled] = useState<Set<string>>(() => new Set());
+  // Every NON-me player's filled set, keyed by playerId. The server broadcasts
+  // opponent_progress for every other player in a race, so a single opponent
+  // set is no longer enough — keep them all here. The 2-player turn-based modes
+  // derive their single `oppFilled` from this (see below).
+  const [othersFilled, setOthersFilled] = useState<Record<string, Set<string>>>({});
 
   // last_standing turn + lives state.
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
@@ -71,7 +79,9 @@ export default function Match() {
   const [gameOver, setGameOver] = useState<GameOver | null>(null);
   const [myRematch, setMyRematch] = useState(false);
   const [oppRematch, setOppRematch] = useState(false);
-  const [showOpponent, setShowOpponent] = useState(false); // mobile toggle
+  // race: which player's map is shown big. Defaults to me once myId is known.
+  const [focusedPlayerId, setFocusedPlayerId] = useState<string | null>(null);
+  const [showOpponent, setShowOpponent] = useState(false); // 2-player race mobile toggle
   const [showNamed, setShowNamed] = useState(false); // named-list slide-over
   // gauntlet: brief toast when the opponent names a country, so you don't repeat
   // it. `key` re-triggers the fade each time; auto-dismisses after ~2s.
@@ -168,9 +178,11 @@ export default function Match() {
       if (state.filled && myIdRef.current) {
         const mine = state.filled[myIdRef.current];
         if (mine) setMyFilled(new Set(mine));
+        const others: Record<string, Set<string>> = {};
         for (const [pid, isos] of Object.entries(state.filled)) {
-          if (pid !== myIdRef.current) setOppFilled(new Set(isos));
+          if (pid !== myIdRef.current) others[pid] = new Set(isos);
         }
+        setOthersFilled(others);
       }
       // Rehydrate last_standing turn + lives from snapshot if present.
       if (state.turn) {
@@ -210,7 +222,7 @@ export default function Match() {
       setEndsAt(p.endsAt);
       setGameOver(null);
       setMyFilled(new Set());
-      setOppFilled(new Set());
+      setOthersFilled({});
       setScores({});
       setMyRematch(false);
       setOppRematch(false);
@@ -255,18 +267,21 @@ export default function Match() {
     }
     function onOpponentProgress(p: { playerId: string; isoCode: string; filled?: string[] }) {
       if (p.playerId === myIdRef.current) return;
-      // Self-healing: when the server sends the opponent's FULL set, replace
-      // ours with it so a single dropped event can't leave a country stuck grey.
-      // Fall back to appending the one iso if `filled` is absent (gauntlet path).
-      if (p.filled) {
-        setOppFilled(new Set(p.filled));
-      } else {
-        setOppFilled((prev) => {
-          const next = new Set(prev);
-          next.add(p.isoCode);
-          return next;
-        });
-      }
+      // Self-healing: when the server sends the guesser's FULL set, replace that
+      // player's set with it so a single dropped event can't leave a country
+      // stuck grey. Fall back to appending the one iso if `filled` is absent
+      // (gauntlet path). Keyed per-player so every racer's map stays current.
+      setOthersFilled((prev) => {
+        const next = { ...prev };
+        if (p.filled) {
+          next[p.playerId] = new Set(p.filled);
+        } else {
+          const set = new Set(next[p.playerId] ?? EMPTY);
+          set.add(p.isoCode);
+          next[p.playerId] = set;
+        }
+        return next;
+      });
       // gauntlet only: flash a brief "Opponent named …" toast so you don't retry
       // what they just took. Not shown in race / last_standing.
       if (gauntletToastActiveRef.current) {
@@ -306,7 +321,7 @@ export default function Match() {
       // A fresh prompt is a clean slate: clear the board (both players' claimed
       // countries) and any stale reject banner from the last turn.
       setMyFilled(new Set());
-      setOppFilled(new Set());
+      setOthersFilled({});
       setRejectMsg(null);
     }
     function onGameOver(p: GameOver) {
@@ -427,6 +442,15 @@ export default function Match() {
   const myColor = slotColor(mySlot);
   const oppColor = slotColor(opponent?.slot ?? otherSlot(mySlot));
 
+  // The single-opponent set for the 2-player turn-based modes (last_standing /
+  // gauntlet), derived from the per-player map so their colour-by-claimer map
+  // and prompt counts keep working unchanged.
+  const oppFilled = opponent ? (othersFilled[opponent.id] ?? EMPTY) : EMPTY;
+
+  // Any player's filled set (mine or an opponent's), by playerId.
+  const filledFor = (playerId: string): Set<string> =>
+    playerId === myId ? myFilled : (othersFilled[playerId] ?? EMPTY);
+
   const mode = room?.settings.mode ?? "race";
   const categoryId = room?.settings.categoryId ?? "countries";
   const categoryLabel = CATEGORY_LABELS[categoryId] ?? "Countries";
@@ -457,15 +481,18 @@ export default function Match() {
     return m;
   }, [me, opponent, myFilled, oppFilled]);
 
-  // Versus named list: each player's items in naming order (p1 then p2).
+  // Versus named list: one column per player in slot order (p1..p4), items in
+  // naming order, each coloured by its seat.
   const namedPlayers = useMemo(() => {
-    if (solo) return undefined;
-    return [p1, p2].map((pl, i) => ({
-      name: pl?.name ?? `Player ${i + 1}`,
-      color: i === 0 ? "var(--color-player1)" : "var(--color-player2)",
-      ids: pl ? [...(pl.id === myId ? myFilled : oppFilled)] : [],
-    }));
-  }, [solo, p1, p2, myId, myFilled, oppFilled]);
+    if (solo || !room) return undefined;
+    return [...room.players]
+      .sort((a, b) => SLOT_ORDER[a.slot] - SLOT_ORDER[b.slot])
+      .map((pl) => ({
+        name: pl.name,
+        color: slotColor(pl.slot),
+        ids: [...(pl.id === myId ? myFilled : (othersFilled[pl.id] ?? EMPTY))],
+      }));
+  }, [solo, room, myId, myFilled, othersFilled]);
 
   // In last_standing it's my turn only when the server names me as current.
   const myTurn = !lastStanding || (myId != null && currentPlayerId === myId);
@@ -482,6 +509,42 @@ export default function Match() {
     }
     return s;
   }, [scores, room]);
+
+  const race = !solo && !lastStanding; // mode === "race", non-solo
+  const playerCount = room?.players.length ?? 1;
+  // 2-player race keeps the classic side-by-side (you | opponent) UI; 3-4 players
+  // use the focused-map + leaderboard view.
+  const multiRace = race && playerCount > 2;
+
+  // Race leaderboard rows: every player, ranked by count (desc), seat order as
+  // the stable tie-break. Count prefers the server score, falling back to the
+  // filled-set size we track locally.
+  const leaderboardRows = useMemo<LeaderboardRow[]>(() => {
+    if (!race || !room) return [];
+    return [...room.players]
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        slot: p.slot,
+        count: effectiveScores[p.id] ?? (p.id === myId ? myFilled.size : (othersFilled[p.id] ?? EMPTY).size),
+        isMe: p.id === myId,
+      }))
+      .sort((a, b) => b.count - a.count || SLOT_ORDER[a.slot] - SLOT_ORDER[b.slot]);
+  }, [race, room, effectiveScores, myId, myFilled, othersFilled]);
+
+  // "Named (N)" button count: solo = just mine; versus = every player's named
+  // items summed (race shows all four; turn-based share one pool but summing
+  // the per-player sets is equivalent).
+  const namedCount = solo
+    ? myFilled.size
+    : myFilled.size + Object.values(othersFilled).reduce((n, s) => n + s.size, 0);
+
+  // Focus my own map by default; keep a valid focus if the focused seat leaves.
+  const focusedId =
+    focusedPlayerId && room?.players.some((p) => p.id === focusedPlayerId)
+      ? focusedPlayerId
+      : myId;
+  const focusedPlayer = room?.players.find((p) => p.id === focusedId);
 
   function handleSubmit(text: string) {
     // Turn-based modes: a player may type ahead off-turn, but a guess is only
@@ -584,7 +647,9 @@ export default function Match() {
             </div>
           )}
 
-          {!solo && !lastStanding && (
+          {/* 2-player race: classic side-by-side maps (desktop) / you↔opponent
+              toggle (mobile). */}
+          {race && !multiRace && (
             <>
               {/* Desktop: side by side */}
               <div className="hidden h-full md:grid md:grid-cols-2">
@@ -600,6 +665,7 @@ export default function Match() {
                   colorVar={oppColor}
                   filled={oppFilled}
                   categoryId={categoryId}
+                  revealNames={false}
                 />
               </div>
 
@@ -614,6 +680,7 @@ export default function Match() {
                   colorVar={showOpponent ? oppColor : myColor}
                   filled={showOpponent ? oppFilled : myFilled}
                   categoryId={categoryId}
+                  revealNames={!showOpponent}
                 />
                 <button
                   onClick={() => setShowOpponent((s) => !s)}
@@ -625,6 +692,44 @@ export default function Match() {
             </>
           )}
 
+          {/* Race (3-4 players): one big focused map + a leaderboard that
+              doubles as the player switcher. Tap/click a row to focus that
+              player's map. Same layout on mobile and desktop (the leaderboard
+              floats top-left; with ≤4 rows it fits without scrolling). Only the
+              local player's own map reveals country-name tooltips on hover. */}
+          {multiRace && (
+            <div className="relative h-full">
+              <MapPane
+                title={
+                  focusedId === myId
+                    ? `You${focusedPlayer ? ` · ${focusedPlayer.name}` : ""}`
+                    : (focusedPlayer?.name ?? "Opponent")
+                }
+                colorVar={slotColor(focusedPlayer?.slot)}
+                filled={focusedId ? filledFor(focusedId) : myFilled}
+                categoryId={categoryId}
+                revealNames={focusedId === myId}
+                hideTitle
+              />
+              {/* Current focus label (the built-in MapPane title is hidden to
+                  clear room for the leaderboard). */}
+              <div
+                className="absolute right-3 top-3 z-10 rounded-lg bg-surface/80 px-3 py-1 text-xs font-semibold"
+                style={{ color: slotColor(focusedPlayer?.slot) }}
+              >
+                {focusedId === myId ? "You" : (focusedPlayer?.name ?? "Opponent")} ·{" "}
+                {(focusedId ? filledFor(focusedId) : myFilled).size}
+              </div>
+              <div className="absolute left-3 top-3 z-10 w-44 max-w-[55%] rounded-lg border border-border bg-surface/90 p-2 shadow backdrop-blur-sm">
+                <Leaderboard
+                  rows={leaderboardRows}
+                  focusedId={focusedId ?? undefined}
+                  onFocus={setFocusedPlayerId}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Open the named-list sheet. It's a slide-over (not below the fold)
               so the match stays a single non-scrolling viewport — focusing the
               input on mobile can't scroll the map away to reveal a list. */}
@@ -632,7 +737,7 @@ export default function Match() {
             onClick={() => setShowNamed(true)}
             className="absolute bottom-3 right-3 z-10 rounded-lg bg-surface-raised px-3 py-2 text-sm font-semibold shadow transition hover:brightness-125"
           >
-            {solo ? "Your" : "Named"} {itemsNoun} ({solo ? myFilled.size : myFilled.size + oppFilled.size}) ↑
+            {solo ? "Your" : "Named"} {itemsNoun} ({namedCount}) ↑
           </button>
 
           {/* Opponent disconnected banner */}
@@ -709,6 +814,8 @@ export default function Match() {
             gameOver={gameOver}
             solo={solo}
             gauntlet={gauntlet}
+            race={race}
+            players={room?.players ?? []}
             total={total}
             me={me}
             opponent={opponent}
@@ -801,6 +908,7 @@ function MapPane({
   categoryId,
   borderRight,
   hideTitle,
+  revealNames = true,
 }: {
   title: string;
   colorVar: string;
@@ -809,6 +917,8 @@ function MapPane({
   borderRight?: boolean;
   /** Suppress the corner label (e.g. when the floating HUD already shows it). */
   hideTitle?: boolean;
+  /** Forwarded to WorldMap: false hides hover tooltips on a non-own map. */
+  revealNames?: boolean;
 }) {
   return (
     <div className={`relative flex h-full flex-col ${borderRight ? "md:border-r md:border-border" : ""}`}>
@@ -817,7 +927,7 @@ function MapPane({
           {title} · {filled.size}
         </div>
       )}
-      <WorldMap filledIso={filled} color={colorVar} categoryId={categoryId} className="h-full w-full" />
+      <WorldMap filledIso={filled} color={colorVar} categoryId={categoryId} revealNames={revealNames} className="h-full w-full" />
     </div>
   );
 }
@@ -843,6 +953,8 @@ function GameOverOverlay({
   gameOver,
   solo,
   gauntlet,
+  race,
+  players,
   total,
   me,
   opponent,
@@ -854,6 +966,8 @@ function GameOverOverlay({
   gameOver: GameOver;
   solo: boolean;
   gauntlet?: boolean;
+  race?: boolean;
+  players: PlayerPublic[];
   total: number;
   me?: PlayerPublic;
   opponent?: PlayerPublic;
@@ -895,6 +1009,69 @@ function GameOverOverlay({
               className="rounded-xl bg-foreground px-6 py-3 font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
             >
               {myRematch ? "Starting…" : "Play again"}
+            </button>
+            <button
+              onClick={onHome}
+              className="rounded-xl bg-surface-raised px-6 py-3 font-semibold transition hover:brightness-125"
+            >
+              Back to home
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Race with 3+ players: a ranked final leaderboard of everyone (the 2-player
+  // race keeps the you-vs-opponent FinalScore pair below).
+  if (race && players.length > 2) {
+    const ranked = [...players]
+      .map((p) => ({ p, score: gameOver.scores[p.id] ?? 0 }))
+      .sort((a, b) => b.score - a.score || SLOT_ORDER[a.p.slot] - SLOT_ORDER[b.p.slot]);
+    return (
+      <div className="fade-in absolute inset-0 z-20 flex items-center justify-center bg-background/90 px-6">
+        <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 text-center">
+          <h2 className="text-3xl font-bold">{result}</h2>
+          <ol className="mt-6 flex flex-col gap-2 text-left">
+            {ranked.map(({ p, score }, i) => {
+              const isMe = me != null && p.id === me.id;
+              const isWinner = gameOver.winnerId != null && p.id === gameOver.winnerId;
+              return (
+                <li
+                  key={p.id}
+                  data-testid={`final-rank-${p.id}`}
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${
+                    isWinner ? "border-foreground bg-surface-raised" : "border-border"
+                  }`}
+                >
+                  <span className="w-4 shrink-0 text-sm tabular-nums text-muted">{i + 1}</span>
+                  <span
+                    aria-hidden
+                    className="h-3 w-3 shrink-0 rounded-full"
+                    style={{ background: slotColor(p.slot) }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                    {isMe ? "You" : p.name}
+                    {isWinner && <span className="ml-1 text-xs text-muted">👑</span>}
+                  </span>
+                  <span className="shrink-0 text-xl font-bold tabular-nums" style={{ color: slotColor(p.slot) }}>
+                    {score}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+
+          <div className="mt-8 flex flex-col gap-3">
+            {oppRematch && !myRematch && (
+              <p className="text-sm font-semibold text-muted">Someone wants a rematch</p>
+            )}
+            <button
+              onClick={onRematch}
+              disabled={myRematch}
+              className="rounded-xl bg-foreground px-6 py-3 font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
+            >
+              {myRematch ? "Waiting for others…" : oppRematch ? "Accept rematch" : "Rematch"}
             </button>
             <button
               onClick={onHome}

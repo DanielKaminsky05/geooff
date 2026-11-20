@@ -34,10 +34,19 @@ vi.mock("react-router-dom", async (importOriginal) => {
 // react-zoom-pan-pinch brings a lot of DOM machinery; keep WorldMap cheap &
 // deterministic by stubbing it to a simple element exposing the filled isos.
 vi.mock("../components/WorldMap", () => ({
-  default: ({ filledIso, color }: { filledIso: Set<string>; color: string }) => (
+  default: ({
+    filledIso,
+    color,
+    revealNames = true,
+  }: {
+    filledIso: Set<string>;
+    color: string;
+    revealNames?: boolean;
+  }) => (
     <div
       data-testid="world-map"
       data-color={color}
+      data-reveal={revealNames ? "true" : "false"}
       data-filled={[...filledIso].sort().join(",")}
     />
   ),
@@ -45,7 +54,9 @@ vi.mock("../components/WorldMap", () => ({
 
 import Match from "./Match";
 
-function player(over: Partial<PlayerPublic> & { id: string; slot: "p1" | "p2" }): PlayerPublic {
+function player(
+  over: Partial<PlayerPublic> & { id: string; slot: PlayerPublic["slot"] },
+): PlayerPublic {
   return { name: "P", connected: true, ready: true, score: 0, ...over };
 }
 
@@ -63,6 +74,13 @@ function roomState(over: Partial<RoomState> = {}): RoomState {
     ...over,
   };
 }
+
+/** Three-player race roster (exercises the focused-map + leaderboard UI). */
+const THREE = [
+  player({ id: "a", slot: "p1", name: "Alice" }),
+  player({ id: "b", slot: "p2", name: "Bob" }),
+  player({ id: "c", slot: "p3", name: "Cara" }),
+];
 
 function renderMatch() {
   return render(
@@ -92,22 +110,29 @@ describe("<Match>", () => {
     expect(socket.__lastEmit("submit_answer")).toEqual({ text: "france" });
   });
 
-  it("fills my map on an accepted answer_result and the opponent map on opponent_progress", () => {
+  it("fills my focused map on an accepted answer_result, and the opponent's when focused", async () => {
+    const user = userEvent.setup();
     renderMatch();
-    socket.__server("room_state", roomState());
+    socket.__server("room_state", roomState({ players: THREE }));
 
     socket.__server("answer_result", { accepted: true, isoCode: "fr", canonical: "France" });
     socket.__server("opponent_progress", { playerId: "b", isoCode: "us", filled: ["us"] });
 
-    const maps = screen.getAllByTestId("world-map");
-    // Desktop layout: [mine, opponent].
-    expect(maps[0].getAttribute("data-filled")).toContain("fr");
-    expect(maps[1].getAttribute("data-filled")).toContain("us");
+    // Race focuses my own map by default — and it reveals name tooltips.
+    const focusedMap = () => screen.getByTestId("world-map");
+    expect(focusedMap().getAttribute("data-filled")).toContain("fr");
+    expect(focusedMap().getAttribute("data-reveal")).toBe("true");
+
+    // Focusing the opponent swaps the big map to their fills, tooltips hidden.
+    await user.click(screen.getByTestId("leaderboard-row-b"));
+    expect(focusedMap().getAttribute("data-filled")).toContain("us");
+    expect(focusedMap().getAttribute("data-reveal")).toBe("false");
   });
 
-  it("self-heals the opponent map by replacing from `filled` (a dropped event can't strand a country)", () => {
+  it("self-heals the opponent map by replacing from `filled` (a dropped event can't strand a country)", async () => {
+    const user = userEvent.setup();
     renderMatch();
-    socket.__server("room_state", roomState());
+    socket.__server("room_state", roomState({ players: THREE }));
 
     // First opponent fill arrives.
     socket.__server("opponent_progress", { playerId: "b", isoCode: "us", filled: ["us"] });
@@ -115,8 +140,8 @@ describe("<Match>", () => {
     // so the opponent map repairs to include both without ever seeing jp alone.
     socket.__server("opponent_progress", { playerId: "b", isoCode: "br", filled: ["us", "jp", "br"] });
 
-    const oppMap = screen.getAllByTestId("world-map")[1];
-    const filled = oppMap.getAttribute("data-filled");
+    await user.click(screen.getByTestId("leaderboard-row-b"));
+    const filled = screen.getByTestId("world-map").getAttribute("data-filled");
     expect(filled).toContain("us");
     expect(filled).toContain("jp");
     expect(filled).toContain("br");
@@ -146,10 +171,12 @@ describe("<Match>", () => {
 
   it("updates scores on score_update", () => {
     renderMatch();
-    socket.__server("room_state", roomState());
-    socket.__server("score_update", { scores: { a: 5, b: 2 } });
-    expect(screen.getByText("5")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
+    socket.__server("room_state", roomState({ players: THREE }));
+    socket.__server("score_update", { scores: { a: 5, b: 2, c: 0 } });
+    // The score shows in both the score bar and the race leaderboard; assert it
+    // reached the leaderboard rows (scoped, since bare counts collide).
+    expect(screen.getByTestId("leaderboard-row-a")).toHaveTextContent("5");
+    expect(screen.getByTestId("leaderboard-row-b")).toHaveTextContent("2");
   });
 
   it("shows the game-over overlay with winner + final scores", () => {
@@ -180,19 +207,99 @@ describe("<Match>", () => {
     expect(screen.getByText("Waiting for opponent…")).toBeInTheDocument();
   });
 
-  it("the mobile 'View opponent' toggle swaps the visible map", async () => {
+  it("2-player race keeps the side-by-side maps (no leaderboard)", () => {
+    renderMatch();
+    socket.__server("room_state", roomState()); // default 2 players
+    // Both maps are shown at once; there's no focus leaderboard for a duel.
+    expect(screen.getAllByTestId("world-map").length).toBeGreaterThan(1);
+    expect(screen.queryByTestId("leaderboard-row-a")).toBeNull();
+  });
+
+  it("race: both opponents' progress appears in the leaderboard (3 players)", () => {
+    renderMatch();
+    socket.__server(
+      "room_state",
+      roomState({
+        players: [
+          player({ id: "a", slot: "p1", name: "Alice" }),
+          player({ id: "b", slot: "p2", name: "Bob" }),
+          player({ id: "c", slot: "p3", name: "Cara" }),
+        ],
+      }),
+    );
+    socket.__server("score_update", { scores: { a: 1, b: 3, c: 2 } });
+
+    // Every player has a leaderboard row (me shown as "You").
+    expect(screen.getByTestId("leaderboard-row-a")).toHaveTextContent("You");
+    expect(screen.getByTestId("leaderboard-row-b")).toHaveTextContent("Bob");
+    expect(screen.getByTestId("leaderboard-row-c")).toHaveTextContent("Cara");
+
+    // Ranked by score desc: Bob (3), Cara (2), You (1).
+    const rows = screen.getAllByTestId(/^leaderboard-row-/);
+    expect(rows.map((r) => r.getAttribute("data-testid"))).toEqual([
+      "leaderboard-row-b",
+      "leaderboard-row-c",
+      "leaderboard-row-a",
+    ]);
+  });
+
+  it("race: selecting another player focuses their map (3 players)", async () => {
     const user = userEvent.setup();
     renderMatch();
-    socket.__server("room_state", roomState());
+    socket.__server(
+      "room_state",
+      roomState({
+        players: [
+          player({ id: "a", slot: "p1", name: "Alice" }),
+          player({ id: "b", slot: "p2", name: "Bob" }),
+          player({ id: "c", slot: "p3", name: "Cara" }),
+        ],
+      }),
+    );
     socket.__server("answer_result", { accepted: true, isoCode: "fr" });
     socket.__server("opponent_progress", { playerId: "b", isoCode: "us", filled: ["us"] });
+    socket.__server("opponent_progress", { playerId: "c", isoCode: "jp", filled: ["jp"] });
 
-    // Mobile map is the 3rd world-map (desktop grid has 2).
-    const mobileMap = () => screen.getAllByTestId("world-map")[2];
-    expect(mobileMap().getAttribute("data-filled")).toContain("fr");
+    const focusedMap = () => screen.getByTestId("world-map");
+    // Default focus: me.
+    expect(focusedMap().getAttribute("data-filled")).toContain("fr");
 
-    await user.click(screen.getByRole("button", { name: "View opponent" }));
-    expect(mobileMap().getAttribute("data-filled")).toContain("us");
+    await user.click(screen.getByTestId("leaderboard-row-c"));
+    expect(focusedMap().getAttribute("data-filled")).toBe("jp");
+    expect(focusedMap().getAttribute("data-reveal")).toBe("false");
+
+    await user.click(screen.getByTestId("leaderboard-row-b"));
+    expect(focusedMap().getAttribute("data-filled")).toBe("us");
+  });
+
+  it("race game-over reveals every player's named column (3 players)", () => {
+    renderMatch();
+    socket.__server(
+      "room_state",
+      roomState({
+        players: [
+          player({ id: "a", slot: "p1", name: "Alice" }),
+          player({ id: "b", slot: "p2", name: "Bob" }),
+          player({ id: "c", slot: "p3", name: "Cara" }),
+        ],
+      }),
+    );
+    socket.__server("answer_result", { accepted: true, isoCode: "fr" });
+    socket.__server("opponent_progress", { playerId: "b", isoCode: "jp", filled: ["jp"] });
+    socket.__server("opponent_progress", { playerId: "c", isoCode: "br", filled: ["br"] });
+
+    socket.__server("game_over", { winnerId: "b", scores: { a: 1, b: 1, c: 1 } });
+
+    // Final standings list everyone, ranked, with the winner marked.
+    expect(screen.getByTestId("final-rank-a")).toHaveTextContent("You");
+    expect(screen.getByTestId("final-rank-b")).toHaveTextContent("Bob");
+    expect(screen.getByTestId("final-rank-c")).toHaveTextContent("Cara");
+
+    // The named sheet now reveals a column per player.
+    const list = screen.getByRole("region", { name: "Named countries" });
+    expect(within(within(list).getByTestId("named-Alice")).getByText("France")).toBeInTheDocument();
+    expect(within(within(list).getByTestId("named-Bob")).getByText("Japan")).toBeInTheDocument();
+    expect(within(within(list).getByTestId("named-Cara")).getByText("Brazil")).toBeInTheDocument();
   });
 
   it("an opponent's rematch request does not disable my button, and I can accept", async () => {

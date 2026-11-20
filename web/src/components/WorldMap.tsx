@@ -16,6 +16,12 @@ export interface WorldMapProps {
   colorByIso?: Map<string, string>;
   /** Which set's map to render (default "countries"). */
   categoryId?: CategoryId;
+  /**
+   * When false, suppress the per-country <title> tooltip so hovering can't
+   * reveal the spelling of a country. Defaults true (your own map). Opponents'
+   * maps pass false (anti-cheat-lite).
+   */
+  revealNames?: boolean;
   className?: string;
 }
 
@@ -24,7 +30,7 @@ export interface WorldMapProps {
  * Filled countries use `color` (or `colorByIso` per item); the rest use the
  * land token. Wrapped in react-zoom-pan-pinch for independent zoom/pan.
  */
-function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries", className }: WorldMapProps) {
+function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries", revealNames = true, className }: WorldMapProps) {
   const { viewBox, locations } = mapFor(categoryId);
   // Pin absolutely to fill the pane without contributing an intrinsic size.
   // A portrait region viewBox (the Americas run Arctic→Patagonia) gave the
@@ -67,8 +73,10 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
                   strokeWidth={0.3}
                 >
                   {/* Only reveal names of countries already guessed —
-                      a tooltip on unguessed ones would leak the answer. */}
-                  {filled && <title>{loc.name}</title>}
+                      a tooltip on unguessed ones would leak the answer. And
+                      only on your own map: an opponent's hover tooltip would
+                      otherwise leak spellings you haven't named yet. */}
+                  {filled && revealNames && <title>{loc.name}</title>}
                 </path>
               );
             })}
