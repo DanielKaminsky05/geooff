@@ -51,6 +51,13 @@ import {
   type LastStandingDeps,
 } from "./lastStanding.js";
 import {
+  isShowdown,
+  beginShowdown,
+  handleShowdownSubmit,
+  resolveShowdownAfterLeave,
+  type ShowdownDeps,
+} from "./showdown.js";
+import {
   KNOWN_CATEGORIES,
   lookupFor,
   canonicalFor,
@@ -69,6 +76,10 @@ export interface CreateServerOptions {
   graceMs?: number;
   /** last_standing per-turn timeout in ms (default settings.turnSeconds * 1000). */
   turnMsOverride?: number;
+  /** showdown per-round duration in ms (default settings.turnSeconds * 1000). */
+  roundMsOverride?: number;
+  /** showdown pause between rounds in ms (default 3500). */
+  interRoundMsOverride?: number;
 }
 
 export interface GeofightServer {
@@ -87,6 +98,8 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
   const graceMs = options.graceMs ?? RECONNECT_GRACE_SECONDS * 1000;
   const graceSeconds = Math.max(1, Math.ceil(graceMs / 1000));
   const turnMsOverride = options.turnMsOverride;
+  const roundMsOverride = options.roundMsOverride;
+  const interRoundMs = options.interRoundMsOverride ?? 3500;
 
   /* ---------------------------------------------------------------- */
   /* HTTP (Express)                                                    */
@@ -204,6 +217,14 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
     turnDurationMs: (room) => turnMsOverride ?? room.settings.turnSeconds * 1000,
   };
 
+  /** Dependencies passed to the showdown round machinery. */
+  const showdownDeps: ShowdownDeps = {
+    io,
+    endGame,
+    roundDurationMs: (room) => roundMsOverride ?? room.settings.turnSeconds * 1000,
+    interRoundMs,
+  };
+
   function startCountdownAndGame(room: Room): void {
     room.phase = "countdown";
     broadcastRoomState(room);
@@ -229,7 +250,12 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         total: totalFor(room.settings.categoryId),
         endsAt: room.endsAt,
       });
-      if (isTurnBased(room)) {
+      if (isShowdown(room)) {
+        // Showdown manages its own per-round clocks; drop the game-level one.
+        room.endsAt = undefined;
+        beginShowdown(showdownDeps, room);
+        broadcastRoomState(room);
+      } else if (isTurnBased(room)) {
         // Turn-based (last_standing / gauntlet): no shared round clock — begin
         // turn 1 (lives + first turn; gauntlet also seeds the opening prompt).
         beginFirstTurn(lsDeps, room);
@@ -321,12 +347,14 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
       handleLeave(socket, room, seat);
       return;
     }
-    // 3+ players: drop the seat and play on. Turn-based games then re-resolve
-    // (advance the turn / end if only one survivor remains).
+    // 3+ players: drop the seat and play on. Turn-based / showdown games then
+    // re-resolve (advance the turn / end if only one survivor remains).
     const turnBasedLive = live && isTurnBased(room);
+    const showdownLive = live && isShowdown(room);
     const leftId = seat.id;
     handleLeave(socket, room, seat);
     if (turnBasedLive && rooms.has(room.code)) resolveAfterLeave(lsDeps, room, leftId);
+    if (showdownLive && rooms.has(room.code)) resolveShowdownAfterLeave(showdownDeps, room);
   }
 
   io.on("connection", (socket: GameSocket) => {
@@ -485,15 +513,19 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           payload?.mode !== undefined &&
           payload.mode !== "race" &&
           payload.mode !== "last_standing" &&
-          payload.mode !== "gauntlet"
+          payload.mode !== "gauntlet" &&
+          payload.mode !== "showdown"
         ) {
           emitError(socket, "bad_mode", "Unknown mode.");
           return;
         }
-        // Last Standing is multiplayer-only (needs a real opponent to alternate
-        // turns). Gauntlet works solo too (you race the prompts yourself).
-        if (payload?.mode === "last_standing" && room.solo) {
-          emitError(socket, "needs_two", "Last Standing needs a second player.");
+        // Last Standing and Showdown are multiplayer-only. Gauntlet works solo
+        // too (you race the prompts yourself).
+        if (
+          (payload?.mode === "last_standing" || payload?.mode === "showdown") &&
+          room.solo
+        ) {
+          emitError(socket, "needs_two", "That mode needs a second player.");
           return;
         }
         if (payload?.timeLimitSeconds !== undefined) {
@@ -503,6 +535,11 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           room.settings.categoryId = payload.categoryId;
         }
         if (payload?.mode) {
+          // Switching into Showdown defaults the round clock to 30s (the host can
+          // still change it); other transitions keep the existing turn time.
+          if (payload.mode === "showdown" && room.settings.mode !== "showdown") {
+            room.settings.turnSeconds = 30;
+          }
           room.settings.mode = payload.mode;
         }
         if (payload?.turnSeconds !== undefined) {
@@ -531,14 +568,17 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         }
         // A lone host starts a solo round straight away (no ready-up needed).
         const solo = room.players.length === 1;
-        // Last Standing needs a real opponent; Gauntlet works solo too.
-        if (room.settings.mode === "last_standing" && solo) {
-          emitError(socket, "needs_two", "Last Standing needs a second player.");
+        // Last Standing and Showdown need a real opponent; Gauntlet works solo.
+        if ((room.settings.mode === "last_standing" || room.settings.mode === "showdown") && solo) {
+          emitError(socket, "needs_two", "That mode needs a second player.");
           return;
         }
-        // Gauntlet needs a prompt pool (country sets only).
-        if (room.settings.mode === "gauntlet" && buildPromptPool(room.settings.categoryId).length === 0) {
-          emitError(socket, "no_prompts", "Gauntlet isn't available for this set.");
+        // Gauntlet and Showdown need a prompt pool (country sets only).
+        if (
+          (room.settings.mode === "gauntlet" || room.settings.mode === "showdown") &&
+          buildPromptPool(room.settings.categoryId).length === 0
+        ) {
+          emitError(socket, "no_prompts", "That mode isn't available for this set.");
           return;
         }
         if (!solo && !room.players.every((p) => p.ready)) {
@@ -558,6 +598,10 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         const { room, seat } = ctx;
         if (room.phase !== "playing") {
           socket.emit("answer_result", { accepted: false, reason: "not_playing" });
+          return;
+        }
+        if (isShowdown(room)) {
+          handleShowdownSubmit(showdownDeps, room, seat, socket, payload?.text ?? "");
           return;
         }
         if (isGauntlet(room)) {
@@ -682,12 +726,14 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           if (seat.connected) return; // reconnected in time
           if (room.phase === "playing" || room.phase === "countdown") {
             if (room.players.length > 2) {
-              // 3+ seats: drop the no-show. Race plays on; a turn-based game
-              // re-resolves (advance the turn, or end if one survivor remains).
+              // 3+ seats: drop the no-show. Race plays on; turn-based / showdown
+              // re-resolve (advance the turn, or end if one survivor remains).
               const turnBasedLive = isTurnBased(room);
+              const showdownLive = isShowdown(room);
               const leftId = seat.id;
               handleLeave(socket, room, seat);
               if (turnBasedLive && rooms.has(room.code)) resolveAfterLeave(lsDeps, room, leftId);
+              if (showdownLive && rooms.has(room.code)) resolveShowdownAfterLeave(showdownDeps, room);
             } else {
               // Duel → the present (connected) player wins, regardless of score.
               // If nobody is present, fall back to score.

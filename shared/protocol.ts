@@ -79,7 +79,7 @@ export function normalizeAnswer(input: string): string {
 /* Core types                                                          */
 /* ------------------------------------------------------------------ */
 
-export type GameMode = "race" | "last_standing" | "gauntlet";
+export type GameMode = "race" | "last_standing" | "gauntlet" | "showdown";
 
 export type CategoryId =
   | "countries"
@@ -197,6 +197,21 @@ export interface ServerToClientEvents {
   life_lost: (payload: { playerId: string; livesLeft: number }) => void;
   /** gauntlet: a new prompt cycled in — label + answer count (never the set). */
   prompt_changed: (p: { id: string; label: string; total: number }) => void;
+  /** showdown: a new simultaneous round began, ending at `endsAt` (epoch ms). */
+  round_started: (payload: { endsAt: number; round: number }) => void;
+  /**
+   * showdown: a round ended. `counts` is each player's tally; `losers` are the
+   * players who tied for the fewest and lost a heart (empty on a tie);
+   * `eliminated` hit 0 hearts; `tie` = everyone equal (nobody lost). `nextInMs`
+   * is the pause before the next round (0 if the game is over).
+   */
+  round_result: (payload: {
+    counts: Record<string, number>;
+    losers: string[];
+    eliminated: string[];
+    tie: boolean;
+    nextInMs: number;
+  }) => void;
   /** Result of YOUR guess only. canonical/isoCode present when accepted. */
   answer_result: (payload: {
     accepted: boolean;

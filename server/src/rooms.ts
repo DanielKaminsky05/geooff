@@ -78,6 +78,10 @@ export interface Room {
   claimedThisPrompt?: Set<string>;
   /** prompt ids already shown this game — no repeats until the pool is exhausted. */
   usedPromptIds?: Set<string>;
+
+  /* ---- showdown runtime (additive) ---- */
+  /** current round number (1-based) in showdown. */
+  round?: number;
 }
 
 const CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -175,12 +179,12 @@ export function seatToPublic(seat: Seat): PlayerPublic {
 }
 
 export function roomStateOf(room: Room, total: number = totalFor(room.settings.categoryId)): RoomState {
-  // Gauntlet's visible board is per-prompt, so restore the current prompt's
-  // claims (not the all-time set) to keep a reconnecting map in sync.
-  const gauntlet = room.settings.mode === "gauntlet";
+  // Gauntlet and showdown show a per-prompt/per-round board, so restore the
+  // current set (not the all-time one) to keep a reconnecting map in sync.
+  const perPrompt = room.settings.mode === "gauntlet" || room.settings.mode === "showdown";
   const filled: Record<string, string[]> = {};
   for (const seat of room.players) {
-    filled[seat.id] = [...(gauntlet ? seat.filledThisPrompt ?? [] : seat.filled)];
+    filled[seat.id] = [...(perPrompt ? seat.filledThisPrompt ?? [] : seat.filled)];
   }
   const state: RoomState = {
     code: room.code,
@@ -242,6 +246,7 @@ export function clearTurnRuntime(room: Room): void {
   room.currentPromptId = undefined;
   room.claimedThisPrompt = undefined;
   room.usedPromptIds = undefined;
+  room.round = undefined;
 }
 
 export function deleteRoom(room: Room): void {
