@@ -172,7 +172,7 @@ describe("<Lobby>", () => {
     expect(screen.queryByRole("button", { name: "Gauntlet" })).toBeNull();
   });
 
-  it("in gauntlet, shows the turn/lives pickers (same as last_standing)", async () => {
+  it("in gauntlet, shows the turn-time AND lives pickers", async () => {
     const user = userEvent.setup();
     renderLobby();
     socket.__server("room_state", roomState({
@@ -216,7 +216,7 @@ describe("<Lobby>", () => {
     expect(socket.__lastEmit("update_settings")).toEqual({ categoryId: "americas" });
   });
 
-  it("in last_standing, shows turn/lives pickers (not the time limit) and emits them", async () => {
+  it("in last_standing, shows the turn-time picker but no lives (sudden death)", async () => {
     const user = userEvent.setup();
     renderLobby();
     socket.__server("room_state", roomState({
@@ -229,8 +229,8 @@ describe("<Lobby>", () => {
     await user.click(screen.getByRole("button", { name: "30s" }));
     expect(socket.__lastEmit("update_settings")).toEqual({ turnSeconds: 30 });
 
-    await user.click(screen.getByRole("button", { name: "3" }));
-    expect(socket.__lastEmit("update_settings")).toEqual({ lives: 3 });
+    // No lives picker — Last Standing is sudden death.
+    expect(screen.queryByText("Lives")).toBeNull();
   });
 
   it("a solo room offers Race + Gauntlet (not Last Standing)", async () => {

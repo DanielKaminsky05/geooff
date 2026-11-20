@@ -17,11 +17,19 @@ export interface LivesBarPlayer {
 }
 
 /**
- * 3-4 player turn-based HUD: a chip per player with their name + remaining
- * hearts, the current player's chip highlighted and eliminated players dimmed.
+ * 3-4 player turn-based HUD: a chip per player with their name, the current
+ * player's chip highlighted and eliminated players dimmed. Gauntlet also shows
+ * remaining hearts; Last Standing is sudden death, so it shows no hearts.
  * Replaces the two-column ScoreBar (which only fits two players).
  */
-export default function LivesBar({ players }: { players: LivesBarPlayer[] }) {
+export default function LivesBar({
+  players,
+  showHearts,
+}: {
+  players: LivesBarPlayer[];
+  /** Gauntlet shows hearts; Last Standing (sudden death) does not. */
+  showHearts: boolean;
+}) {
   return (
     <div className="flex flex-wrap items-start justify-center gap-2 px-3 pt-2">
       {players.map((p) => {
@@ -38,14 +46,16 @@ export default function LivesBar({ players }: { players: LivesBarPlayer[] }) {
               {p.name}
               {p.eliminated ? " · out" : ""}
             </div>
-            <span key={p.hitKey} className="hearts-hit mt-0.5 inline-flex">
-              {p.hitKey > 0 && (
-                <span className="damage-pop" aria-hidden>
-                  −1
-                </span>
-              )}
-              <Hearts lives={p.lives} max={p.maxLives} colorVar={color} label={p.name} size="sm" />
-            </span>
+            {showHearts && (
+              <span key={p.hitKey} className="hearts-hit mt-0.5 inline-flex">
+                {p.hitKey > 0 && (
+                  <span className="damage-pop" aria-hidden>
+                    −1
+                  </span>
+                )}
+                <Hearts lives={p.lives} max={p.maxLives} colorVar={color} label={p.name} size="sm" />
+              </span>
+            )}
           </div>
         );
       })}

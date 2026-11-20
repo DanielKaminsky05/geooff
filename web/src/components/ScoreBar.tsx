@@ -152,9 +152,10 @@ export function ScoreBar({
   const p1Score = p1 ? (scores[p1.id] ?? p1.score ?? 0) : 0;
   const p2Score = p2 ? (scores[p2.id] ?? p2.score ?? 0) : 0;
   const low = endsAt != null && remaining <= 30_000;
+  // Hearts are Gauntlet-only; Last Standing is sudden death (no lives shown).
   const livesFor = (p?: PlayerPublic) =>
-    lastStanding && p && lives ? (lives[p.id] ?? maxLives) : undefined;
-  const hitFor = (p?: PlayerPublic) => (lastStanding && p && hits ? (hits[p.id] ?? 0) : 0);
+    gauntlet && p && lives ? (lives[p.id] ?? maxLives) : undefined;
+  const hitFor = (p?: PlayerPublic) => (gauntlet && p && hits ? (hits[p.id] ?? 0) : 0);
   // Gauntlet is a shared pool: unify both players' progress into one count.
   const promptNamed = Object.values(promptCounts ?? {}).reduce((s, n) => s + n, 0);
 
@@ -174,7 +175,7 @@ export function ScoreBar({
             align="left"
             gauntlet={gauntlet}
             lives={livesFor(p1)}
-            maxLives={lastStanding ? maxLives : undefined}
+            maxLives={gauntlet ? maxLives : undefined}
             hitKey={hitFor(p1)}
           />
         </div>
@@ -225,7 +226,7 @@ export function ScoreBar({
               align="right"
               gauntlet={gauntlet}
               lives={livesFor(p2)}
-              maxLives={lastStanding ? maxLives : undefined}
+              maxLives={gauntlet ? maxLives : undefined}
               hitKey={hitFor(p2)}
             />
           )}

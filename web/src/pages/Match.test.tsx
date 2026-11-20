@@ -508,16 +508,10 @@ describe("<Match> last_standing", () => {
     expect(screen.getByText("Your turn")).toBeInTheDocument();
   });
 
-  it("decrements a player's hearts on life_lost", () => {
+  it("shows no hearts — Last Standing is sudden death", () => {
     renderMatch();
     socket.__server("room_state", lsState());
-
-    const heartsFor = (name: string) =>
-      screen.getByRole("img", { name: new RegExp(`^${name}:`) });
-    expect(heartsFor("Bob")).toHaveAttribute("data-lives", "5");
-
-    socket.__server("life_lost", { playerId: "b", livesLeft: 4 });
-    expect(heartsFor("Bob")).toHaveAttribute("data-lives", "4");
+    expect(screen.queryByTestId("hearts")).toBeNull();
   });
 
   it("surfaces a not_your_turn rejection gracefully", () => {
@@ -578,6 +572,17 @@ describe("<Match> gauntlet", () => {
     socket.__server("room_state", gState());
     const banner = screen.getByTestId("prompt-banner");
     expect(within(banner).getByText("Landlocked countries")).toBeInTheDocument();
+  });
+
+  it("keeps hearts and decrements them on life_lost (Gauntlet)", () => {
+    renderMatch();
+    socket.__server("room_state", gState());
+    const heartsFor = (name: string) =>
+      screen.getByRole("img", { name: new RegExp(`^${name}:`) });
+    expect(heartsFor("Bob")).toHaveAttribute("data-lives", "5");
+
+    socket.__server("life_lost", { playerId: "b", livesLeft: 4 });
+    expect(heartsFor("Bob")).toHaveAttribute("data-lives", "4");
   });
 
   it("updates the prompt banner on prompt_changed", () => {

@@ -104,7 +104,10 @@ function scheduleTurnTimeout(deps: LastStandingDeps, room: Room, ms: number): Re
  */
 export function beginFirstTurn(deps: LastStandingDeps, room: Room): void {
   room.lives = {};
-  for (const seat of room.players) room.lives[seat.id] = room.settings.lives;
+  // Last Standing is sudden death: one miss (turn timeout) eliminates you.
+  // Gauntlet keeps the configured lives.
+  const startingLives = isGauntlet(room) ? room.settings.lives : 1;
+  for (const seat of room.players) room.lives[seat.id] = startingLives;
   room.claimed = new Set<string>();
   room.pausedTurnMs = undefined;
   // Gauntlet: seed the opening prompt (resets claimedThisPrompt + announces it)

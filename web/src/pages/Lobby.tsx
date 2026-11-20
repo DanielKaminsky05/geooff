@@ -330,26 +330,31 @@ export default function Lobby() {
               })}
             </div>
 
-            <p className="mt-4 mb-2 text-sm font-semibold text-muted">Lives</p>
-            <div className="flex flex-wrap gap-2">
-              {LIVES_PRESETS.map((n) => {
-                const active = room?.settings.lives === n;
-                return (
-                  <button
-                    key={n}
-                    disabled={!isHost}
-                    onClick={() => socket.emit("update_settings", { lives: n })}
-                    className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
-                      active
-                        ? "border-foreground bg-surface-raised text-foreground"
-                        : "border-border bg-surface text-muted hover:text-foreground hover:brightness-125"
-                    } disabled:cursor-not-allowed disabled:opacity-60`}
-                  >
-                    {n}
-                  </button>
-                );
-              })}
-            </div>
+            {/* Lives are Gauntlet-only; Last Standing is sudden death. */}
+            {effectiveMode === "gauntlet" && (
+              <>
+                <p className="mt-4 mb-2 text-sm font-semibold text-muted">Lives</p>
+                <div className="flex flex-wrap gap-2">
+                  {LIVES_PRESETS.map((n) => {
+                    const active = room?.settings.lives === n;
+                    return (
+                      <button
+                        key={n}
+                        disabled={!isHost}
+                        onClick={() => socket.emit("update_settings", { lives: n })}
+                        className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+                          active
+                            ? "border-foreground bg-surface-raised text-foreground"
+                            : "border-border bg-surface text-muted hover:text-foreground hover:brightness-125"
+                        } disabled:cursor-not-allowed disabled:opacity-60`}
+                      >
+                        {n}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </>
         ) : (
           <>

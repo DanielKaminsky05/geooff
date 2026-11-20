@@ -109,8 +109,8 @@ describe("last standing — turns", () => {
     expect(t2.endsAt).toBeGreaterThan(Date.now());
     // Turn runtime reflects the flip.
     expect(rooms.get(ctx.code)!.currentPlayerId).toBe(bId);
-    // aId did not lose a life on a correct answer.
-    expect(rooms.get(ctx.code)!.lives![aId]).toBe(3);
+    // aId did not lose a life on a correct answer (sudden death → 1 life).
+    expect(rooms.get(ctx.code)!.lives![aId]).toBe(1);
   });
 
   it("the non-current player is rejected with not_your_turn (no turn change)", async () => {
@@ -160,7 +160,7 @@ describe("last standing — turns", () => {
 });
 
 describe("last standing — lives + elimination", () => {
-  it("a turn timeout costs the current player a life and passes the turn", async () => {
+  it("a turn timeout eliminates the current player (sudden death)", async () => {
     server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 80 });
     const ctx = await makeLsRoom();
 
@@ -171,26 +171,15 @@ describe("last standing — lives + elimination", () => {
 
     const firstTurn = awaitEvent<any>(a, "turn_started", 8000);
     const lifeLost = awaitEvent<any>(a, "life_lost", 8000);
-    const secondTurn = new Promise<any>((resolve) => {
-      let seen = 0;
-      a.on("turn_started", function onT(t: any) {
-        seen += 1;
-        if (seen === 2) {
-          a.off("turn_started", onT);
-          resolve(t);
-        }
-      });
-    });
+    const over = awaitEvent<any>(b, "game_over", 8000);
     a.emit("start_game");
     await firstTurn;
 
-    // A never answers → A's clock runs out.
+    // A never answers → A's clock runs out → A eliminated (one life) → B wins.
     const ll = await lifeLost;
     expect(ll.playerId).toBe(aId);
-    expect(ll.livesLeft).toBe(2);
-    // Play passes to B.
-    const t2 = await secondTurn;
-    expect(t2.playerId).toBe(bId);
+    expect(ll.livesLeft).toBe(0);
+    expect((await over).winnerId).toBe(bId);
   }, 10000);
 
   it("reaching 0 lives ends the game with the OTHER player as winner", async () => {
@@ -256,7 +245,7 @@ describe("last standing — disconnect pause / resume", () => {
     expect(room.currentPlayerId).toBe(aId);
     expect(room.turnTimer).toBeUndefined();
     expect(room.pausedTurnMs).toBeGreaterThan(0);
-    expect(room.lives![aId]).toBe(3);
+    expect(room.lives![aId]).toBe(1);
 
     // Reconnect within grace → turn resumes for A.
     const a2 = client();
@@ -272,7 +261,7 @@ describe("last standing — disconnect pause / resume", () => {
     // Snapshot rehydrates turn + lives.
     const snap = rooms.get(code)!;
     expect(snap.currentPlayerId).toBe(aId);
-    expect(snap.lives![aId]).toBe(3);
+    expect(snap.lives![aId]).toBe(1);
   }, 10000);
 });
 

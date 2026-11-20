@@ -640,7 +640,7 @@ export default function Match() {
             read as one HUD rather than three stacked bars. */}
         {lastStanding ? (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col bg-gradient-to-b from-background via-background/90 to-transparent pb-12">
-            {multiTurnBased && <LivesBar players={livesBarPlayers} />}
+            {multiTurnBased && <LivesBar players={livesBarPlayers} showHearts={gauntlet} />}
             {scoreBar}
             {gauntlet && phase === "playing" && !gameOver && prompt && (
               <PromptBanner bare label={prompt.label} />
