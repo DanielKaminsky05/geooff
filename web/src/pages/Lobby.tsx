@@ -173,8 +173,8 @@ export default function Lobby() {
   const effectiveMode = availableModes.some((m) => m.value === mode) ? mode : "race";
   // Both Last Standing and Gauntlet use the per-turn clock + lives pickers.
   const turnBased = effectiveMode === "last_standing" || effectiveMode === "gauntlet";
-  // Race seats up to MAX_PLAYERS; turn-based modes are 2-player for now.
-  const seatCount = turnBased ? 2 : MAX_PLAYERS;
+  // All versus modes now seat up to MAX_PLAYERS.
+  const seatCount = MAX_PLAYERS;
 
   const [copied, setCopied] = useState(false);
   async function copyCode() {

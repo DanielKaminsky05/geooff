@@ -10,6 +10,7 @@ import NamedCountries from "../components/NamedCountries";
 import ProgressBar from "../components/ProgressBar";
 import PromptBanner from "../components/PromptBanner";
 import Leaderboard, { type LeaderboardRow } from "../components/Leaderboard";
+import LivesBar, { type LivesBarPlayer } from "../components/LivesBar";
 import { countryName } from "../lib/continents";
 import { slotColor } from "../lib/colors";
 
@@ -464,13 +465,17 @@ export default function Match() {
   const lastStanding = mode === "last_standing" || gauntlet;
   const maxLives = room?.settings.lives ?? 0;
 
-  // Last Standing is one shared map: colour each claimed item by who took it.
+  // Last Standing is one shared map: colour each claimed item by who took it
+  // (every player, so 3-4 player games colour all claims).
   const claimedColors = useMemo(() => {
     const m = new Map<string, string>();
-    for (const id of oppFilled) m.set(id, oppColor);
-    for (const id of myFilled) m.set(id, myColor);
+    for (const p of room?.players ?? []) {
+      const color = slotColor(p.slot);
+      const filled = p.id === myId ? myFilled : (othersFilled[p.id] ?? EMPTY);
+      for (const id of filled) m.set(id, color);
+    }
     return m;
-  }, [myFilled, oppFilled, myColor, oppColor]);
+  }, [room?.players, myId, myFilled, othersFilled]);
 
   // Gauntlet: how many each player has named for the CURRENT prompt (the filled
   // sets reset on each prompt), shown as "named / prompt total" in the score bar.
@@ -515,6 +520,27 @@ export default function Match() {
   // 2-player race keeps the classic side-by-side (you | opponent) UI; 3-4 players
   // use the focused-map + leaderboard view.
   const multiRace = race && playerCount > 2;
+  // 3-4 player turn-based: swap the two-column ScoreBar for an N-player lives bar.
+  const multiTurnBased = lastStanding && playerCount > 2;
+
+  const livesBarPlayers = useMemo<LivesBarPlayer[]>(() => {
+    if (!multiTurnBased) return [];
+    return [...(room?.players ?? [])]
+      .sort((a, b) => a.slot.localeCompare(b.slot))
+      .map((p) => {
+        const lv = lives[p.id] ?? maxLives;
+        return {
+          id: p.id,
+          name: p.id === myId ? "You" : p.name,
+          slot: p.slot,
+          lives: lv,
+          maxLives,
+          isCurrent: p.id === currentPlayerId,
+          eliminated: lv <= 0,
+          hitKey: hits[p.id] ?? 0,
+        };
+      });
+  }, [multiTurnBased, room?.players, myId, lives, maxLives, currentPlayerId, hits]);
 
   // Race leaderboard rows: every player, ranked by count (desc), seat order as
   // the stable tie-break. Count prefers the server score, falling back to the
@@ -577,7 +603,7 @@ export default function Match() {
       maxLives={maxLives}
       hits={hits}
       bare={lastStanding || multiRace}
-      compact={multiRace}
+      compact={multiRace || multiTurnBased}
       showTurn={lastStanding && phase === "playing" && !gameOver}
       turnName={myTurn ? "Your turn" : `${currentPlayer?.name ?? "Opponent"}'s turn`}
       turnColor={myTurn ? myColor : oppColor}
@@ -614,6 +640,7 @@ export default function Match() {
             read as one HUD rather than three stacked bars. */}
         {lastStanding ? (
           <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col bg-gradient-to-b from-background via-background/90 to-transparent pb-12">
+            {multiTurnBased && <LivesBar players={livesBarPlayers} />}
             {scoreBar}
             {gauntlet && phase === "playing" && !gameOver && prompt && (
               <PromptBanner bare label={prompt.label} />
@@ -824,7 +851,6 @@ export default function Match() {
             gameOver={gameOver}
             solo={solo}
             gauntlet={gauntlet}
-            race={race}
             players={room?.players ?? []}
             total={total}
             me={me}
@@ -963,7 +989,6 @@ function GameOverOverlay({
   gameOver,
   solo,
   gauntlet,
-  race,
   players,
   total,
   me,
@@ -976,7 +1001,6 @@ function GameOverOverlay({
   gameOver: GameOver;
   solo: boolean;
   gauntlet?: boolean;
-  race?: boolean;
   players: PlayerPublic[];
   total: number;
   me?: PlayerPublic;
@@ -1032,9 +1056,9 @@ function GameOverOverlay({
     );
   }
 
-  // Race with 3+ players: a ranked final leaderboard of everyone (the 2-player
-  // race keeps the you-vs-opponent FinalScore pair below).
-  if (race && players.length > 2) {
+  // 3+ players (race or turn-based): a ranked final leaderboard of everyone (the
+  // 2-player games keep the you-vs-opponent FinalScore pair below).
+  if (players.length > 2) {
     const ranked = [...players]
       .map((p) => ({ p, score: gameOver.scores[p.id] ?? 0 }))
       .sort((a, b) => b.score - a.score || SLOT_ORDER[a.p.slot] - SLOT_ORDER[b.p.slot]);

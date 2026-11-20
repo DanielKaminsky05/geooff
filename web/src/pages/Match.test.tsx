@@ -526,6 +526,27 @@ describe("<Match> last_standing", () => {
     socket.__server("answer_result", { accepted: false, reason: "not_your_turn" });
     expect(screen.getByText("Not your turn")).toBeInTheDocument();
   });
+
+  it("3-player last_standing shows a lives bar for every player, current highlighted", () => {
+    renderMatch();
+    socket.__server(
+      "room_state",
+      lsState({
+        players: [
+          player({ id: "a", slot: "p1", name: "Alice" }),
+          player({ id: "b", slot: "p2", name: "Bob" }),
+          player({ id: "c", slot: "p3", name: "Cara" }),
+        ],
+        turn: { currentPlayerId: "c", endsAt: Date.now() + 15_000 },
+        lives: { a: 5, b: 5, c: 5 },
+      }),
+    );
+    expect(screen.getByTestId("lives-a")).toBeInTheDocument();
+    expect(screen.getByTestId("lives-b")).toBeInTheDocument();
+    expect(screen.getByTestId("lives-c")).toBeInTheDocument();
+    // The current player's chip is highlighted.
+    expect(screen.getByTestId("lives-c").className).toContain("border-foreground");
+  });
 });
 
 describe("<Match> gauntlet", () => {
