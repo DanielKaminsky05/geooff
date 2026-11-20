@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession, defaultName } from "../lib/session";
 import GlitchWordmark from "../components/GlitchWordmark";
+import { slotColor } from "../lib/colors";
 import {
   TIME_LIMIT_MIN_SECONDS,
   TIME_LIMIT_MAX_SECONDS,
@@ -10,11 +11,15 @@ import {
   TURN_SECONDS_MAX,
   LIVES_MIN,
   LIVES_MAX,
+  MAX_PLAYERS,
   type RoomState,
   type PlayerPublic,
+  type PlayerSlot,
   type CategoryId,
   type GameMode,
 } from "../lib/protocol";
+
+const SEAT_SLOTS: PlayerSlot[] = ["p1", "p2", "p3", "p4"];
 
 const PRESETS = [
   { label: "1 min", seconds: 60 },
@@ -152,10 +157,8 @@ export default function Lobby() {
     [room, identity],
   );
   const isHost = room != null && identity != null && room.hostId === identity.playerId;
-  const p1 = room?.players.find((p) => p.slot === "p1");
-  const p2 = room?.players.find((p) => p.slot === "p2");
   const bothReady =
-    room != null && room.players.length === 2 && room.players.every((p) => p.ready);
+    room != null && room.players.length >= 2 && room.players.every((p) => p.ready);
   const alone = room != null && room.players.length === 1;
   const solo = room?.solo === true;
   const mode = room?.settings.mode ?? "race";
@@ -170,6 +173,8 @@ export default function Lobby() {
   const effectiveMode = availableModes.some((m) => m.value === mode) ? mode : "race";
   // Both Last Standing and Gauntlet use the per-turn clock + lives pickers.
   const turnBased = effectiveMode === "last_standing" || effectiveMode === "gauntlet";
+  // Race seats up to MAX_PLAYERS; turn-based modes are 2-player for now.
+  const seatCount = turnBased ? 2 : MAX_PLAYERS;
 
   const [copied, setCopied] = useState(false);
   async function copyCode() {
@@ -240,8 +245,14 @@ export default function Lobby() {
           </section>
 
           <section className="grid grid-cols-2 gap-3">
-            <PlayerCard player={p1} colorVar="var(--color-player1)" label="Player 1" />
-            <PlayerCard player={p2} colorVar="var(--color-player2)" label="Player 2" />
+            {SEAT_SLOTS.slice(0, seatCount).map((slot, i) => (
+              <PlayerCard
+                key={slot}
+                player={room?.players.find((p) => p.slot === slot)}
+                colorVar={slotColor(slot)}
+                label={`Player ${i + 1}`}
+              />
+            ))}
           </section>
         </>
       )}
@@ -403,7 +414,7 @@ export default function Lobby() {
                   ? "Start game"
                   : alone
                     ? "Waiting for a player…"
-                    : "Waiting for both players…"}
+                    : "Waiting for everyone to ready up…"}
               </button>
             )}
           </>

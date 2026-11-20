@@ -17,6 +17,8 @@
 
   --color-player1: #3fb950; /* emerald — player 1 */
   --color-player2: #e3a008; /* amber — player 2 */
+  --color-player3: #58a6ff; /* sky — player 3 */
+  --color-player4: #bc8cff; /* violet — player 4 */
   --color-both: #1f9e8e; /* teal — both guessed */
   --color-accent: #f0623e; /* coral — timer / alerts / errors */
 

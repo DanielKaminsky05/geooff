@@ -286,7 +286,7 @@ describe("<Lobby>", () => {
         player({ id: "b", slot: "p2", name: "Bob", ready: false }),
       ],
     }));
-    expect(screen.getByRole("button", { name: /Waiting for both players/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Waiting for everyone/ })).toBeDisabled();
 
     // Both ready → enabled, emits start_game.
     socket.__server("room_state", roomState({
@@ -326,12 +326,14 @@ describe("<Lobby>", () => {
     expect(socket.__emitted.some((e) => e.event === "start_game")).toBe(true);
   });
 
-  it("shows both seats, with the opponent seat waiting until they join", () => {
+  it("shows up to 4 seats, with empty seats waiting until they join", () => {
     renderLobby();
     socket.__server("room_state", roomState());
     expect(screen.getByText("Alice")).toBeInTheDocument();
+    // Race lobby has 4 seats: one host + three empty "Waiting…" seats.
     expect(screen.getByText("Player 2")).toBeInTheDocument();
-    expect(screen.getByText("Waiting…")).toBeInTheDocument();
+    expect(screen.getByText("Player 4")).toBeInTheDocument();
+    expect(screen.getAllByText("Waiting…")).toHaveLength(3);
   });
 
   it("navigates to the game on a countdown event", () => {
