@@ -33,7 +33,24 @@ import {
   mediterraneanCoast,
   drivesLeft,
   monarchies,
+  natoMembers,
+  g20Members,
+  nuclearArmed,
+  usdUsers,
+  majorityMuslim,
+  atlanticCoast,
+  pacificCoast,
+  indianOceanCoast,
+  formerBritishColony,
+  formerFrenchColony,
+  flagHasCrescent,
+  flagHasStar,
+  flagThreeHorizontalStripes,
+  flagThreeVerticalStripes,
+  flagHasSun,
+  flagHasAnimal,
 } from "./data/countryGroups.js";
+import { capitals, capitalNotLargest } from "./data/capitals.js";
 import { allIdsFor } from "./sets.js";
 
 /** A compiled prompt: label is shown to players; validIds stays server-side. */
@@ -48,7 +65,14 @@ export interface Prompt {
  * Minimum valid answers (within a category) for a prompt to be offered — so a
  * round does not dead-end immediately.
  */
-export const MIN_VALID = 8;
+export const MIN_VALID = 7;
+
+/**
+ * Upper bound for the "contains a letter" family: skip letters so common that
+ * nearly every country qualifies (A, E, I, N…) — those make a trivial prompt.
+ * Only uncommon letters (W, Z, K, V…) make an interesting constraint.
+ */
+export const CONTAINS_MAX = 25;
 
 /** All attribute records as an array (the full country attribute pool). */
 const allAttrs = Object.values(countryAttributes);
@@ -105,6 +129,23 @@ function buildPrompts(): Prompt[] {
     });
   }
 
+  // contains-letter: normalizeAnswer(name) includes the letter anywhere. Only
+  // offered when between MIN_VALID and CONTAINS_MAX countries contain it, so the
+  // letter is a real constraint, not "name almost any country" (common letters
+  // like A/E/I) nor a dead-end (X/Q). W is a highlight: no country name STARTS
+  // with W, but a dozen contain it.
+  for (const letter of LETTERS) {
+    const ids = new Set(
+      countries.filter((c) => normalizeAnswer(c.name).includes(letter)).map((c) => c.iso),
+    );
+    if (ids.size < MIN_VALID || ids.size > CONTAINS_MAX) continue;
+    prompts.push({
+      id: `contains-${letter}`,
+      label: `Name a country whose name contains the letter ${letter.toUpperCase()}`,
+      validIds: ids,
+    });
+  }
+
   // landlocked
   prompts.push({
     id: "landlocked",
@@ -129,7 +170,7 @@ function buildPrompts(): Prompt[] {
   }
 
   // elevation thresholds (feet)
-  for (const ft of [10000, 13000]) {
+  for (const ft of [10000, 13000, 20000]) {
     prompts.push({
       id: `elevation-${ft}`,
       label: `Name a country with a peak above ${ft.toLocaleString("en-US")} ft`,
@@ -153,9 +194,24 @@ function buildPrompts(): Prompt[] {
     validIds: attrIds((a) => a.borders.length > 4),
   });
   prompts.push({
+    id: "borders-6",
+    label: "Name a country bordering 6 or more others",
+    validIds: attrIds((a) => a.borders.length >= 6),
+  });
+  prompts.push({
     id: "borders-1",
     label: "Name a country with exactly one land border",
     validIds: attrIds((a) => a.borders.length === 1),
+  });
+  prompts.push({
+    id: "borders-2",
+    label: "Name a country with exactly two land borders",
+    validIds: attrIds((a) => a.borders.length === 2),
+  });
+  prompts.push({
+    id: "borders-3",
+    label: "Name a country with exactly three land borders",
+    validIds: attrIds((a) => a.borders.length === 3),
   });
 
   // borders-a-given-country: data-driven. "Name a country that borders X" for
@@ -181,6 +237,11 @@ function buildPrompts(): Prompt[] {
 
   // area thresholds (km²): the giants and the micro-states.
   prompts.push({
+    id: "area-xlarge",
+    label: "Name a country larger than 2,000,000 km²",
+    validIds: attrIds((a) => a.areaKm2 > 2_000_000),
+  });
+  prompts.push({
     id: "area-large",
     label: "Name a country larger than 1,000,000 km²",
     validIds: attrIds((a) => a.areaKm2 > 1_000_000),
@@ -190,8 +251,18 @@ function buildPrompts(): Prompt[] {
     label: "Name a country smaller than 10,000 km²",
     validIds: attrIds((a) => a.areaKm2 < 10_000),
   });
+  prompts.push({
+    id: "area-xsmall",
+    label: "Name a country smaller than 1,000 km²",
+    validIds: attrIds((a) => a.areaKm2 < 1_000),
+  });
 
   // more population tiers: the giants and the tiny.
+  prompts.push({
+    id: "population-200",
+    label: "Name a country with over 200 million people",
+    validIds: attrIds((a) => a.populationM > 200),
+  });
   prompts.push({
     id: "population-100",
     label: "Name a country with over 100 million people",
@@ -202,12 +273,30 @@ function buildPrompts(): Prompt[] {
     label: "Name a country with fewer than 2 million people",
     validIds: attrIds((a) => a.populationM < 2),
   });
+  prompts.push({
+    id: "population-under-1",
+    label: "Name a country with fewer than 1 million people",
+    validIds: attrIds((a) => a.populationM < 1),
+  });
 
   // flat countries (low highest point).
   prompts.push({
     id: "elevation-low",
     label: "Name a country whose highest point is under 1,500 ft",
     validIds: attrIds((a) => a.elevationFtMax < 1500),
+  });
+
+  // population density (people per km²), derived from pop + area — no new data.
+  const densityOf = (a: (typeof allAttrs)[number]) => (a.populationM * 1_000_000) / a.areaKm2;
+  prompts.push({
+    id: "density-high",
+    label: "Name a densely populated country (over 300 people/km²)",
+    validIds: attrIds((a) => densityOf(a) > 300),
+  });
+  prompts.push({
+    id: "density-low",
+    label: "Name a sparsely populated country (under 20 people/km²)",
+    validIds: attrIds((a) => densityOf(a) < 20),
   });
 
   // name patterns.
@@ -222,6 +311,81 @@ function buildPrompts(): Prompt[] {
     validIds: new Set(
       countries.filter((c) => normalizeAnswer(c.name).endsWith("land")).map((c) => c.iso),
     ),
+  });
+  prompts.push({
+    id: "name-ends-stan",
+    label: "Name a country whose name ends in “-stan”",
+    validIds: new Set(
+      countries.filter((c) => normalizeAnswer(c.name).endsWith("stan")).map((c) => c.iso),
+    ),
+  });
+  prompts.push({
+    id: "name-ends-ia",
+    label: "Name a country whose name ends in “-ia”",
+    validIds: new Set(
+      countries.filter((c) => normalizeAnswer(c.name).endsWith("ia")).map((c) => c.iso),
+    ),
+  });
+  prompts.push({
+    id: "name-double-letter",
+    label: "Name a country with a double letter in its name",
+    validIds: new Set(
+      countries
+        .filter((c) => /(.)\1/.test(normalizeAnswer(c.name).replace(/\s/g, "")))
+        .map((c) => c.iso),
+    ),
+  });
+  // Name length counts letters only (spaces stripped) so "South Sudan" is 10.
+  const nameLen = (name: string) => normalizeAnswer(name).replace(/\s/g, "").length;
+  prompts.push({
+    id: "name-short",
+    label: "Name a country with 5 letters or fewer in its name",
+    validIds: new Set(countries.filter((c) => nameLen(c.name) <= 5).map((c) => c.iso)),
+  });
+  prompts.push({
+    id: "name-long",
+    label: "Name a country with 10 letters or more in its name",
+    validIds: new Set(countries.filter((c) => nameLen(c.name) >= 10).map((c) => c.iso)),
+  });
+
+  // Capital-based prompts (answer is the COUNTRY; capitals are the server-only
+  // key). Computed from the capitals dataset so nothing is hand-transcribed.
+  // capital-starts-with-letter: the country's capital begins with the letter.
+  for (const letter of LETTERS) {
+    const ids = new Set(
+      Object.entries(capitals)
+        .filter(([, cap]) => normalizeAnswer(cap).startsWith(letter))
+        .map(([iso]) => iso),
+    );
+    if (ids.size === 0) continue;
+    prompts.push({
+      id: `capital-starts-${letter}`,
+      label: `Name a country whose capital starts with ${letter.toUpperCase()}`,
+      validIds: ids,
+    });
+  }
+  // capital shares its name with the country (Singapore, Djibouti, Kuwait City…).
+  const isoToCountryName = new Map(countries.map((c) => [c.iso, c.name]));
+  prompts.push({
+    id: "capital-equals-country",
+    label: "Name a country whose capital shares its name",
+    validIds: new Set(
+      Object.entries(capitals)
+        .filter(([iso, cap]) => {
+          const country = normalizeAnswer(isoToCountryName.get(iso) ?? "").replace(/\s/g, "");
+          const city = normalizeAnswer(cap)
+            .replace(/ city$/, "")
+            .replace(/\s/g, "");
+          return country.length > 0 && (country.includes(city) || city.includes(country));
+        })
+        .map(([iso]) => iso),
+    ),
+  });
+  // capital is not the country's largest/most famous city (editorial list).
+  prompts.push({
+    id: "capital-not-largest",
+    label: "Name a country whose capital is not its largest city",
+    validIds: new Set(capitalNotLargest),
   });
 
   // Categorical groupings (language, organisations, geography, misc) from the
@@ -243,6 +407,22 @@ function buildPrompts(): Prompt[] {
     { id: "geo-mediterranean", label: "Name a country with a Mediterranean coastline", ids: mediterraneanCoast },
     { id: "misc-drives-left", label: "Name a country that drives on the left", ids: drivesLeft },
     { id: "misc-monarchy", label: "Name a country that is a monarchy", ids: monarchies },
+    { id: "org-nato", label: "Name a NATO member", ids: natoMembers },
+    { id: "org-g20", label: "Name a G20 member", ids: g20Members },
+    { id: "mil-nuclear", label: "Name a country with nuclear weapons", ids: nuclearArmed },
+    { id: "org-usd", label: "Name a country that uses the US dollar", ids: usdUsers },
+    { id: "rel-muslim", label: "Name a majority-Muslim country", ids: majorityMuslim },
+    { id: "ocean-atlantic", label: "Name a country on the Atlantic Ocean", ids: atlanticCoast },
+    { id: "ocean-pacific", label: "Name a country on the Pacific Ocean", ids: pacificCoast },
+    { id: "ocean-indian", label: "Name a country on the Indian Ocean", ids: indianOceanCoast },
+    { id: "hist-british", label: "Name a former British colony", ids: formerBritishColony },
+    { id: "hist-french", label: "Name a former French colony", ids: formerFrenchColony },
+    { id: "flag-crescent", label: "Name a country whose flag has a crescent", ids: flagHasCrescent },
+    { id: "flag-star", label: "Name a country whose flag has a star", ids: flagHasStar },
+    { id: "flag-h-stripes", label: "Name a country with three horizontal stripes on its flag", ids: flagThreeHorizontalStripes },
+    { id: "flag-v-stripes", label: "Name a country with three vertical stripes on its flag", ids: flagThreeVerticalStripes },
+    { id: "flag-sun", label: "Name a country whose flag has a sun", ids: flagHasSun },
+    { id: "flag-animal", label: "Name a country whose flag has an animal", ids: flagHasAnimal },
   ];
   for (const g of groupPrompts) {
     prompts.push({ id: g.id, label: g.label, validIds: new Set(g.ids) });

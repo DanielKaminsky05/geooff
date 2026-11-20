@@ -129,6 +129,72 @@ describe("prompt spot-checks (within 'countries')", () => {
     expect(ids.has("za")).toBe(true);
     expect(ids.has("fr")).toBe(false);
   });
+
+  it("'contains W' matches names with a W anywhere, incl. ones not starting with W", () => {
+    const ids = within("contains-w");
+    expect(ids.has("zw")).toBe(true); // Zimbabwe
+    expect(ids.has("bw")).toBe(true); // Botswana
+    expect(ids.has("rw")).toBe(true); // Rwanda
+    expect(ids.has("fr")).toBe(false); // France has no W
+  });
+
+  it("'contains Z' includes Brazil (Z not at the start)", () => {
+    const ids = within("contains-z");
+    expect(ids.has("br")).toBe(true);
+    expect(ids.has("zm")).toBe(true); // Zambia
+  });
+
+  it("common letters make no 'contains' prompt (too trivial)", () => {
+    // A/E/I match nearly every country, so the family omits them.
+    expect(promptById("contains-a")).toBeUndefined();
+    expect(promptById("contains-e")).toBeUndefined();
+    // X/Q are too rare to clear MIN_VALID.
+    expect(promptById("contains-x")).toBeUndefined();
+  });
+
+  it("'-stan' names include Pakistan/Kazakhstan, exclude France", () => {
+    const ids = within("name-ends-stan");
+    expect(ids.has("pk")).toBe(true);
+    expect(ids.has("kz")).toBe(true);
+    expect(ids.has("fr")).toBe(false);
+  });
+
+  it("double-letter names include Morocco/Philippines, exclude Spain", () => {
+    const ids = within("name-double-letter");
+    expect(ids.has("ma")).toBe(true); // moroCCo
+    expect(ids.has("ph")).toBe(true); // philiPPines
+    expect(ids.has("es")).toBe(false); // spain — no double letter
+  });
+
+  it("name length tiers: short excludes long and vice versa", () => {
+    const short = within("name-short"); // <= 5 letters
+    const long = within("name-long"); // >= 10 letters
+    expect(short.has("cu")).toBe(true); // Cuba
+    expect(short.has("us")).toBe(false); // United States is long
+    expect(long.has("us")).toBe(true);
+    expect(long.has("cu")).toBe(false);
+  });
+
+  it("population > 200M includes India/China, excludes Monaco", () => {
+    const ids = within("population-200");
+    expect(ids.has("in")).toBe(true);
+    expect(ids.has("cn")).toBe(true);
+    expect(ids.has("mc")).toBe(false);
+  });
+
+  it("density-high includes a dense country, density-low includes a sparse one", () => {
+    const high = within("density-high");
+    const low = within("density-low");
+    expect(high.has("bd")).toBe(true); // Bangladesh — very dense
+    expect(low.has("mn")).toBe(true); // Mongolia — very sparse
+    expect(high.has("mn")).toBe(false);
+  });
+
+  it("exact border counts are disjoint tiers", () => {
+    const two = within("borders-2");
+    const three = within("borders-3");
+    for (const id of two) expect(three.has(id)).toBe(false);
+  });
 });
 
 describe("categorical group prompts (within 'countries')", () => {
@@ -180,6 +246,120 @@ describe("categorical group prompts (within 'countries')", () => {
 
   it("Arabic-speaking gives the Middle East a real prompt (>= MIN_VALID there)", () => {
     expect(validIdsFor(get("lang-arabic"), "middle-east").size).toBeGreaterThanOrEqual(MIN_VALID);
+  });
+
+  it("NATO includes the US/France, excludes neutral Ireland and non-member Russia", () => {
+    const ids = within("org-nato");
+    expect(ids.has("us")).toBe(true);
+    expect(ids.has("fr")).toBe(true);
+    expect(ids.has("fi")).toBe(true); // joined 2023
+    expect(ids.has("ie")).toBe(false);
+    expect(ids.has("ru")).toBe(false);
+  });
+
+  it("nuclear-armed is exactly the nine possessor states", () => {
+    const ids = within("mil-nuclear");
+    expect(ids.size).toBe(9);
+    for (const iso of ["us", "ru", "cn", "fr", "gb", "in", "pk", "kp", "il"]) {
+      expect(ids.has(iso)).toBe(true);
+    }
+  });
+
+  it("USD users include Ecuador/El Salvador, exclude the eurozone", () => {
+    const ids = within("org-usd");
+    expect(ids.has("ec")).toBe(true);
+    expect(ids.has("sv")).toBe(true);
+    expect(ids.has("de")).toBe(false);
+  });
+
+  it("ocean coasts: landlocked countries never appear", () => {
+    const atlantic = within("ocean-atlantic");
+    const pacific = within("ocean-pacific");
+    expect(atlantic.has("br")).toBe(true);
+    expect(pacific.has("jp")).toBe(true);
+    // Switzerland/Bolivia are landlocked — on no ocean.
+    for (const sea of [atlantic, pacific, within("ocean-indian")]) {
+      expect(sea.has("ch")).toBe(false);
+      expect(sea.has("bo")).toBe(false);
+    }
+  });
+
+  it("former colonies: British includes India, French includes Senegal; not swapped", () => {
+    const british = within("hist-british");
+    const french = within("hist-french");
+    expect(british.has("in")).toBe(true);
+    expect(british.has("sn")).toBe(false);
+    expect(french.has("sn")).toBe(true);
+    expect(french.has("in")).toBe(false);
+  });
+});
+
+describe("capital-based prompts (within 'countries')", () => {
+  const within = (id: string) => validIdsFor(get(id), "countries");
+
+  it("capital starts with B: France (Paris=P) excluded, Germany (Berlin) included", () => {
+    const ids = within("capital-starts-b");
+    expect(ids.has("de")).toBe(true); // Berlin
+    expect(ids.has("cn")).toBe(true); // Beijing
+    expect(ids.has("fr")).toBe(false); // Paris
+  });
+
+  it("capital starts with W: country named off the CAPITAL, not its own name", () => {
+    const ids = within("capital-starts-w");
+    expect(ids.has("pl")).toBe(true); // Warsaw
+    expect(ids.has("na")).toBe(true); // Windhoek
+    expect(ids.has("us")).toBe(true); // Washington
+  });
+
+  it("capital shares the country name: Singapore yes, France no", () => {
+    const ids = within("capital-equals-country");
+    expect(ids.has("sg")).toBe(true); // Singapore
+    expect(ids.has("kw")).toBe(true); // Kuwait City ~ Kuwait
+    expect(ids.has("mx")).toBe(true); // Mexico City ~ Mexico
+    expect(ids.has("fr")).toBe(false); // Paris
+    expect(ids.has("br")).toBe(false); // Brasilia is NOT ~ Brazil
+  });
+
+  it("capital not largest city: US/Australia yes, France (Paris is largest) no", () => {
+    const ids = within("capital-not-largest");
+    expect(ids.has("us")).toBe(true); // Washington < New York
+    expect(ids.has("au")).toBe(true); // Canberra < Sydney
+    expect(ids.has("tr")).toBe(true); // Ankara < Istanbul
+    expect(ids.has("fr")).toBe(false);
+  });
+});
+
+describe("flag-feature prompts (within 'countries')", () => {
+  const within = (id: string) => validIdsFor(get(id), "countries");
+
+  it("crescent includes Turkey/Pakistan, excludes France", () => {
+    const ids = within("flag-crescent");
+    expect(ids.has("tr")).toBe(true);
+    expect(ids.has("pk")).toBe(true);
+    expect(ids.has("fr")).toBe(false);
+  });
+
+  it("star includes USA/China, excludes Vanuatu (boar tusk, no star)", () => {
+    const ids = within("flag-star");
+    expect(ids.has("us")).toBe(true);
+    expect(ids.has("cn")).toBe(true);
+    expect(ids.has("vu")).toBe(false);
+  });
+
+  it("vertical stripes include France, exclude Mexico (central emblem)", () => {
+    const vert = within("flag-v-stripes");
+    expect(vert.has("fr")).toBe(true);
+    expect(vert.has("mx")).toBe(false); // emblem, removed in verification
+    const horiz = within("flag-h-stripes");
+    expect(horiz.has("nl")).toBe(true);
+    expect(horiz.has("co")).toBe(false); // unequal bands, removed
+  });
+
+  it("animal includes Sri Lanka/Mexico, excludes France", () => {
+    const ids = within("flag-animal");
+    expect(ids.has("lk")).toBe(true); // lion
+    expect(ids.has("mx")).toBe(true); // eagle + snake
+    expect(ids.has("fr")).toBe(false);
   });
 });
 
