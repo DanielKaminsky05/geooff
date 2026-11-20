@@ -87,7 +87,7 @@ export default function Lobby() {
     }
     function onJoined(payload: {
       playerId: string;
-      slot: "p1" | "p2";
+      slot: PlayerSlot;
       reconnectToken: string;
       state: RoomState;
     }) {

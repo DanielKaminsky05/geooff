@@ -37,7 +37,7 @@ vi.mock("react-router-dom", async (importOriginal) => {
 
 import Lobby from "./Lobby";
 
-function player(over: Partial<PlayerPublic> & { id: string; slot: "p1" | "p2" }): PlayerPublic {
+function player(over: Partial<PlayerPublic> & { id: string; slot: PlayerPublic["slot"] }): PlayerPublic {
   return { name: "P", connected: true, ready: false, score: 0, ...over };
 }
 

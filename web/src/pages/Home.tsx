@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession, defaultName } from "../lib/session";
 import GlitchWordmark from "../components/GlitchWordmark";
+import type { PlayerSlot } from "../lib/protocol";
 
 export default function Home() {
   const socket = useSocket();
@@ -14,7 +15,7 @@ export default function Home() {
   useEffect(() => {
     function onJoined(payload: {
       playerId: string;
-      slot: "p1" | "p2";
+      slot: PlayerSlot;
       reconnectToken: string;
       state: { code: string };
     }) {
