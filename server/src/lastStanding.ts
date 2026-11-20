@@ -158,6 +158,9 @@ export function pickPrompt(room: Room, excludeId?: string): Prompt | undefined {
 function setPrompt(deps: LastStandingDeps, room: Room, prompt: Prompt): void {
   room.currentPromptId = prompt.id;
   room.claimedThisPrompt = new Set<string>();
+  // Clear every player's per-prompt claims so the board (and reconnect
+  // snapshots) start empty for the new prompt.
+  for (const seat of room.players) seat.filledThisPrompt = new Set<string>();
   const total = validIdsFor(prompt, room.settings.categoryId).size;
   deps.io.to(room.code).emit("prompt_changed", { id: prompt.id, label: prompt.label, total });
 }
@@ -357,9 +360,12 @@ export function handleGauntletSubmit(
     return;
   }
 
-  // Accept: score + record in the player's filled set and the per-prompt pool.
+  // Accept: score + record in the all-time set, the shared per-prompt pool, and
+  // this seat's per-prompt set (what the board shows / reconnect restores).
   claimedThisPrompt.add(iso);
   seat.filled.add(iso);
+  const mineThisPrompt = (seat.filledThisPrompt ??= new Set<string>());
+  mineThisPrompt.add(iso);
   seat.score += 1;
   socket.emit("answer_result", {
     accepted: true,
@@ -367,10 +373,12 @@ export function handleGauntletSubmit(
     isoCode: iso,
   });
   deps.io.to(room.code).emit("score_update", { scores: scoresOf(room) });
+  // Broadcast the current-prompt set (not the all-time one) so every map colours
+  // only this prompt's claims and self-heals on a dropped event.
   deps.io.to(room.code).emit("opponent_progress", {
     playerId: seat.id,
     isoCode: iso,
-    filled: [...seat.filled],
+    filled: [...mineThisPrompt],
   });
 
   // Prompt exhausted (every valid answer named) → cycle a fresh prompt, NO life

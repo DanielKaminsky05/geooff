@@ -28,7 +28,13 @@ export interface Seat {
   connected: boolean;
   ready: boolean;
   score: number;
-  filled: Set<string>; // iso codes
+  filled: Set<string>; // iso codes claimed (all-time; gauntlet accumulates across prompts)
+  /**
+   * gauntlet only: isos this seat claimed under the CURRENT prompt. The board
+   * clears each prompt, so this (not the all-time `filled`) is what the map
+   * shows and what reconnect snapshots restore. Reset on every prompt change.
+   */
+  filledThisPrompt?: Set<string>;
   reconnectToken: string;
   rematchRequested: boolean;
 }
@@ -169,9 +175,12 @@ export function seatToPublic(seat: Seat): PlayerPublic {
 }
 
 export function roomStateOf(room: Room, total: number = totalFor(room.settings.categoryId)): RoomState {
+  // Gauntlet's visible board is per-prompt, so restore the current prompt's
+  // claims (not the all-time set) to keep a reconnecting map in sync.
+  const gauntlet = room.settings.mode === "gauntlet";
   const filled: Record<string, string[]> = {};
   for (const seat of room.players) {
-    filled[seat.id] = [...seat.filled];
+    filled[seat.id] = [...(gauntlet ? seat.filledThisPrompt ?? [] : seat.filled)];
   }
   const state: RoomState = {
     code: room.code,

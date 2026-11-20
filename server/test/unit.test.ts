@@ -349,3 +349,29 @@ describe("room settings", () => {
     rooms.delete(code);
   });
 });
+
+describe("gauntlet snapshot is per-prompt (reconnect stays in sync)", () => {
+  it("roomStateOf.filled reflects the CURRENT prompt, not all-time claims", () => {
+    const { room, seat } = createRoom("Alice");
+    const seat2 = addPlayer(room, "Bob");
+    room.settings.mode = "gauntlet";
+    // seat.filled accumulates across prompts; filledThisPrompt is just this one.
+    seat.filled = new Set(["fr", "de", "it"]);
+    seat.filledThisPrompt = new Set(["it"]);
+    seat2.filled = new Set(["jp", "cn"]);
+    seat2.filledThisPrompt = new Set(["jp"]);
+
+    const snap = roomStateOf(room);
+    expect(snap.filled![seat.id]).toEqual(["it"]);
+    expect(snap.filled![seat2.id]).toEqual(["jp"]);
+    rooms.delete(room.code);
+  });
+
+  it("non-gauntlet modes still snapshot the full claimed set", () => {
+    const { room, seat } = createRoom("Alice");
+    room.settings.mode = "race";
+    seat.filled = new Set(["fr", "de", "it"]);
+    expect(new Set(roomStateOf(room).filled![seat.id])).toEqual(new Set(["fr", "de", "it"]));
+    rooms.delete(room.code);
+  });
+});
