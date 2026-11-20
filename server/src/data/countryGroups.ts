@@ -82,3 +82,117 @@ export const monarchies = [
   "nz", "om", "pg", "qa", "sa", "sb", "se", "sz", "th", "to",
   "tv", "va", "vc",
 ];
+
+// --- Organisations / status (verified 2026) ---
+
+/** NATO member states — all 32, incl. Finland (2023) and Sweden (2024). */
+export const natoMembers = [
+  "al", "be", "bg", "ca", "hr", "cz", "dk", "ee", "fi", "fr",
+  "de", "gr", "hu", "is", "it", "lv", "lt", "lu", "me", "nl",
+  "mk", "no", "pl", "pt", "ro", "sk", "si", "es", "se", "tr",
+  "gb", "us",
+];
+
+/** G20 — the 19 sovereign-country members (the EU and AU blocs are excluded). */
+export const g20Members = [
+  "ar", "au", "br", "ca", "cn", "fr", "de", "in", "id", "it",
+  "jp", "kr", "mx", "ru", "sa", "za", "tr", "gb", "us",
+];
+
+/** States that possess nuclear weapons (the nine; Israel never officially confirms). */
+export const nuclearArmed = ["us", "ru", "cn", "fr", "gb", "in", "pk", "kp", "il"];
+
+/** Countries using the US dollar as official or primary currency. */
+export const usdUsers = ["us", "ec", "sv", "pa", "tl", "mh", "fm", "pw", "zw", "lr"];
+
+// --- Religion ---
+
+/** Countries where Islam is the majority religion (>50%, strict). */
+export const majorityMuslim = [
+  "af", "al", "dz", "az", "bh", "bd", "bn", "bf", "td", "km",
+  "dj", "eg", "gm", "gn", "iq", "ir", "jo", "kz", "xk", "kw",
+  "kg", "lb", "ly", "my", "mv", "ml", "mr", "ma", "ne", "om",
+  "pk", "ps", "qa", "sa", "sn", "sl", "so", "sd", "sy", "tj",
+  "tr", "tm", "tn", "ae", "uz", "ye",
+];
+
+// --- Ocean coastlines (marginal seas counted; see research notes) ---
+
+/** Countries with an Atlantic Ocean coastline (incl. North/Baltic/Caribbean seas, Gulf of Mexico). */
+export const atlanticCoast = [
+  "pt", "es", "fr", "gb", "ie", "is", "no", "se", "fi", "dk",
+  "de", "nl", "be", "ee", "lv", "lt", "pl", "ma", "mr", "sn",
+  "gm", "gw", "gn", "sl", "lr", "ci", "gh", "tg", "bj", "ng",
+  "cm", "gq", "ga", "cg", "cd", "ao", "na", "za", "cv", "st",
+  "ca", "us", "mx", "bz", "gt", "hn", "ni", "cr", "pa", "co",
+  "ve", "gy", "sr", "br", "uy", "ar", "bs", "cu", "jm", "ht",
+  "do", "kn", "ag", "dm", "lc", "vc", "bb", "gd", "tt",
+];
+
+/** Countries with a Pacific Ocean coastline (incl. its marginal seas + Pacific island states). */
+export const pacificCoast = [
+  "ru", "cn", "kp", "kr", "jp", "tw", "ph", "vn", "kh", "th",
+  "my", "sg", "bn", "id", "au", "nz", "pg", "sb", "fj", "vu",
+  "ki", "nr", "tv", "to", "ws", "fm", "mh", "pw", "ca", "us",
+  "mx", "gt", "sv", "hn", "ni", "cr", "pa", "co", "ec", "pe",
+  "cl",
+];
+
+/** Countries with an Indian Ocean coastline (open ocean + Arabian Sea/Bay of Bengal/Red Sea). */
+export const indianOceanCoast = [
+  "za", "mz", "tz", "ke", "so", "dj", "er", "sd", "eg", "sa",
+  "ye", "om", "ae", "qa", "bh", "kw", "iq", "ir", "pk", "in",
+  "lk", "mv", "bd", "mm", "th", "my", "id", "sg", "au", "tl",
+  "mg", "mu", "sc", "km",
+];
+
+// --- Colonial history (commonly-accepted sets of modern sovereign states) ---
+
+/** Former British colonies / protectorates / mandates. */
+export const formerBritishColony = [
+  "us", "ca", "au", "nz", "in", "pk", "bd", "lk", "mm", "my",
+  "sg", "bn", "ng", "gh", "sl", "gm", "ke", "ug", "tz", "zm",
+  "zw", "mw", "bw", "ls", "sz", "za", "sd", "ss", "eg", "iq",
+  "jo", "il", "ps", "kw", "bh", "qa", "ae", "om", "ye", "cy",
+  "mt", "jm", "bs", "bb", "tt", "gy", "bz", "ag", "dm", "gd",
+  "kn", "lc", "vc", "fj", "sb", "tv", "ki", "to", "ws", "mv",
+  "mu", "sc",
+];
+
+/** Former French colonies / protectorates / mandates. */
+export const formerFrenchColony = [
+  "dz", "tn", "ma", "mr", "sn", "ml", "ne", "td", "bf", "bj",
+  "ci", "gn", "tg", "ga", "cg", "cf", "cm", "dj", "km", "mg",
+  "sc", "vn", "la", "kh", "lb", "sy", "ht", "mu", "vu",
+];
+
+// --- National flag features (source-verified 2026) ---
+// A flag feature is either clearly present or not; these are strict sets —
+// composite coats-of-arms count as "has an animal/sun" only when the official
+// national flag bears them (noted during verification).
+
+/** Flag bears a crescent. */
+export const flagHasCrescent = ["tr", "pk", "dz", "tn", "my", "sg", "mr", "az", "mv", "ly", "km", "uz", "tm"];
+
+/** Flag bears at least one star. */
+export const flagHasStar = [
+  "us", "cn", "vn", "tr", "pk", "my", "sg", "cu", "cl", "gh",
+  "so", "br", "au", "nz", "ve", "ma", "kp", "dj", "cv", "mh",
+  "az", "tn", "dz", "mr", "pg", "ws", "hn", "mm", "cm", "lr",
+  "st", "gw", "bf", "cf", "tg", "ao", "mz", "sb", "fm", "tj", "ba",
+];
+
+/** Three equal horizontal bands (plain — no dominating emblem). */
+export const flagThreeHorizontalStripes = ["nl", "ru", "de", "hu", "bg", "lt", "ee", "lu", "ye", "am", "sl", "ga", "at"];
+
+/** Three equal vertical bands (plain — no dominating emblem). */
+export const flagThreeVerticalStripes = ["fr", "it", "ie", "be", "ro", "td", "ml", "gn", "ci", "ng", "pe"];
+
+/** Flag bears a sun (disc or rayed). */
+export const flagHasSun = ["ar", "uy", "jp", "bd", "ne", "kg", "mk", "np", "rw", "kz", "ag", "ph", "tw", "mw", "ki"];
+
+/** Flag depicts an animal (incl. birds, dragons, heraldic beasts). */
+export const flagHasAnimal = [
+  "lk", "me", "al", "eg", "mx", "zm", "ec", "bo", "ug", "pg",
+  "bt", "gt", "dm", "zw", "rs", "md", "fj", "es", "ad", "kz",
+];
