@@ -143,12 +143,20 @@ describe("create + join", () => {
     expect((await err).code).toBe("room_not_found");
   });
 
-  it("join_room on a full (2-player) room emits error_msg", async () => {
-    const { code } = await makeRoom();
+  it("join_room on a full (4-player) room emits error_msg", async () => {
+    const { code } = await makeRoom(); // 2 seats
+    // Fill to MAX_PLAYERS (4): add a 3rd and 4th player.
+    for (const name of ["Third", "Fourth"]) {
+      const p = client();
+      await awaitEvent(p, "connect");
+      p.emit("join_room", { code, playerName: name });
+      await awaitEvent(p, "joined");
+    }
+    // The 5th is turned away.
     const c = client();
     await awaitEvent(c, "connect");
     const err = awaitEvent<any>(c, "error_msg");
-    c.emit("join_room", { code, playerName: "Third" });
+    c.emit("join_room", { code, playerName: "Fifth" });
     expect((await err).code).toBe("room_full");
   });
 
@@ -460,10 +468,17 @@ describe("disconnect + reconnect", () => {
   }, 10000);
 
   it("[anti-cheat] reconnect with an unknown token does not hijack a seat", async () => {
-    const { code } = await makeRoom();
+    const { code } = await makeRoom(); // 2 seats
+    // Fill the room to capacity so a bad-token join can't fall through to a free seat.
+    for (const name of ["Third", "Fourth"]) {
+      const p = client();
+      await awaitEvent(p, "connect");
+      p.emit("join_room", { code, playerName: name });
+      await awaitEvent(p, "joined");
+    }
     const c = client();
     await awaitEvent(c, "connect");
-    // Room is full (2 seats); a bad token must not reattach, and the room is full.
+    // A bad token must not reattach to an existing seat; the room is full.
     const err = awaitEvent<any>(c, "error_msg");
     c.emit("join_room", { code, playerName: "Hacker", reconnectToken: "not-a-real-token" });
     expect((await err).code).toBe("room_full");

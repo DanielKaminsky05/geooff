@@ -14,6 +14,7 @@ import { Server, type Socket } from "socket.io";
 import {
   COUNTDOWN_SECONDS,
   RECONNECT_GRACE_SECONDS,
+  MAX_PLAYERS,
   clampTimeLimit,
   clampTurnSeconds,
   clampLives,
@@ -26,7 +27,7 @@ import {
 import {
   rooms,
   createRoom,
-  addSecondPlayer,
+  addPlayer,
   roomStateOf,
   seatToPublic,
   scoresOf,
@@ -307,7 +308,10 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
    * is removed.
    */
   function leaveRoom(socket: GameSocket, room: Room, seat: Seat): void {
-    if (room.phase === "countdown" || room.phase === "playing") {
+    const live = room.phase === "countdown" || room.phase === "playing";
+    // A duel (2 seats) or a turn-based match forfeits to the remaining player.
+    // A Race with 3+ seats just loses one racer and plays on.
+    if (live && (isTurnBased(room) || room.players.length <= 2)) {
       // Stop the leaver from receiving the old room's game_over.
       socket.leave(room.code);
       seat.connected = false;
@@ -391,10 +395,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
               reconnectToken: seat.reconnectToken,
               state: roomStateOf(room),
             });
-            const other = otherSeat(room, seat);
-            if (other?.socketId) {
-              io.to(other.socketId).emit("opponent_reconnected", { playerId: seat.id });
-            }
+            socket.to(room.code).emit("opponent_reconnected", { playerId: seat.id });
             // last_standing: resume a paused turn clock for the returning player.
             resumeTurnOnReconnect(lsDeps, room, seat);
             broadcastRoomState(room);
@@ -408,7 +409,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           emitError(socket, "not_joinable", "That game can't be joined.");
           return;
         }
-        if (room.players.length >= 2) {
+        if (room.players.length >= MAX_PLAYERS) {
           emitError(socket, "room_full", "That room is already full.");
           return;
         }
@@ -418,7 +419,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           return;
         }
 
-        const seat = addSecondPlayer(room, name);
+        const seat = addPlayer(room, name);
         seat.socketId = socket.id;
         socket.join(room.code);
         socket.emit("joined", {
@@ -528,13 +529,19 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           emitError(socket, "needs_two", "Last Standing needs a second player.");
           return;
         }
+        // Turn-based modes are 2-player for now (round-robin for >2 is Phase 2);
+        // Race supports the full lobby.
+        if (isTurnBased(room) && room.players.length > 2) {
+          emitError(socket, "too_many", "Last Standing and Gauntlet are 2-player for now — use Race for more.");
+          return;
+        }
         // Gauntlet needs a prompt pool (country sets only).
         if (room.settings.mode === "gauntlet" && buildPromptPool(room.settings.categoryId).length === 0) {
           emitError(socket, "no_prompts", "Gauntlet isn't available for this set.");
           return;
         }
         if (!solo && !room.players.every((p) => p.ready)) {
-          emitError(socket, "not_ready", "Both players must be ready.");
+          emitError(socket, "not_ready", "Everyone must be ready.");
           return;
         }
         room.solo = solo;
@@ -576,16 +583,15 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
               isoCode: outcome.iso,
             });
             io.to(room.code).emit("score_update", { scores: scoresOf(room) });
-            const other = otherSeat(room, seat);
-            if (other?.socketId) {
-              io.to(other.socketId).emit("opponent_progress", {
-                playerId: seat.id,
-                isoCode: outcome.iso,
-                // Self-healing: send the FULL named set so a client that missed
-                // an earlier event repairs by replacing rather than appending.
-                filled: [...seat.filled],
-              });
-            }
+            // Broadcast progress to everyone ELSE in the room (race renders every
+            // player's map live, not just one opponent's).
+            socket.to(room.code).emit("opponent_progress", {
+              playerId: seat.id,
+              isoCode: outcome.iso,
+              // Self-healing: send the FULL named set so a client that missed
+              // an earlier event repairs by replacing rather than appending.
+              filled: [...seat.filled],
+            });
             // End early if this player named every item in the set.
             if (seat.filled.size >= totalFor(categoryId)) {
               endGame(room);
@@ -630,7 +636,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           startCountdownAndGame(room);
           return;
         }
-        if (room.players.length === 2 && room.players.every((p) => p.rematchRequested)) {
+        if (room.players.length >= 2 && room.players.every((p) => p.rematchRequested)) {
           resetForRematch(room);
           broadcastRoomState(room);
           io.to(room.code).emit("rematch_start");
@@ -665,21 +671,24 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         // last_standing: if the CURRENT player left, pause their turn clock so
         // no life bleeds while they are inside the reconnect grace window.
         pauseTurnForDisconnect(room, seat);
-        const other = otherSeat(room, seat);
-        if (other?.socketId) {
-          io.to(other.socketId).emit("opponent_disconnected", {
-            playerId: seat.id,
-            graceSeconds,
-          });
-        }
+        // Notify everyone else in the room (any of up to 3 other racers).
+        socket.to(room.code).emit("opponent_disconnected", {
+          playerId: seat.id,
+          graceSeconds,
+        });
         const timer = setTimeout(() => guard("grace", () => {
           room.graceTimers.delete(seat.id);
           if (seat.connected) return; // reconnected in time
           if (room.phase === "playing" || room.phase === "countdown") {
-            // Grace expired mid-match → the present (connected) player wins,
-            // regardless of score. If nobody is present, fall back to score.
-            const present = room.players.find((p) => p.id !== seat.id && p.connected);
-            endGame(room, present?.id);
+            if (!isTurnBased(room) && room.players.length > 2) {
+              // Race with 3+ seats: drop the no-show and keep the race going.
+              handleLeave(socket, room, seat);
+            } else {
+              // Duel / turn-based → the present (connected) player wins,
+              // regardless of score. If nobody is present, fall back to score.
+              const present = room.players.find((p) => p.id !== seat.id && p.connected);
+              endGame(room, present?.id);
+            }
           } else {
             deleteIfAbandoned(room);
           }

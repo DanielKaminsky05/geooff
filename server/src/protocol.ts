@@ -23,6 +23,8 @@
 export const ROOM_CODE_LENGTH = 6;
 export const COUNTDOWN_SECONDS = 3;
 export const RECONNECT_GRACE_SECONDS = 60;
+/** Max seats in a room. Race supports up to this; turn-based modes cap at 2. */
+export const MAX_PLAYERS = 4;
 
 /** Host-configurable time limit, clamped server-side to this range. */
 export const TIME_LIMIT_MIN_SECONDS = 60; // 1 min
@@ -88,7 +90,7 @@ export type CategoryId =
   | "middle-east"
   | "americas"; // more categories later (capitals…)
 
-export type PlayerSlot = "p1" | "p2";
+export type PlayerSlot = "p1" | "p2" | "p3" | "p4";
 
 export type GamePhase = "lobby" | "countdown" | "playing" | "ended";
 
@@ -103,7 +105,7 @@ export type RejectReason =
 /** A player as seen by everyone (no secrets). */
 export interface PlayerPublic {
   id: string; // stable per-seat id
-  slot: PlayerSlot; // p1 = emerald, p2 = amber (theme)
+  slot: PlayerSlot; // p1 emerald, p2 amber, p3 sky, p4 violet (theme)
   name: string;
   connected: boolean;
   ready: boolean;

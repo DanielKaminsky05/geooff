@@ -131,10 +131,19 @@ export function createRoom(hostName: string): { room: Room; seat: Seat } {
   return { room, seat };
 }
 
-export function addSecondPlayer(room: Room, name: string): Seat {
+/** Seat order → theme color. Slots are assigned lowest-free so colors are stable. */
+const SLOTS: PlayerSlot[] = ["p1", "p2", "p3", "p4"];
+
+/**
+ * Seat a new player in the lowest free slot (p1..p4). Caller must ensure the
+ * room isn't already full (MAX_PLAYERS).
+ */
+export function addPlayer(room: Room, name: string): Seat {
+  const taken = new Set(room.players.map((p) => p.slot));
+  const slot = SLOTS.find((s) => !taken.has(s)) ?? "p2";
   const seat: Seat = {
     id: newPlayerId(),
-    slot: "p2",
+    slot,
     name,
     socketId: null,
     connected: true,

@@ -18,7 +18,7 @@ import {
 import {
   generateRoomCode,
   createRoom,
-  addSecondPlayer,
+  addPlayer,
   roomStateOf,
   scoresOf,
   rooms,
@@ -157,7 +157,7 @@ describe("country matching", () => {
 describe("scoring", () => {
   function fresh() {
     const { room } = createRoom("P1");
-    const p2 = addSecondPlayer(room, "P2");
+    const p2 = addPlayer(room, "P2");
     rooms.delete(room.code);
     return { room, p1: room.players[0], p2 };
   }
@@ -342,7 +342,7 @@ describe("room settings", () => {
 
   it("scoresOf reports each seat's score keyed by playerId", () => {
     const room = rooms.get(code)!;
-    const p2 = addSecondPlayer(room, "P2");
+    const p2 = addPlayer(room, "P2");
     room.players[0].score = 3;
     p2.score = 1;
     expect(scoresOf(room)).toEqual({ [room.players[0].id]: 3, [p2.id]: 1 });
