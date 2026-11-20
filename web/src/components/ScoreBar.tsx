@@ -28,6 +28,9 @@ export interface ScoreBarProps {
   promptTotal?: number;
   /** Drop the bar's own border/background (for use inside the floating HUD). */
   bare?: boolean;
+  /** 3-4 player race: show only the center (timer + category); the per-player
+      scores live in the on-map leaderboard, so the two side columns are hidden. */
+  compact?: boolean;
   /** last_standing: fold whose-turn + per-turn clock into the center column. */
   showTurn?: boolean;
   turnName?: string;
@@ -139,6 +142,7 @@ export function ScoreBar({
   promptCounts,
   promptTotal,
   bare,
+  compact,
   showTurn,
   turnName,
   turnColor,
@@ -156,23 +160,25 @@ export function ScoreBar({
 
   return (
     <div
-      className={`flex items-center justify-between gap-3 px-4 py-3 ${
+      className={`flex items-center gap-3 px-4 py-3 ${compact ? "justify-center" : "justify-between"} ${
         bare ? "" : "border-b border-border bg-surface"
       }`}
     >
-      <div className="min-w-0 flex-1">
-        <PlayerScore
-          player={p1}
-          score={p1Score}
-          total={total}
-          colorVar="var(--color-player1)"
-          align="left"
-          gauntlet={gauntlet}
-          lives={livesFor(p1)}
-          maxLives={lastStanding ? maxLives : undefined}
-          hitKey={hitFor(p1)}
-        />
-      </div>
+      {!compact && (
+        <div className="min-w-0 flex-1">
+          <PlayerScore
+            player={p1}
+            score={p1Score}
+            total={total}
+            colorVar="var(--color-player1)"
+            align="left"
+            gauntlet={gauntlet}
+            lives={livesFor(p1)}
+            maxLives={lastStanding ? maxLives : undefined}
+            hitKey={hitFor(p1)}
+          />
+        </div>
+      )}
 
       <div className="flex flex-col items-center px-2">
         {/* Last Standing has no shared round clock — the per-turn timer lives in
@@ -208,21 +214,23 @@ export function ScoreBar({
         )}
       </div>
 
-      <div className="min-w-0 flex-1">
-        {!solo && (
-          <PlayerScore
-            player={p2}
-            score={p2Score}
-            total={total}
-            colorVar="var(--color-player2)"
-            align="right"
-            gauntlet={gauntlet}
-            lives={livesFor(p2)}
-            maxLives={lastStanding ? maxLives : undefined}
-            hitKey={hitFor(p2)}
-          />
-        )}
-      </div>
+      {!compact && (
+        <div className="min-w-0 flex-1">
+          {!solo && (
+            <PlayerScore
+              player={p2}
+              score={p2Score}
+              total={total}
+              colorVar="var(--color-player2)"
+              align="right"
+              gauntlet={gauntlet}
+              lives={livesFor(p2)}
+              maxLives={lastStanding ? maxLives : undefined}
+              hitKey={hitFor(p2)}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

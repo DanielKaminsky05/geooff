@@ -535,9 +535,12 @@ export default function Match() {
   // "Named (N)" button count: solo = just mine; versus = every player's named
   // items summed (race shows all four; turn-based share one pool but summing
   // the per-player sets is equivalent).
-  const namedCount = solo
-    ? myFilled.size
-    : myFilled.size + Object.values(othersFilled).reduce((n, s) => n + s.size, 0);
+  // Whether the named view reveals everyone (shared-pool modes, or race at game
+  // over) vs. just the local player (a live race hides opponents' lists — #8).
+  const revealAllNamed = !solo && (gameOver != null || mode !== "race");
+  const namedCount = revealAllNamed
+    ? myFilled.size + Object.values(othersFilled).reduce((n, s) => n + s.size, 0)
+    : myFilled.size;
 
   // Focus my own map by default; keep a valid focus if the focused seat leaves.
   const focusedId =
@@ -573,7 +576,8 @@ export default function Match() {
       lives={lives}
       maxLives={maxLives}
       hits={hits}
-      bare={lastStanding}
+      bare={lastStanding || multiRace}
+      compact={multiRace}
       showTurn={lastStanding && phase === "playing" && !gameOver}
       turnName={myTurn ? "Your turn" : `${currentPlayer?.name ?? "Opponent"}'s turn`}
       turnColor={myTurn ? myColor : oppColor}
@@ -614,6 +618,12 @@ export default function Match() {
             {gauntlet && phase === "playing" && !gameOver && prompt && (
               <PromptBanner bare label={prompt.label} />
             )}
+          </div>
+        ) : multiRace ? (
+          // 3-4 player race: the timer floats centered over the map (no strip), so
+          // the map is full-height and the leaderboard sits flush at the top-left.
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center">
+            {scoreBar}
           </div>
         ) : (
           scoreBar
@@ -860,7 +870,7 @@ export default function Match() {
             // watched live; other versus modes (last_standing/gauntlet) share one
             // pool and stay revealed. When versus is undefined, NamedCountries
             // falls back to the grouped solo view of your own `filled`.
-            versus={!solo && (gameOver != null || mode !== "race") ? namedPlayers : undefined}
+            versus={revealAllNamed ? namedPlayers : undefined}
             flat={solo && gauntlet}
           />
         </div>
