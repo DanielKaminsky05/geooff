@@ -57,20 +57,29 @@ function ScrollToTop() {
   return null;
 }
 
+/** The route table, without a router or providers (tests mount it in a MemoryRouter). */
+export function AppRoutes() {
+  return (
+    <>
+      <ScrollToTop />
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/" element={<HomeRoute />} />
+          <Route path="/room/:code" element={<LobbyRoute />} />
+          <Route path="/game/:code" element={<Match />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </>
+  );
+}
+
 export default function App() {
   return (
     <SocketProvider>
       <SessionProvider>
         <BrowserRouter>
-          <ScrollToTop />
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
-              <Route path="/" element={<HomeRoute />} />
-              <Route path="/room/:code" element={<LobbyRoute />} />
-              <Route path="/game/:code" element={<Match />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
+          <AppRoutes />
         </BrowserRouter>
       </SessionProvider>
     </SocketProvider>

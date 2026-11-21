@@ -386,7 +386,19 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
       seat.ready = false;
       seat.rematchRequested = false;
       seat.filled = new Set();
+      // Gauntlet/showdown snapshots read the per-prompt board, so clear it too
+      // or the rematch lobby would still show last game's answers.
+      seat.filledThisPrompt = undefined;
     }
+  }
+
+  /** Multiplayer rematch: once every remaining seat (2+) has asked, go to lobby. */
+  function maybeStartRematch(room: Room): void {
+    if (room.phase !== "ended") return;
+    if (room.players.length < 2 || !room.players.every((p) => p.rematchRequested)) return;
+    resetForRematch(room);
+    broadcastRoomState(room);
+    io.to(room.code).emit("rematch_start");
   }
 
   /** Wrap a payload handler so a thrown error can't crash the process. */
@@ -432,6 +444,8 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
       room.hostId = room.players[0].id;
     }
     broadcastRoomState(room);
+    // The leaver may have been the last holdout on a pending rematch.
+    maybeStartRematch(room);
   }
 
   /**
@@ -829,11 +843,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           startCountdownAndGame(room);
           return;
         }
-        if (room.players.length >= 2 && room.players.every((p) => p.rematchRequested)) {
-          resetForRematch(room);
-          broadcastRoomState(room);
-          io.to(room.code).emit("rematch_start");
-        }
+        maybeStartRematch(room);
       }),
     );
 

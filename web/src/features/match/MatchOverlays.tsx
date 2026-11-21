@@ -56,7 +56,9 @@ export function OpponentDisconnectedBanner({
       {players.map(({ player, endsAt }) => (
         <span key={player.id}>
           {label(player)} disconnected — waiting
-          {endsAt != null ? ` ${Math.max(0, Math.ceil((endsAt - now) / 1000))}s` : "…"}
+          {/* round, not ceil: `now` can be up to one tick (250ms) stale when a
+              fresh deadline lands, which ceil would show as 61s of a 60s grace. */}
+          {endsAt != null ? ` ${Math.max(0, Math.round((endsAt - now) / 1000))}s` : "…"}
         </span>
       ))}
     </div>

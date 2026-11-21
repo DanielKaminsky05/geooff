@@ -52,10 +52,17 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            server/package-lock.json
       - run: npm ci
+      # The integration suite runs the real game server in-process, so it needs
+      # the server's dependencies (express, socket.io, ...) too.
+      - run: npm ci
+        working-directory: server
       - run: npm run lint
       - run: npm test
+      - run: npm run test:integration
       - run: npm run build
       - uses: actions/upload-artifact@v4
         with:

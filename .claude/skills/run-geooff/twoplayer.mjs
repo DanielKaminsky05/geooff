@@ -1,89 +1,57 @@
 // Two-player headless smoke test for geooff: two separate Chromium instances
-// play a full match (lobby → countdown → play → refresh/reconnect → game over
-// → rematch → leave → solo). Requires server (:3001) and web (:5173) running.
-// Exit code 1 if any check fails.
-import fs from "node:fs";
-import { chromium } from "playwright";
+// play a full race (lobby → countdown → play → refresh/reconnect → game over
+// → rematch → leave), then both solo entry points. Requires the server and the
+// web dev server running. Exit code 1 if any check fails. ~90s (1-minute round).
+import {
+  APP, check, launch, shot, btn, input, maps, filled, scoreBar, resultHeading,
+  guess, guessOk, waitEnabled, waitFilled, createLobby, joinLobby, emptySeats,
+  pickSetting, until, finish, onError,
+} from "./lib.mjs";
 
-const APP = process.env.APP_URL ?? "http://localhost:5173";
-const SHOTS = (process.env.SHOTS_DIR ?? "./shots").replace(/\/?$/, "/");
-fs.mkdirSync(SHOTS, { recursive: true });
-const results = [];
-const check = (name, ok, extra = "") => {
-  results.push({ name, ok });
-  console.log(`${ok ? "PASS" : "FAIL"}  ${name}${extra ? "  — " + extra : ""}`);
-};
-
-// Two fully separate browser instances = two players.
-const launch = async (label) => {
-  const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
-  const page = await (await browser.newContext({ viewport: { width: 1280, height: 800 } })).newPage();
-  page.errors = [];
-  page.on("console", (m) => m.type() === "error" && page.errors.push(`[${label}] ${m.text()}`));
-  page.on("pageerror", (e) => page.errors.push(`[${label}] ${e.message}`));
-  return { browser, page };
-};
 const A = await launch("Alice");
 const B = await launch("Bob");
 const a = A.page, b = B.page;
-const shot = (p, n) => p.screenshot({ path: `${SHOTS}${n}.png` });
-const maps = (p) => p.locator('[data-testid="world-map"]:visible');
-const filled = (p, idx, iso) =>
-  maps(p).nth(idx).locator(`path[data-iso="${iso}"]`).getAttribute("data-filled");
-const guess = async (p, text) => {
-  const input = p.getByLabel("Country guess");
-  await input.fill(text);
-  await input.press("Enter");
-};
 
 try {
-  // --- Home → create ---
-  await a.goto(APP);
-  await a.getByPlaceholder("Enter a name").fill("Alice");
-  await a.getByRole("button", { name: "Create a game" }).click();
-  await a.waitForURL(/\/room\/[A-Z0-9]{6}$/, { timeout: 10000 });
-  const code = a.url().split("/").pop();
+  // --- Home → create, Bob joins by code ---
+  const code = await createLobby(a, "Alice");
   check("Alice creates a room", true, code);
+  check("Host alone: start is 'Waiting for a player…' and disabled",
+    await btn(a, "Waiting for a player…").isDisabled());
 
-  // --- Bob joins by code ---
-  await b.goto(APP);
-  await b.getByPlaceholder("Enter a name").fill("Bob");
-  await b.getByPlaceholder("ROOM CODE").fill(code);
-  await b.getByRole("button", { name: "Join" }).click();
-  await b.waitForURL(new RegExp(`/room/${code}$`));
-  await a.getByText("Bob").waitFor({ timeout: 5000 });
-  await b.getByText("Alice").waitFor({ timeout: 5000 });
+  await joinLobby(b, "Bob", code);
+  await a.getByText("Bob", { exact: true }).waitFor({ timeout: 5000 });
+  await b.getByText("Alice", { exact: true }).waitFor({ timeout: 5000 });
   check("Both players see each other in lobby", true);
-  check("Bob did NOT get 'room full' (StrictMode fix)", !(await b.getByText(/already full/).isVisible()));
+  check("Lobby shows 4 seats, 2 empty", (await emptySeats(a)) === 2);
+  check("Bob did NOT get 'room full'", !(await b.getByText(/already full/).isVisible()));
 
   // --- Settings + ready + start ---
-  await a.getByRole("button", { name: "1 min" }).click();
-  await b.getByRole("button", { name: "Ready up" }).click();
-  await a.getByRole("button", { name: "Ready up" }).click();
-  await a.getByRole("button", { name: "Start game" }).waitFor({ timeout: 5000 });
+  await pickSetting(a, b, "Race");
+  await pickSetting(a, b, "1 min");
+  check("Guest sees settings read-only",
+    (await b.getByText("Only the host can change settings.").isVisible()) && (await btn(b, "3 min").isDisabled()));
+  await btn(b, "Ready up").click();
+  await btn(a, "Waiting for everyone to ready up…").waitFor({ timeout: 5000 });
+  check("Host start disabled until everyone is ready", await btn(a, "Waiting for everyone to ready up…").isDisabled());
   await shot(a, "1-lobby-alice");
   await shot(b, "1-lobby-bob");
-  check("Guest sees settings read-only", await b.getByText("Only the host can change settings.").isVisible());
-  await a.getByRole("button", { name: "Start game" }).click();
-
+  await btn(a, "Ready up").click();
+  await btn(a, "Start game").click();
   await Promise.all([a.waitForURL(/\/game\//), b.waitForURL(/\/game\//)]);
   await shot(b, "2-countdown-bob");
-  const input = (p) => p.getByLabel("Country guess");
   check("Input disabled during countdown", await input(a).isDisabled());
-  await Promise.all([
-    input(a).waitFor({ state: "visible" }).then(() => a.waitForFunction(() => !document.querySelector('[aria-label="Country guess"]').disabled, null, { timeout: 8000 })),
-    b.waitForFunction(() => !document.querySelector('[aria-label="Country guess"]').disabled, null, { timeout: 8000 }),
-  ]);
+  await Promise.all([waitEnabled(a), waitEnabled(b)]);
   check("Both inputs enabled after 3-2-1", true);
 
   // --- Play ---
-  await guess(a, "france");
-  await a.waitForFunction(() => document.querySelector('[aria-label="Country guess"]').value === "");
+  await guessOk(a, "france");
   check("Correct guess clears input", true);
+  await waitFilled(a, "fr", 3000);
   check("France filled on Alice's own map", (await filled(a, 0, "fr")) === "true");
-  await b.waitForFunction(() => [...document.querySelectorAll('[data-testid="world-map"]')]
-    .some((m) => m.offsetParent && m.querySelector('path[data-iso="fr"][data-filled="true"]')), null, { timeout: 3000 });
-  check("France appears live on Bob's opponent map", (await filled(b, 1, "fr")) === "true" && (await filled(b, 0, "fr")) === "false");
+  await waitFilled(b, "fr", 3000);
+  check("France appears live on Bob's opponent map",
+    (await filled(b, 1, "fr")) === "true" && (await filled(b, 0, "fr")) === "false");
 
   await guess(a, "atlantis");
   await a.getByText("Not a match").waitFor({ timeout: 3000 });
@@ -92,94 +60,102 @@ try {
   await a.getByText("Already named").waitFor({ timeout: 3000 });
   check("Duplicate rejected", true);
 
-  for (const g of ["usa", "Côte d'Ivoire", "japan"]) {
-    await guess(b, g);
-    await b.waitForFunction(() => document.querySelector('[aria-label="Country guess"]').value === "", null, { timeout: 3000 });
-  }
-  check("Bob's aliases accepted (usa, Côte d'Ivoire)", (await filled(b, 0, "us")) === "true" && (await filled(b, 0, "ci")) === "true");
-  await a.waitForTimeout(300);
-  const scoreText = await a.locator("main > div").first().innerText();
+  for (const g of ["usa", "Côte d'Ivoire", "japan"]) await guessOk(b, g);
+  await waitFilled(b, "jp", 3000).catch(() => {}); // the field clears before the map repaints
+  check("Bob's aliases accepted (usa, Côte d'Ivoire)",
+    (await filled(b, 0, "us")) === "true" && (await filled(b, 0, "ci")) === "true");
+  await until(async () => /3\s*\/\s*197/.test(await scoreBar(a).innerText()), 3000);
+  const scoreText = await scoreBar(a).innerText();
   check("Score bar shows 1 vs 3", /1\s*\/\s*197/.test(scoreText) && /3\s*\/\s*197/.test(scoreText), scoreText.replace(/\n/g, " | "));
   check("Unguessed country has no answer tooltip", (await maps(a).nth(0).locator('path[data-iso="de"] title').count()) === 0);
+  check("Opponent's map reveals no names", (await maps(b).nth(1).locator('path[data-iso="fr"] title').count()) === 0);
   await shot(a, "3-playing-alice");
   await shot(b, "3-playing-bob");
 
-  // --- Bob refreshes mid-match (reconnect) ---
+  // --- Bob refreshes mid-match (reconnect token) ---
   await b.reload();
-  await b.waitForFunction(() => [...document.querySelectorAll('[data-testid="world-map"]')]
-    .some((m) => m.offsetParent && m.querySelector('path[data-iso="jp"][data-filled="true"]')), null, { timeout: 8000 });
-  check("Bob's refresh rehydrates his map (reconnect token)", (await filled(b, 0, "jp")) === "true" && (await filled(b, 1, "fr")) === "true");
-  const bScore = await b.locator("main > div").first().innerText();
+  await waitFilled(b, "jp");
+  check("Bob's refresh rehydrates his map (reconnect token)",
+    (await filled(b, 0, "jp")) === "true" && (await filled(b, 1, "fr")) === "true");
+  const bScore = await scoreBar(b).innerText();
   check("Total survives refresh (not '/ 0')", /\/\s*197/.test(bScore), bScore.replace(/\n/g, " | "));
-  await guess(b, "germany");
-  await b.waitForFunction(() => document.querySelector('[aria-label="Country guess"]').value === "", null, { timeout: 3000 });
+  await waitEnabled(b);
+  await guessOk(b, "germany");
+  await waitFilled(b, "de", 3000).catch(() => {});
   check("Bob can still score after refresh", (await filled(b, 0, "de")) === "true");
   await shot(b, "4-after-refresh-bob");
 
+  const secs = async (p) => {
+    const [m, s] = (await p.getByTestId("timer").innerText()).split(":").map(Number);
+    return m * 60 + s;
+  };
+  const t0 = await secs(a);
+  await a.waitForTimeout(2500);
+  const t1 = await secs(a);
+  check("Round timer counts down", t1 <= t0 - 2 && t1 > 0, `${t0}s → ${t1}s`);
+
   // --- Wait for the 1-minute timer to end ---
   console.log("…waiting for round timer to expire (~1 min)");
-  await Promise.all([
-    a.getByRole("heading", { name: /You win|You lose|tie/ }).waitFor({ timeout: 75000 }),
-    b.getByRole("heading", { name: /You win|You lose|tie/ }).waitFor({ timeout: 75000 }),
-  ]);
-  const ra = await a.getByRole("heading", { name: /You win|You lose|tie/ }).innerText();
-  const rb = await b.getByRole("heading", { name: /You win|You lose|tie/ }).innerText();
-  check("Game over: Bob wins 4-1", ra === "You lose" && rb === "You win!", `Alice="${ra}" Bob="${rb}"`);
+  await Promise.all([resultHeading(a).waitFor({ timeout: 75000 }), resultHeading(b).waitFor({ timeout: 75000 })]);
+  const ra = await resultHeading(a).innerText();
+  const rb = await resultHeading(b).innerText();
+  check("Game over: Bob wins", ra === "You lose" && rb === "You win!", `Alice="${ra}" Bob="${rb}"`);
+  const fa = await a.getByTestId("my-final-score").innerText();
+  const fo = await a.getByTestId("opp-final-score").innerText();
+  check("Final scores 1 vs 4", fa === "1" && fo === "4", `Alice=${fa} Bob=${fo}`);
   check("Input disabled after game over", await input(a).isDisabled());
   await shot(a, "5-gameover-alice");
   await shot(b, "5-gameover-bob");
 
-  // --- Rematch: Bob asks first (was a deadlock) ---
-  await b.getByRole("button", { name: "Rematch" }).click();
-  await a.getByRole("button", { name: "Accept rematch" }).waitFor({ timeout: 3000 });
-  check("Alice sees 'Accept rematch' (deadlock fixed)", await a.getByRole("button", { name: "Accept rematch" }).isEnabled());
-  await a.getByRole("button", { name: "Accept rematch" }).click();
+  // --- Rematch: Bob asks first ---
+  await btn(b, "Rematch").click();
+  await btn(b, "Waiting for opponent…").waitFor({ timeout: 3000 });
+  await btn(a, "Accept rematch").waitFor({ timeout: 3000 });
+  check("Alice sees 'Accept rematch'", await btn(a, "Accept rematch").isEnabled());
+  await btn(a, "Accept rematch").click();
   await Promise.all([a.waitForURL(new RegExp(`/room/${code}$`)), b.waitForURL(new RegExp(`/room/${code}$`))]);
-  await a.getByRole("button", { name: "Ready up" }).waitFor({ timeout: 5000 });
-  check("Both back in lobby for rematch, unready", (await b.getByRole("button", { name: "Ready up" }).isVisible()));
+  await btn(a, "Ready up").waitFor({ timeout: 5000 });
+  check("Both back in lobby for rematch, unready", await btn(b, "Ready up").isVisible());
   await shot(a, "6-rematch-lobby-alice");
 
   // --- Leave ---
-  await b.getByRole("button", { name: "Leave" }).click();
+  await btn(b, "Leave").click();
   await b.waitForURL(APP + "/");
-  await a.getByText("Waiting…").waitFor({ timeout: 5000 });
-  check("Bob leaves → Alice sees empty seat", true);
+  await btn(a, "Waiting for a player…").waitFor({ timeout: 5000 });
+  check("Bob leaves → Alice sees 3 empty seats and is alone",
+    (await emptySeats(a)) === 3 && !(await a.getByText("Bob", { exact: true }).isVisible()));
   await shot(a, "7-after-leave-alice");
 
-  // --- Solo: Bob from Home, Alice from her now-empty lobby ---
-  const enabled = (p) => p.waitForFunction(
-    () => document.querySelector('[aria-label="Country guess"]')?.disabled === false, null, { timeout: 8000 });
-  await b.getByRole("button", { name: "Play solo" }).click();
+  // --- Solo from Home: solo setup → Start → play → give up → play again ---
+  await btn(b, "Play solo").click();
+  await b.waitForURL(/\/room\/[A-Z0-9]{6}$/, { timeout: 8000 });
+  await btn(b, "Start").waitFor({ timeout: 5000 });
+  check("Play solo opens a solo setup (no room code / seats)",
+    !(await b.getByText("Room code").isVisible()) && (await emptySeats(b)) === 0);
+  check("Solo modes: Race + Gauntlet only",
+    (await btn(b, "Gauntlet").isVisible()) && !(await btn(b, "Last Standing").isVisible()) && !(await btn(b, "Showdown").isVisible()));
+  await btn(b, "Start").click();
   await b.waitForURL(/\/game\//, { timeout: 8000 });
-  await enabled(b);
-  check("Home → Play solo drops straight into a round", true);
+  await waitEnabled(b);
+  check("Solo Start drops into a round", true);
   check("Solo shows a single map", (await maps(b).count()) === 1);
-  await guess(b, "brazil");
-  await b.waitForFunction(() => document.querySelector('[aria-label="Country guess"]').value === "", null, { timeout: 3000 });
+  await guessOk(b, "brazil");
   await shot(b, "8-solo-playing-bob");
-  await b.getByRole("button", { name: "Give up" }).click();
+  await btn(b, "Give up").click();
   await b.getByRole("heading", { name: "Round over" }).waitFor({ timeout: 3000 });
   const soloScore = await b.getByTestId("my-final-score").innerText();
-  check("Solo results show score out of total", /1\s*\/\s*197/.test(soloScore), soloScore);
+  check("Solo results show score out of total", /1\s*\/\s*197/.test(soloScore), soloScore.replace(/\n/g, " "));
   await shot(b, "9-solo-over-bob");
-  await b.getByRole("button", { name: "Play again" }).click();
-  await enabled(b);
+  await btn(b, "Play again").click();
+  await waitEnabled(b);
   check("Play again restarts the solo round in place",
     /\/game\//.test(b.url()) && (await filled(b, 0, "br")) === "false");
-
-  await a.getByRole("button", { name: "Play solo" }).click();
-  await a.waitForURL(/\/game\//, { timeout: 8000 });
-  await enabled(a);
-  check("Lobby → Play solo works for a host left alone", (await maps(a).count()) === 1);
+  await btn(b, "Give up").click();
+  await btn(b, "Back to home").click();
+  await b.waitForURL(APP + "/");
+  check("Solo 'Back to home' returns to Home", true);
 } catch (e) {
-  check("Unexpected error", false, e.message.split("\n")[0]);
-  await shot(a, "error-alice").catch(() => {});
-  await shot(b, "error-bob").catch(() => {});
+  await onError(e, [A, B]);
 } finally {
-  const errs = [...a.errors, ...b.errors];
-  check("No browser console errors", errs.length === 0, errs.slice(0, 5).join(" ; "));
-  console.log(`\n${results.filter((r) => r.ok).length}/${results.length} checks passed`);
-  await A.browser.close();
-  await B.browser.close();
-  process.exitCode = results.every((r) => r.ok) ? 0 : 1;
+  await finish([A, B]);
 }
