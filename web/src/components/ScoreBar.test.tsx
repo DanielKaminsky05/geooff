@@ -83,6 +83,41 @@ describe("ScoreBar", () => {
     expect(bob.getAttribute("style")).toContain("var(--color-player2)");
   });
 
+  it("colors each column by the player's actual slot (p1 vs p3, not hardcoded p2)", () => {
+    const p3: PlayerPublic = { ...p2, id: "c", slot: "p3", name: "Cara" };
+    render(
+      <ScoreBar
+        p1={p1}
+        p2={p3}
+        scores={{ a: 0, c: 0 }}
+        total={196}
+        endsAt={Date.now() + 60_000}
+        category="Countries"
+      />,
+    );
+    expect(screen.getByText("Cara").getAttribute("style")).toContain("var(--color-player3)");
+  });
+
+  it("shows a paused per-turn clock frozen at pausedMs", () => {
+    render(
+      <ScoreBar
+        p1={p1}
+        p2={p2}
+        scores={{ a: 0, b: 0 }}
+        total={196}
+        endsAt={null}
+        category="Countries"
+        lastStanding
+        showTurn
+        turnName="Bob's turn"
+        turnEndsAt={Date.now() - 60_000}
+        turnPausedMs={7_000}
+      />,
+    );
+    expect(screen.getByTestId("turn-timer")).toHaveTextContent("7");
+    expect(screen.getByText(/paused/i)).toBeInTheDocument();
+  });
+
   it("renders a dash when there is no active round", () => {
     render(
       <ScoreBar

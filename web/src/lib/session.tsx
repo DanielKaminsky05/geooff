@@ -40,6 +40,14 @@ function writeName(name: string) {
   }
 }
 
+// A Record keyed by PlayerSlot so adding a slot to the protocol forces an
+// update here (otherwise a refresh would drop that seat's reconnect token).
+const PLAYER_SLOTS: Record<PlayerSlot, true> = { p1: true, p2: true, p3: true, p4: true };
+
+function isPlayerSlot(value: unknown): value is PlayerSlot {
+  return typeof value === "string" && Object.hasOwn(PLAYER_SLOTS, value);
+}
+
 function readIdentity(): Identity | null {
   try {
     const raw = sessionStorage.getItem(IDENTITY_KEY);
@@ -49,7 +57,7 @@ function readIdentity(): Identity | null {
       !parsed ||
       typeof parsed.playerId !== "string" ||
       typeof parsed.reconnectToken !== "string" ||
-      (parsed.slot !== "p1" && parsed.slot !== "p2")
+      !isPlayerSlot(parsed.slot)
     ) {
       return null;
     }

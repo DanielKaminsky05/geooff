@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { StrictMode } from "react";
+import { StrictMode, act } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
@@ -52,15 +52,21 @@ function roomState(over: Partial<RoomState> = {}): RoomState {
   };
 }
 
-function renderLobby({ strict = false }: { strict?: boolean } = {}) {
+function renderLobby({ strict = false, path = "/room/ROOM01" }: { strict?: boolean; path?: string } = {}) {
   const tree = (
-    <MemoryRouter initialEntries={["/room/ROOM01"]}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/room/:code" element={<Lobby />} />
       </Routes>
     </MemoryRouter>
   );
   return render(strict ? <StrictMode>{tree}</StrictMode> : tree);
+}
+
+async function flushMicrotasks() {
+  await act(async () => {
+    await Promise.resolve();
+  });
 }
 
 function joinEmits() {
@@ -409,12 +415,139 @@ describe("<Lobby>", () => {
     expect(navigate).toHaveBeenCalledWith("/");
   });
 
-  it("'Back to home' on the error screen clears identity", async () => {
+  it("'Back to home' on the error screen clears identity and emits leave_room", async () => {
     const user = userEvent.setup();
     renderLobby();
     socket.__server("error_msg", { code: "room_not_found", message: "No such room." });
     await user.click(screen.getByRole("button", { name: "Back to home" }));
+    expect(socket.__emitted.some((e) => e.event === "leave_room")).toBe(true);
     expect(setIdentitySpy).toHaveBeenCalledWith(null);
     expect(navigate).toHaveBeenCalledWith("/");
+  });
+
+  it.each(["room_not_found", "room_full", "in_progress", "not_joinable"])(
+    "shows the error screen for fatal join error %s before being seated",
+    (errCode) => {
+      identity = null;
+      renderLobby();
+      socket.__server("error_msg", { code: errCode, message: `fatal ${errCode}` });
+      expect(screen.getByText(`fatal ${errCode}`)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Back to home" })).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    "not_ready",
+    "no_prompts",
+    "needs_two",
+    "not_host",
+    "locked",
+    "bad_mode",
+    "bad_category",
+    "internal",
+  ])("shows recoverable error %s inline without replacing the lobby", (errCode) => {
+    renderLobby();
+    socket.__server("room_state", roomState());
+    socket.__server("error_msg", { code: errCode, message: `oops ${errCode}` });
+    expect(screen.getByRole("status")).toHaveTextContent(`oops ${errCode}`);
+    expect(screen.queryByRole("button", { name: "Back to home" })).toBeNull();
+    // The lobby itself is still rendered.
+    expect(screen.getByText("ROOM01")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Leave" })).toBeInTheDocument();
+  });
+
+  it("treats any error as recoverable once seated in this room", () => {
+    identity = null;
+    renderLobby();
+    socket.__server("joined", {
+      playerId: "a",
+      slot: "p1",
+      reconnectToken: "tok",
+      state: roomState(),
+    });
+    socket.__server("error_msg", { code: "room_not_found", message: "Weird glitch." });
+    expect(screen.getByRole("status")).toHaveTextContent("Weird glitch.");
+    expect(screen.queryByRole("button", { name: "Back to home" })).toBeNull();
+  });
+
+  it("auto-dismisses the inline error after a few seconds", () => {
+    vi.useFakeTimers();
+    try {
+      renderLobby();
+      socket.__server("room_state", roomState());
+      socket.__server("error_msg", { code: "not_ready", message: "Not everyone is ready." });
+      expect(screen.getByText("Not everyone is ready.")).toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(10_000);
+      });
+      expect(screen.queryByText("Not everyone is ready.")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders the server's mode as-is (no local fallback)", () => {
+    // Server says showdown even though the category lacks a prompt pool; we
+    // display the server's truth rather than faking "race".
+    renderLobby();
+    socket.__server("room_state", roomState({
+      settings: { categoryId: "us-states", mode: "showdown", timeLimitSeconds: 300, turnSeconds: 15, lives: 5 },
+    }));
+    expect(screen.getByText("Round time")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "5 min" })).toBeNull();
+  });
+
+  it("emits leave_room when the lobby unmounts via other navigation (e.g. browser back)", async () => {
+    const { unmount } = renderLobby();
+    socket.__server("room_state", roomState());
+    expect(socket.__emitted.some((e) => e.event === "leave_room")).toBe(false);
+    unmount();
+    await flushMicrotasks();
+    expect(socket.__emitted.filter((e) => e.event === "leave_room")).toHaveLength(1);
+  });
+
+  it("does not emit leave_room on StrictMode's simulated unmount", async () => {
+    renderLobby({ strict: true });
+    await flushMicrotasks();
+    socket.__server("room_state", roomState());
+    expect(socket.__emitted.some((e) => e.event === "leave_room")).toBe(false);
+  });
+
+  it("does not emit leave_room when unmounting to go into the game", async () => {
+    const { unmount } = renderLobby();
+    socket.__server("room_state", roomState());
+    socket.__server("countdown", { seconds: 3 });
+    unmount();
+    await flushMicrotasks();
+    expect(socket.__emitted.some((e) => e.event === "leave_room")).toBe(false);
+  });
+
+  it("Leave emits leave_room only once (not again on unmount)", async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderLobby();
+    socket.__server("room_state", roomState());
+    await user.click(screen.getByRole("button", { name: "Leave" }));
+    unmount();
+    await flushMicrotasks();
+    expect(socket.__emitted.filter((e) => e.event === "leave_room")).toHaveLength(1);
+  });
+
+  it("normalizes a lowercase room code from the URL", () => {
+    identity = { playerId: "a", slot: "p1", reconnectToken: "tok", roomCode: "ROOM01" };
+    renderLobby({ path: "/room/room01" });
+    expect(socket.__lastEmit("join_room")).toMatchObject({ code: "ROOM01", reconnectToken: "tok" });
+    expect(screen.getByText("ROOM01")).toBeInTheDocument();
+
+    // Seated via the uppercase server code → a later room_full is ignored.
+    socket.__server("joined", {
+      playerId: "a",
+      slot: "p1",
+      reconnectToken: "tok",
+      state: roomState(),
+    });
+    socket.__server("error_msg", { code: "room_full", message: "That room is already full." });
+    expect(screen.queryByText("That room is already full.")).toBeNull();
+    socket.__server("countdown", { seconds: 3 });
+    expect(navigate).toHaveBeenCalledWith("/game/ROOM01");
   });
 });

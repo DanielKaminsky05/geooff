@@ -80,6 +80,8 @@ export interface CreateServerOptions {
   roundMsOverride?: number;
   /** showdown pause between rounds in ms (default 3500). */
   interRoundMsOverride?: number;
+  /** race round duration in ms (default settings.timeLimitSeconds * 1000). */
+  raceMsOverride?: number;
 }
 
 export interface GeofightServer {
@@ -100,6 +102,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
   const turnMsOverride = options.turnMsOverride;
   const roundMsOverride = options.roundMsOverride;
   const interRoundMs = options.interRoundMsOverride ?? 3500;
+  const raceMsOverride = options.raceMsOverride;
 
   /* ---------------------------------------------------------------- */
   /* HTTP (Express)                                                    */
@@ -148,8 +151,23 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
     return room.players.find((p) => p.id !== seat.id);
   }
 
+  /**
+   * Snapshot for one viewer. Showdown snapshots are viewer-specific (only the
+   * viewer's own answers); every other mode is the same for everyone.
+   */
+  function stateFor(room: Room, viewerId: string): ReturnType<typeof roomStateOf> {
+    return roomStateOf(room, { viewerId });
+  }
+
   function broadcastRoomState(room: Room): void {
-    io.to(room.code).emit("room_state", roomStateOf(room));
+    if (!isShowdown(room)) {
+      io.to(room.code).emit("room_state", roomStateOf(room));
+      return;
+    }
+    // Showdown: never broadcast everyone's boards — send each seat its own view.
+    for (const seat of room.players) {
+      if (seat.socketId) io.to(seat.socketId).emit("room_state", stateFor(room, seat.id));
+    }
   }
 
   function emitError(socket: GameSocket, code: string, message: string): void {
@@ -206,7 +224,16 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
       missedByPlayer,
     });
 
-    deleteIfAbandoned(room);
+    if (deleteIfAbandoned(room)) return;
+    // Grace timers were just cleared, so a seat that dropped mid-match would sit
+    // in the ended room forever (blocking every rematch). Drop those seats now;
+    // their client will find the room gone / seat missing and head home.
+    const gone = room.players.filter((p) => !p.connected);
+    if (gone.length === 0) return;
+    room.players = room.players.filter((p) => p.connected);
+    for (const seat of gone) io.to(room.code).emit("player_left", { playerId: seat.id });
+    if (!room.players.some((p) => p.id === room.hostId)) room.hostId = room.players[0].id;
+    broadcastRoomState(room);
   }
 
   /** Dependencies passed to the last_standing turn machinery. */
@@ -215,6 +242,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
     endGame,
     otherSeat,
     turnDurationMs: (room) => turnMsOverride ?? room.settings.turnSeconds * 1000,
+    broadcastState: (room) => broadcastRoomState(room),
   };
 
   /** Dependencies passed to the showdown round machinery. */
@@ -243,7 +271,8 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
       room.countdownTimer = undefined;
 
       room.phase = "playing";
-      room.endsAt = Date.now() + room.settings.timeLimitSeconds * 1000;
+      const raceMs = raceMsOverride ?? room.settings.timeLimitSeconds * 1000;
+      room.endsAt = Date.now() + raceMs;
       io.to(room.code).emit("game_started", {
         categoryId: room.settings.categoryId,
         mode: room.settings.mode,
@@ -264,7 +293,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         broadcastRoomState(room);
         room.roundTimer = setTimeout(
           () => guard("roundTimer", () => endGame(room)),
-          room.settings.timeLimitSeconds * 1000,
+          raceMs,
         );
       }
     }), countdownTickMs);
@@ -344,7 +373,9 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
       seat.socketId = null;
       const other = otherSeat(room, seat);
       endGame(room, other?.id);
-      handleLeave(socket, room, seat);
+      // endGame drops disconnected seats (incl. this one) itself; only tidy up
+      // here if the seat is somehow still listed.
+      if (room.players.includes(seat)) handleLeave(socket, room, seat);
       return;
     }
     // 3+ players: drop the seat and play on. Turn-based / showdown games then
@@ -352,8 +383,9 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
     const turnBasedLive = live && isTurnBased(room);
     const showdownLive = live && isShowdown(room);
     const leftId = seat.id;
+    const leftSlot = seat.slot;
     handleLeave(socket, room, seat);
-    if (turnBasedLive && rooms.has(room.code)) resolveAfterLeave(lsDeps, room, leftId);
+    if (turnBasedLive && rooms.has(room.code)) resolveAfterLeave(lsDeps, room, leftId, leftSlot);
     if (showdownLive && rooms.has(room.code)) resolveShowdownAfterLeave(showdownDeps, room);
   }
 
@@ -377,7 +409,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           playerId: seat.id,
           slot: seat.slot,
           reconnectToken: seat.reconnectToken,
-          state: roomStateOf(room),
+          state: stateFor(room, seat.id),
         });
       }),
     );
@@ -402,9 +434,9 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
             playerId: prev.seat.id,
             slot: prev.seat.slot,
             reconnectToken: prev.seat.reconnectToken,
-            state: roomStateOf(room),
+            state: stateFor(room, prev.seat.id),
           });
-          socket.emit("room_state", roomStateOf(room));
+          socket.emit("room_state", stateFor(room, prev.seat.id));
           return;
         }
         if (prev) {
@@ -428,7 +460,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
               playerId: seat.id,
               slot: seat.slot,
               reconnectToken: seat.reconnectToken,
-              state: roomStateOf(room),
+              state: stateFor(room, seat.id),
             });
             socket.to(room.code).emit("opponent_reconnected", { playerId: seat.id });
             // last_standing: resume a paused turn clock for the returning player.
@@ -461,7 +493,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           playerId: seat.id,
           slot: seat.slot,
           reconnectToken: seat.reconnectToken,
-          state: roomStateOf(room),
+          state: stateFor(room, seat.id),
         });
         socket.to(room.code).emit("player_joined", { player: seatToPublic(seat) });
         broadcastRoomState(room);
@@ -547,6 +579,14 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         }
         if (payload?.lives !== undefined) {
           room.settings.lives = clampLives(payload.lives);
+        }
+        // Gauntlet/Showdown need a prompt pool; a category without one (e.g.
+        // us-states) leaves them unplayable, so fall back to race.
+        if (
+          (room.settings.mode === "gauntlet" || room.settings.mode === "showdown") &&
+          buildPromptPool(room.settings.categoryId).length === 0
+        ) {
+          room.settings.mode = "race";
         }
         broadcastRoomState(room);
       }),
@@ -660,6 +700,12 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
       safe0(socket, () => {
         const ctx = seatForSocket(socket);
         if (!ctx) return;
+        // Giving up is a solo-only action; in multiplayer it would let one
+        // player end everyone's match (leave_room is the forfeit path there).
+        if (!(ctx.room.solo && ctx.room.players.length === 1)) {
+          emitError(socket, "not_solo", "Giving up is only available in solo games.");
+          return;
+        }
         if (ctx.room.phase !== "playing" && ctx.room.phase !== "countdown") return;
         endGame(ctx.room);
       }),
@@ -716,6 +762,8 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         // last_standing: if the CURRENT player left, pause their turn clock so
         // no life bleeds while they are inside the reconnect grace window.
         pauseTurnForDisconnect(room, seat);
+        // Surface connected:false (+ turn.pausedMs if the clock froze).
+        broadcastRoomState(room);
         // Notify everyone else in the room (any of up to 3 other racers).
         socket.to(room.code).emit("opponent_disconnected", {
           playerId: seat.id,
@@ -731,8 +779,11 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
               const turnBasedLive = isTurnBased(room);
               const showdownLive = isShowdown(room);
               const leftId = seat.id;
+              const leftSlot = seat.slot;
               handleLeave(socket, room, seat);
-              if (turnBasedLive && rooms.has(room.code)) resolveAfterLeave(lsDeps, room, leftId);
+              if (turnBasedLive && rooms.has(room.code)) {
+                resolveAfterLeave(lsDeps, room, leftId, leftSlot);
+              }
               if (showdownLive && rooms.has(room.code)) resolveShowdownAfterLeave(showdownDeps, room);
             } else {
               // Duel → the present (connected) player wins, regardless of score.

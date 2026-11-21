@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { createMockSocket, type MockSocket } from "../test/mockSocket";
@@ -111,6 +111,46 @@ describe("<Home>", () => {
     await user.click(screen.getByRole("button", { name: "Join" }));
 
     expect(navigate).toHaveBeenCalledWith("/room/ABC123");
+  });
+
+  it("resets 'Starting…' and shows the message when create_room fails", async () => {
+    const user = userEvent.setup();
+    renderHome();
+    await user.click(screen.getByRole("button", { name: "Start a lobby" }));
+    expect(screen.getByRole("button", { name: "Starting lobby…" })).toBeDisabled();
+
+    socket.__server("error_msg", { code: "internal", message: "Something broke." });
+    expect(screen.getByRole("button", { name: "Start a lobby" })).toBeEnabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Something broke.");
+  });
+
+  it("resets 'Starting…' on a connect_error", async () => {
+    const user = userEvent.setup();
+    renderHome();
+    await user.click(screen.getByRole("button", { name: "Play solo" }));
+    expect(screen.getByRole("button", { name: "Starting…" })).toBeDisabled();
+
+    socket.__server("connect_error", new Error("xhr poll error"));
+    expect(screen.getByRole("button", { name: "Play solo" })).toBeEnabled();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("gives up on 'Starting…' after a timeout if the server never answers", () => {
+    vi.useFakeTimers();
+    try {
+      renderHome();
+      act(() => {
+        screen.getByRole("button", { name: "Start a lobby" }).click();
+      });
+      expect(screen.getByRole("button", { name: "Starting lobby…" })).toBeDisabled();
+      act(() => {
+        vi.advanceTimersByTime(15_000);
+      });
+      expect(screen.getByRole("button", { name: "Start a lobby" })).toBeEnabled();
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("disables the Join button when the code is empty", () => {

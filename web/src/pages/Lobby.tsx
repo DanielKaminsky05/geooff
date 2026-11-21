@@ -47,6 +47,16 @@ const MODES: { value: GameMode; label: string }[] = [
   { value: "showdown", label: "Showdown" },
 ];
 
+/**
+ * Errors that mean we never got a seat in this room — only these replace the
+ * lobby with an error screen, and only before we've been seated. Everything
+ * else (not_ready, not_host, locked, …) is a transient inline notice.
+ */
+const FATAL_JOIN_ERRORS = new Set(["room_not_found", "room_full", "in_progress", "not_joinable"]);
+
+/** How long a recoverable error notice stays on screen. */
+const NOTICE_MS = 4000;
+
 const CATEGORIES: { value: CategoryId; label: string }[] = [
   { value: "countries", label: "Countries" },
   { value: "us-states", label: "US states" },
@@ -58,19 +68,28 @@ const CATEGORIES: { value: CategoryId; label: string }[] = [
 ];
 
 export default function Lobby() {
-  const { code = "" } = useParams();
+  // Server room codes are uppercase; normalize so a hand-typed /room/abc123
+  // still matches the server's code in token/seat comparisons.
+  const code = (useParams().code ?? "").toUpperCase();
   const socket = useSocket();
   const navigate = useNavigate();
   const { playerName, setPlayerName, identity, setIdentity, identityRef } = useSession();
 
   const [room, setRoom] = useState<RoomState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Recoverable error shown inline; `id` restarts the dismiss timer on repeats.
+  const [notice, setNotice] = useState<{ id: number; message: string } | null>(null);
 
   // Refs survive StrictMode's simulated unmount/remount, so they let us emit
   // join_room exactly once per (socket, code) for this Lobby instance, and
   // remember whether the server has already seated us in this room.
   const joinSentRef = useRef<{ socket: unknown; code: string } | null>(null);
   const joinedCodeRef = useRef<string | null>(null);
+  // Set when we leave on purpose (Leave / Back to home) or head into the game,
+  // so the unmount safety net below doesn't emit leave_room a second time or
+  // drop our seat on the way into the match.
+  const exitHandledRef = useRef(false);
+  const mountedRef = useRef(false);
 
   // Join on mount (create flow already joined, but re-emitting with the
   // reconnect token is harmless / supports direct-link joins, reconnects and
@@ -115,10 +134,16 @@ export default function Lobby() {
     function onError(payload: { code: string; message: string }) {
       // A duplicate join (e.g. a stray re-emit) can bounce off our own seat as
       // room_full; that's not fatal once we're already seated in this room.
-      if (payload.code === "room_full" && joinedCodeRef.current === code) return;
-      setError(payload.message);
+      const seated = joinedCodeRef.current === code;
+      if (payload.code === "room_full" && seated) return;
+      if (!seated && FATAL_JOIN_ERRORS.has(payload.code)) {
+        setError(payload.message);
+      } else {
+        setNotice((prev) => ({ id: (prev?.id ?? 0) + 1, message: payload.message }));
+      }
     }
     function goToGame() {
+      exitHandledRef.current = true;
       navigate(`/game/${code}`);
     }
 
@@ -149,9 +174,32 @@ export default function Lobby() {
   // If the room is already playing (e.g. rejoin), jump to the game.
   useEffect(() => {
     if (room && (room.phase === "playing" || room.phase === "countdown")) {
+      exitHandledRef.current = true;
       navigate(`/game/${code}`);
     }
   }, [room, navigate, code]);
+
+  // Auto-dismiss the inline notice.
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), NOTICE_MS);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  // Leaving the lobby any other way (browser back, an in-app link) must free
+  // our seat too, or a ghost player lingers in the room. The check is deferred
+  // a microtask so StrictMode's simulated unmount/remount doesn't trigger it.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      queueMicrotask(() => {
+        if (mountedRef.current || exitHandledRef.current) return;
+        exitHandledRef.current = true;
+        socket.emit("leave_room");
+      });
+    };
+  }, [socket]);
 
   const me = useMemo(
     () => room?.players.find((p) => p.id === identity?.playerId),
@@ -178,7 +226,14 @@ export default function Lobby() {
           ? !solo && promptAvailable
           : true,
   );
-  const effectiveMode = availableModes.some((m) => m.value === mode) ? mode : "race";
+  // Render the server's mode as-is (it resets to Race itself when a category
+  // change makes the mode unavailable). If it's momentarily outside the
+  // available set, still show it — selected but disabled — rather than
+  // pretending it's Race.
+  const modeOptions = availableModes.some((m) => m.value === mode)
+    ? availableModes
+    : [...availableModes, ...MODES.filter((m) => m.value === mode)];
+  const effectiveMode = mode;
   // Last Standing, Gauntlet, and Showdown all use the per-turn/round clock.
   const turnBased =
     effectiveMode === "last_standing" ||
@@ -200,12 +255,8 @@ export default function Lobby() {
   }
 
   function leave() {
+    exitHandledRef.current = true;
     socket.emit("leave_room");
-    setIdentity(null);
-    navigate("/");
-  }
-
-  function backHome() {
     setIdentity(null);
     navigate("/");
   }
@@ -215,7 +266,7 @@ export default function Lobby() {
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
         <p className="text-accent">{error}</p>
         <button
-          onClick={backHome}
+          onClick={leave}
           className="rounded-xl bg-surface-raised px-5 py-3 font-semibold"
         >
           Back to home
@@ -238,6 +289,14 @@ export default function Lobby() {
           Leave
         </button>
       </header>
+
+      <div role="status" aria-live="polite" className="empty:hidden">
+        {notice && (
+          <p className="rounded-xl border border-accent bg-surface px-4 py-3 text-sm text-accent">
+            {notice.message}
+          </p>
+        )}
+      </div>
 
       {/* Room code / share + seats are versus-only; solo has neither. */}
       {!solo && (
@@ -272,16 +331,17 @@ export default function Lobby() {
       <section className="rounded-xl border border-border bg-surface p-5">
         {/* Mode picker — shown when the room has a real choice (solo offers
             Race + Gauntlet; versus adds Last Standing). */}
-        {availableModes.length > 1 && (
+        {modeOptions.length > 1 && (
           <>
             <p className="mb-2 text-sm font-semibold text-muted">Mode</p>
             <div className="mb-4 flex flex-wrap gap-2">
-              {availableModes.map((m) => {
+              {modeOptions.map((m) => {
                 const active = effectiveMode === m.value;
+                const available = availableModes.includes(m);
                 return (
                   <button
                     key={m.value}
-                    disabled={!isHost}
+                    disabled={!isHost || !available}
                     onClick={() => socket.emit("update_settings", { mode: m.value })}
                     className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
                       active

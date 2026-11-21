@@ -42,7 +42,9 @@ function otherSlot(slot: PlayerSlot | undefined): PlayerSlot {
 }
 
 export default function Match() {
-  const { code = "" } = useParams();
+  // The server's codes are uppercase; normalise a hand-typed/lowercase URL so
+  // the stored identity and every emit/navigation use the canonical code.
+  const code = (useParams().code ?? "").toUpperCase();
   const socket = useSocket();
   const navigate = useNavigate();
   const { identity, playerName, identityRef, setIdentity } = useSession();
@@ -63,6 +65,8 @@ export default function Match() {
   // last_standing turn + lives state.
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [turnEndsAt, setTurnEndsAt] = useState<number | null>(null);
+  // Set while the turn clock is frozen (current player disconnected): ms left.
+  const [turnPausedMs, setTurnPausedMs] = useState<number | null>(null);
   const [lives, setLives] = useState<Record<string, number>>({});
   // gauntlet: the active prompt (label only — the valid set is never sent).
   const [prompt, setPrompt] = useState<{ id: string; label: string; total: number } | null>(null);
@@ -105,8 +109,9 @@ export default function Match() {
   const [reconnecting, setReconnecting] = useState(false);
   /** A (re)join failed unrecoverably (room gone, grace expired, …). */
   const [fatalError, setFatalError] = useState<string | null>(null);
-  /** Epoch ms when the opponent's reconnect grace runs out; null = connected. */
-  const [oppGraceEndsAt, setOppGraceEndsAt] = useState<number | null>(null);
+  /** Disconnected opponents → epoch ms their reconnect grace runs out (null =
+   *  unknown, e.g. rehydrated from a snapshot after a refresh). */
+  const [disconnected, setDisconnected] = useState<Record<string, number | null>>({});
 
   const myId = identity?.playerId ?? null;
   const myIdRef = useRef<string | null>(myId);
@@ -175,6 +180,13 @@ export default function Match() {
 
   useEffect(() => {
     function onRoomState(state: RoomState) {
+      // A rematch resets the room to the lobby (room_state, then rematch_start).
+      // Go straight there rather than clearing the game-over overlay, which
+      // would flash the dead board underneath before navigation.
+      if (state.phase === "lobby") {
+        navigate(`/room/${code}`);
+        return;
+      }
       setRoom(state);
       setPhase(state.phase);
       if (state.phase !== "ended") setGameOver(null);
@@ -189,6 +201,10 @@ export default function Match() {
       // between-round pause) so a reconnecting client's round clock is in sync.
       if (state.settings?.mode === "showdown") {
         setRoundEndsAt(state.phase === "playing" ? state.endsAt ?? null : null);
+        // Round number + every player's live round tally (opponents' filled
+        // sets are withheld in showdown, so counts come from roundCounts).
+        if (state.round != null) setRoundNum(state.round);
+        if (state.roundCounts) setScores({ ...state.roundCounts });
       }
       // Rehydrate filled maps from snapshot if present.
       if (state.filled && myIdRef.current) {
@@ -204,7 +220,19 @@ export default function Match() {
       if (state.turn) {
         setCurrentPlayerId(state.turn.currentPlayerId);
         setTurnEndsAt(state.turn.endsAt);
+        setTurnPausedMs(state.turn.pausedMs ?? null);
       }
+      // Rehydrate who's away from the snapshot (a refresh misses the
+      // opponent_disconnected event). Keep a known grace deadline; otherwise
+      // the end time is unknown (null). Anyone connected or gone is dropped.
+      setDisconnected((prev) => {
+        const next: Record<string, number | null> = {};
+        for (const pl of state.players) {
+          if (pl.id === myIdRef.current || pl.connected) continue;
+          next[pl.id] = prev[pl.id] ?? null;
+        }
+        return next;
+      });
       if (state.lives) setLives(state.lives);
       // Rehydrate the gauntlet prompt from the snapshot if present.
       if (state.prompt) setPrompt(state.prompt);
@@ -242,11 +270,23 @@ export default function Match() {
       setScores({});
       setMyRematch(false);
       setOppRematch(false);
-      setOppGraceEndsAt(null);
       setCurrentPlayerId(null);
       setTurnEndsAt(null);
+      setTurnPausedMs(null);
       setLives({});
       setPrompt(null);
+      // Per-game transient UI (matters for solo "Play again", which restarts in
+      // place without remounting this page).
+      setRejectMsg(null);
+      setHits({});
+      setFlash(null);
+      setShaking(false);
+      setBreaking(false);
+      setOppToast(null);
+      setRoundEndsAt(null);
+      setRoundNum(0);
+      setRoundResult(null);
+      setClearSignal((n) => n + 1);
     }
     function onAnswerResult(p: {
       accepted: boolean;
@@ -309,6 +349,7 @@ export default function Match() {
     function onTurnStarted(p: { playerId: string; endsAt: number }) {
       setCurrentPlayerId(p.playerId);
       setTurnEndsAt(p.endsAt);
+      setTurnPausedMs(null);
       setRejectMsg(null);
     }
     function onLifeLost(p: { playerId: string; livesLeft: number }) {
@@ -369,7 +410,7 @@ export default function Match() {
       setEndsAt(null);
       setRoundEndsAt(null);
       setRoundResult(null);
-      setOppGraceEndsAt(null);
+      setDisconnected({});
     }
     function onRematchStart() {
       navigate(`/room/${code}`);
@@ -384,11 +425,16 @@ export default function Match() {
     }
     function onOpponentDisconnected(p: { playerId: string; graceSeconds: number }) {
       if (p.playerId === myIdRef.current) return;
-      setOppGraceEndsAt(Date.now() + p.graceSeconds * 1000);
+      setDisconnected((prev) => ({ ...prev, [p.playerId]: Date.now() + p.graceSeconds * 1000 }));
     }
     function onOpponentReconnected(p: { playerId: string }) {
       if (p.playerId === myIdRef.current) return;
-      setOppGraceEndsAt(null);
+      setDisconnected((prev) => {
+        if (!(p.playerId in prev)) return prev;
+        const next = { ...prev };
+        delete next[p.playerId];
+        return next;
+      });
     }
     function onDisconnect() {
       setReconnecting(true);
@@ -416,7 +462,14 @@ export default function Match() {
         p.code === "room_full"
       ) {
         setReconnecting(false);
-        setFatalError(p.message || "This game is no longer available.");
+        // in_progress / not_joinable on a rejoin mean our seat is gone (e.g. the
+        // game ended and the server dropped it) — the server's wording ("already
+        // in progress") is misleading here.
+        setFatalError(
+          p.code === "room_not_found" || p.code === "room_full"
+            ? p.message || "This game is no longer available."
+            : "This game has ended or is no longer available.",
+        );
       }
     }
 
@@ -475,10 +528,14 @@ export default function Match() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, code]);
 
-  const p1 = room?.players.find((p) => p.slot === "p1");
-  const p2 = room?.players.find((p) => p.slot === "p2");
   const me = room?.players.find((p) => p.id === myId);
   const opponent = room?.players.find((p) => p.id !== myId);
+  // 2-player score bar columns: the two seats in slot order. Seats can be any
+  // pair (e.g. p1 vs p3 after someone left), so don't assume p1/p2.
+  const [leftPlayer, rightPlayer] = useMemo(
+    () => [...(room?.players ?? [])].sort((a, b) => SLOT_ORDER[a.slot] - SLOT_ORDER[b.slot]),
+    [room?.players],
+  );
 
   const solo = room?.solo === true;
   const mySlot = me?.slot ?? identity?.slot;
@@ -524,10 +581,11 @@ export default function Match() {
   // sets reset on each prompt), shown as "named / prompt total" in the score bar.
   const promptCounts = useMemo(() => {
     const m: Record<string, number> = {};
-    if (me) m[me.id] = myFilled.size;
-    if (opponent) m[opponent.id] = oppFilled.size;
+    for (const p of room?.players ?? []) {
+      m[p.id] = (p.id === myId ? myFilled : (othersFilled[p.id] ?? EMPTY)).size;
+    }
     return m;
-  }, [me, opponent, myFilled, oppFilled]);
+  }, [room?.players, myId, myFilled, othersFilled]);
 
   // Versus named list: one column per player in slot order (p1..p4), items in
   // naming order, each coloured by its seat.
@@ -565,6 +623,11 @@ export default function Match() {
 
   const race = !solo && !lastStanding && !showdown; // mode === "race", non-solo
   const playerCount = room?.players.length ?? 1;
+  // Disconnected opponents still seated, in slot order, for the banner.
+  const awayPlayers = [...(room?.players ?? [])]
+    .filter((p) => p.id in disconnected)
+    .sort((a, b) => SLOT_ORDER[a.slot] - SLOT_ORDER[b.slot])
+    .map((player) => ({ player, endsAt: disconnected[player.id] }));
   // 2-player race keeps the classic side-by-side (you | opponent) UI; 3-4 players
   // use the focused-map + leaderboard view.
   const multiRace = race && playerCount > 2;
@@ -667,8 +730,8 @@ export default function Match() {
   // per-turn clock folded into its center column.
   const scoreBar = (
     <ScoreBar
-      p1={solo ? me : p1}
-      p2={solo ? undefined : p2}
+      p1={solo ? me : leftPlayer}
+      p2={solo ? undefined : rightPlayer}
       solo={solo}
       scores={effectiveScores}
       total={total}
@@ -685,8 +748,9 @@ export default function Match() {
       compact={multiRace || multiTurnBased}
       showTurn={lastStanding && phase === "playing" && !gameOver}
       turnName={myTurn ? "Your turn" : `${currentPlayer?.name ?? "Opponent"}'s turn`}
-      turnColor={myTurn ? myColor : oppColor}
+      turnColor={currentPlayer ? slotColor(currentPlayer.slot) : myTurn ? myColor : oppColor}
       turnEndsAt={turnEndsAt}
+      turnPausedMs={turnPausedMs}
     />
   );
 
@@ -881,8 +945,11 @@ export default function Match() {
           </button>
 
           {/* Opponent disconnected banner */}
-          {oppGraceEndsAt != null && !gameOver && (
-            <OpponentDisconnectedBanner endsAt={oppGraceEndsAt} />
+          {awayPlayers.length > 0 && !gameOver && (
+            <OpponentDisconnectedBanner
+              players={awayPlayers}
+              label={(pl) => (playerCount > 2 ? pl.name : "Opponent")}
+            />
           )}
         </section>
 
@@ -1110,19 +1177,30 @@ function MapPane({
   );
 }
 
-function OpponentDisconnectedBanner({ endsAt }: { endsAt: number }) {
+function OpponentDisconnectedBanner({
+  players,
+  label,
+}: {
+  /** Each disconnected opponent with their grace deadline (null = unknown). */
+  players: Array<{ player: PlayerPublic; endsAt: number | null }>;
+  label: (p: PlayerPublic) => string;
+}) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, []);
-  const secs = Math.max(0, Math.ceil((endsAt - now) / 1000));
   return (
     <div
       role="status"
-      className="absolute left-1/2 top-14 z-10 -translate-x-1/2 whitespace-nowrap rounded-lg border border-accent bg-surface px-4 py-2 text-sm font-semibold text-accent shadow"
+      className="absolute left-1/2 top-14 z-10 flex -translate-x-1/2 flex-col items-center gap-0.5 whitespace-nowrap rounded-lg border border-accent bg-surface px-4 py-2 text-sm font-semibold text-accent shadow"
     >
-      Opponent disconnected — waiting {secs}s
+      {players.map(({ player, endsAt }) => (
+        <span key={player.id}>
+          {label(player)} disconnected — waiting
+          {endsAt != null ? ` ${Math.max(0, Math.ceil((endsAt - now) / 1000))}s` : "…"}
+        </span>
+      ))}
     </div>
   );
 }

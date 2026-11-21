@@ -3,6 +3,7 @@ import type { PlayerPublic } from "../lib/protocol";
 import ProgressBar from "./ProgressBar";
 import Hearts from "./Hearts";
 import TurnTimer from "./TurnTimer";
+import { slotColor } from "../lib/colors";
 
 export interface ScoreBarProps {
   p1?: PlayerPublic;
@@ -36,6 +37,8 @@ export interface ScoreBarProps {
   turnName?: string;
   turnColor?: string;
   turnEndsAt?: number | null;
+  /** last_standing: set while the turn clock is frozen (ms left). */
+  turnPausedMs?: number | null;
 }
 
 function fmt(ms: number): string {
@@ -147,6 +150,7 @@ export function ScoreBar({
   turnName,
   turnColor,
   turnEndsAt,
+  turnPausedMs,
 }: ScoreBarProps) {
   const remaining = useCountdown(endsAt);
   const p1Score = p1 ? (scores[p1.id] ?? p1.score ?? 0) : 0;
@@ -171,7 +175,7 @@ export function ScoreBar({
             player={p1}
             score={p1Score}
             total={total}
-            colorVar="var(--color-player1)"
+            colorVar={slotColor(p1?.slot ?? "p1")}
             align="left"
             gauntlet={gauntlet}
             lives={livesFor(p1)}
@@ -210,7 +214,7 @@ export function ScoreBar({
             <span className="text-sm font-semibold" style={{ color: turnColor }}>
               {turnName}
             </span>
-            <TurnTimer endsAt={turnEndsAt ?? null} />
+            <TurnTimer endsAt={turnEndsAt ?? null} pausedMs={turnPausedMs ?? null} />
           </div>
         )}
       </div>
@@ -222,7 +226,7 @@ export function ScoreBar({
               player={p2}
               score={p2Score}
               total={total}
-              colorVar="var(--color-player2)"
+              colorVar={slotColor(p2?.slot ?? "p2")}
               align="right"
               gauntlet={gauntlet}
               lives={livesFor(p2)}

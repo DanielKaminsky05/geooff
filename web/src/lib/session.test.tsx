@@ -99,6 +99,20 @@ describe("SessionProvider identity persistence", () => {
     expect(captured.session!.identityRef.current).toEqual(ID);
   });
 
+  it.each(["p3", "p4"] as const)("restores a %s identity from sessionStorage", (slot) => {
+    const id: Identity = { ...ID, slot };
+    sessionStorage.setItem(IDENTITY_KEY, JSON.stringify(id));
+    renderSession();
+    expect(captured.session!.identity).toEqual(id);
+    expect(captured.session!.identityRef.current).toEqual(id);
+  });
+
+  it("ignores a stored identity with an unknown slot", () => {
+    sessionStorage.setItem(IDENTITY_KEY, JSON.stringify({ ...ID, slot: "p5" }));
+    renderSession();
+    expect(captured.session!.identity).toBeNull();
+  });
+
   it("ignores malformed stored identity", () => {
     sessionStorage.setItem(IDENTITY_KEY, "{not json");
     renderSession();
