@@ -399,6 +399,25 @@ describe("<Match>", () => {
     });
   });
 
+  it("emits exactly one join_room per reconnect", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.emit.mockClear();
+    socket.__emitted.length = 0;
+
+    socket.__server("disconnect", "transport close");
+    socket.__server("connect");
+    expect(socket.__emitted.filter((e) => e.event === "join_room")).toHaveLength(1);
+  });
+
+  it("a rate_limited error is not treated as fatal", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.__server("error_msg", { code: "rate_limited", message: "Slow down" });
+    expect(screen.queryByText("Game unavailable")).toBeNull();
+    expect(screen.getByLabelText("Country guess")).toBeEnabled();
+  });
+
   it("surfaces a fatal error and offers home when the room is gone", async () => {
     const user = userEvent.setup();
     renderMatch();

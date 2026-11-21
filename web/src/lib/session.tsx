@@ -1,12 +1,11 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useContext, useRef, useState } from "react";
 import type { PlayerSlot } from "./protocol";
-import { useSocket } from "./socket";
 
 export interface Identity {
   playerId: string;
   slot: PlayerSlot;
   reconnectToken: string;
-  /** Room this identity belongs to; enables auto-rejoin after reconnects. */
+  /** Room this identity belongs to (scopes which room its token may rejoin). */
   roomCode?: string;
 }
 
@@ -77,14 +76,9 @@ function writeIdentity(id: Identity | null) {
 }
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
-  const socket = useSocket();
   const [playerName, setPlayerNameState] = useState<string>(readName);
   const [identity, setIdentityState] = useState<Identity | null>(readIdentity);
   const identityRef = useRef<Identity | null>(identity);
-  const playerNameRef = useRef(playerName);
-  useEffect(() => {
-    playerNameRef.current = playerName;
-  }, [playerName]);
 
   const setPlayerName = (name: string) => {
     setPlayerNameState(name);
@@ -97,27 +91,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     writeIdentity(id);
   };
 
-  // After socket.io transparently re-establishes the connection (network
-  // blip), the server sees a brand-new socket; re-claim our seat with the
-  // reconnect token. The Manager's "reconnect" only fires on RE-connects.
-  useEffect(() => {
-    // Test doubles may not expose the Manager.
-    const manager = (socket as Partial<typeof socket> | undefined)?.io;
-    if (!manager || typeof manager.on !== "function") return;
-    const onReconnect = () => {
-      const id = identityRef.current;
-      if (!id?.roomCode || !id.reconnectToken) return;
-      socket.emit("join_room", {
-        code: id.roomCode,
-        playerName: playerNameRef.current,
-        reconnectToken: id.reconnectToken,
-      });
-    };
-    manager.on("reconnect", onReconnect);
-    return () => {
-      manager.off("reconnect", onReconnect);
-    };
-  }, [socket]);
+  // NOTE: re-claiming the seat after a socket reconnect is owned by the page
+  // holding it (Lobby / Match re-emit join_room on "connect"), not here — a
+  // global rejoin would duplicate theirs and could re-seat a player who had
+  // already left the room via browser navigation.
 
   return (
     <SessionContext.Provider
