@@ -1,6 +1,7 @@
 import CountryInput from "../../components/CountryInput";
 
-/** The bottom input bar: guess field, floating reject message, solo Give up. */
+/** The bottom input bar: guess field, floating reject message, solo Give up,
+ *  multiplayer Leave. */
 export default function AnswerBar({
   onSubmit,
   clearSignal,
@@ -9,6 +10,7 @@ export default function AnswerBar({
   rejectMsg,
   disabled,
   onGiveUp,
+  onLeave,
 }: {
   /** Return `false` when the guess was not sent (the field keeps its text). */
   onSubmit: (text: string) => boolean | void;
@@ -21,6 +23,8 @@ export default function AnswerBar({
   disabled: boolean;
   /** When set, show a "Give up" button (solo, while playing). */
   onGiveUp?: () => void;
+  /** When set, show a "Leave" button (multiplayer, while the match is live). */
+  onLeave?: () => void;
 }) {
   return (
     <section className="relative border-t border-border bg-surface px-4 pt-3 pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]">
@@ -47,6 +51,14 @@ export default function AnswerBar({
             className="shrink-0 rounded-xl bg-surface-raised px-5 py-4 font-semibold transition hover:brightness-125"
           >
             Give up
+          </button>
+        )}
+        {onLeave && (
+          <button
+            onClick={onLeave}
+            className="shrink-0 rounded-xl bg-surface-raised px-5 py-4 font-semibold transition hover:brightness-125"
+          >
+            Leave
           </button>
         )}
       </div>

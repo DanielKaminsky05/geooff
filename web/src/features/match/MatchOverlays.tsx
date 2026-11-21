@@ -122,3 +122,57 @@ export function FatalErrorOverlay({ message, onHome }: { message: string; onHome
     </div>
   );
 }
+
+/** Confirm leaving a live multiplayer match. In a 1v1 it's a forfeit; with
+ *  3+ players the seat is dropped and the rest play on. */
+export function LeaveConfirmDialog({
+  forfeit,
+  onConfirm,
+  onCancel,
+}: {
+  forfeit: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const stayRef = useRef<HTMLButtonElement>(null);
+  const id = useId();
+  // Focus "Stay" first so a stray Enter can't forfeit the match.
+  useDialogFocus(true, stayRef, onCancel);
+  return (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-desc`}
+      className="fixed inset-0 z-40 flex items-center justify-center bg-background/80 px-6"
+    >
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 text-center shadow-xl">
+        <h2 id={`${id}-title`} className="text-xl font-bold">
+          Leave the match?
+        </h2>
+        <p id={`${id}-desc`} className="mt-2 text-sm text-muted">
+          {forfeit
+            ? "Leaving now forfeits — your opponent wins."
+            : "You'll be removed from the match and the others will play on."}
+        </p>
+        <div className="mt-5 flex flex-col gap-2">
+          <button
+            ref={stayRef}
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl bg-foreground px-6 py-3 font-semibold text-background transition hover:brightness-110"
+          >
+            Stay
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="rounded-xl bg-surface-raised px-6 py-3 font-semibold text-accent transition hover:brightness-125"
+          >
+            {forfeit ? "Forfeit and leave" : "Leave match"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

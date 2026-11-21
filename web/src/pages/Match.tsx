@@ -18,6 +18,7 @@ import GameOverOverlay from "../features/match/GameOverOverlay";
 import { NamedButton, NamedSheet } from "../features/match/NamedSheet";
 import {
   FatalErrorOverlay,
+  LeaveConfirmDialog,
   LifeLossFx,
   MatchToast,
   OpponentDisconnectedBanner,
@@ -46,6 +47,7 @@ export default function Match() {
   const model = useMatchModel(state, identity?.slot);
   const fx = useMatchFx();
   const [showNamed, setShowNamed] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
   useLockedViewport();
 
   /** (Re)claim our seat. Idempotent server-side if we're already seated. */
@@ -137,6 +139,18 @@ export default function Match() {
     navigate("/");
   }
 
+  function leaveMatch() {
+    // Server-side this forfeits a 1v1 or drops our seat in a 3+ game; either
+    // way we're out of the room, so clear the stored identity too.
+    socket.emit("leave_room");
+    goHome();
+  }
+
+  // Multiplayer only (solo has Give up), during countdown or play.
+  const phase = state.room?.phase;
+  const canLeave =
+    !model.solo && !state.gameOver && (phase === "countdown" || phase === "playing");
+
   // Disconnected opponents still seated, in slot order, for the banner.
   const awayPlayers = model.players
     .filter((p) => p.id in state.disconnected)
@@ -171,6 +185,7 @@ export default function Match() {
           rejectMsg={state.rejectMsg}
           disabled={model.inputDisabled}
           onGiveUp={model.solo && model.live ? () => socket.emit("give_up") : undefined}
+          onLeave={canLeave ? () => setConfirmLeave(true) : undefined}
         />
 
         {state.countdown != null && !state.gameOver && <CountdownOverlay countdown={state.countdown} />}
@@ -199,6 +214,14 @@ export default function Match() {
       </div>
 
       <NamedSheet model={model} open={showNamed} onClose={() => setShowNamed(false)} />
+
+      {confirmLeave && canLeave && (
+        <LeaveConfirmDialog
+          forfeit={model.playerCount <= 2}
+          onConfirm={leaveMatch}
+          onCancel={() => setConfirmLeave(false)}
+        />
+      )}
 
       {state.reconnecting && !state.fatalError && <ReconnectingOverlay />}
       {state.fatalError && <FatalErrorOverlay message={state.fatalError} onHome={goHome} />}

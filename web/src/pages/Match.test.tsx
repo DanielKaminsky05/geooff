@@ -987,3 +987,78 @@ describe("<Match> audit fixes", () => {
     expect(screen.queryByText("That game is already in progress.")).toBeNull();
   });
 });
+
+describe("<Match> leave mid-match", () => {
+  beforeEach(() => {
+    socket = createMockSocket();
+    identity = { playerId: "a", slot: "p1", reconnectToken: "tok" };
+    navigate.mockClear();
+    setIdentity.mockClear();
+  });
+
+  const left = () => socket.__emitted.some((e) => e.event === "leave_room");
+
+  it("1v1: Leave asks to confirm a forfeit; Stay keeps you in the match", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", roomState());
+
+    await user.click(screen.getByRole("button", { name: "Leave" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Leave the match?" });
+    expect(within(dialog).getByText(/forfeits/)).toBeInTheDocument();
+    // "Stay" has focus so a stray Enter can't forfeit.
+    expect(within(dialog).getByRole("button", { name: "Stay" })).toHaveFocus();
+
+    await user.click(within(dialog).getByRole("button", { name: "Stay" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(left()).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("Escape cancels the confirm dialog", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", roomState());
+    await user.click(screen.getByRole("button", { name: "Leave" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(left()).toBe(false);
+  });
+
+  it("confirming emits leave_room, clears the identity and goes home", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", roomState());
+    await user.click(screen.getByRole("button", { name: "Leave" }));
+    await user.click(screen.getByRole("button", { name: "Forfeit and leave" }));
+    expect(left()).toBe(true);
+    expect(setIdentity).toHaveBeenCalledWith(null);
+    expect(navigate).toHaveBeenCalledWith("/");
+  });
+
+  it("3+ players: the dialog says the others play on (no forfeit)", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", roomState({ players: THREE }));
+    await user.click(screen.getByRole("button", { name: "Leave" }));
+    expect(screen.getByText(/others will play on/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Leave match" })).toBeInTheDocument();
+  });
+
+  it("is offered during the countdown too", () => {
+    renderMatch();
+    socket.__server("room_state", roomState({ phase: "countdown" }));
+    expect(screen.getByRole("button", { name: "Leave" })).toBeInTheDocument();
+  });
+
+  it("is not offered in solo (Give up instead) or after game over", () => {
+    renderMatch();
+    socket.__server("room_state", roomState({ solo: true, players: [player({ id: "a", slot: "p1", name: "Alice" })] }));
+    expect(screen.queryByRole("button", { name: "Leave" })).toBeNull();
+
+    socket.__server("room_state", roomState());
+    expect(screen.getByRole("button", { name: "Leave" })).toBeInTheDocument();
+    socket.__server("game_over", { winnerId: "a", scores: { a: 1, b: 0 } });
+    expect(screen.queryByRole("button", { name: "Leave" })).toBeNull();
+  });
+});
