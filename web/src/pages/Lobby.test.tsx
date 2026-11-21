@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { StrictMode, act } from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { createMockSocket, type MockSocket } from "../test/mockSocket";
@@ -550,4 +550,47 @@ describe("<Lobby>", () => {
     socket.__server("countdown", { seconds: 3 });
     expect(navigate).toHaveBeenCalledWith("/game/ROOM01");
   });
+
+  it("shows ready state with a word + icon, not colour alone, and marks the active setting", () => {
+    renderLobby();
+    socket.__server("room_state", roomState({
+      players: [
+        player({ id: "a", slot: "p1", name: "Alice", ready: true }),
+        player({ id: "b", slot: "p2", name: "Bob" }),
+      ],
+    }));
+    expect(screen.getByText("Ready", { selector: "span" }).textContent).toBe("✓ Ready");
+    expect(screen.getByText("Not ready", { selector: "span" }).textContent).toBe("○ Not ready");
+    expect(screen.getByRole("button", { name: "Race" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Gauntlet" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("'Copied!' resets after a moment and its timer is cleared on unmount", async () => {
+    vi.useFakeTimers();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    try {
+      const { unmount } = renderLobby();
+      socket.__server("room_state", roomState());
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Share link" }));
+      });
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining("/room/ROOM01"));
+      expect(screen.getByRole("button", { name: "Copied!" })).toBeInTheDocument();
+
+      act(() => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(screen.getByRole("button", { name: "Share link" })).toBeInTheDocument();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Share link" }));
+      });
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
+

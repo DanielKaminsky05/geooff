@@ -71,10 +71,12 @@ describe("matchReducer: single events", () => {
     expect(s.countdown).toBeNull();
   });
 
-  it("answer_result: accepted fills my set + clears; rejected maps the reason", () => {
+  it("answer_result: accepted fills my set + bumps accept (not clear); rejected maps the reason", () => {
     let s = run([{ type: "answer_result", payload: { accepted: true, isoCode: "fr" } }]);
     expect(ids(s, "a")).toEqual(["fr"]);
-    expect(s.clearSignal).toBe(1);
+    expect(s.acceptSignal).toBe(1);
+    // An accept must not hard-clear the field (that would wipe type-ahead).
+    expect(s.clearSignal).toBe(0);
 
     const reasons = [
       ["duplicate", "Already named"],
@@ -168,6 +170,20 @@ describe("matchReducer: single events", () => {
     expect(s.endsAt).toBeNull();
   });
 
+  it("a reject banner never outlives its game (game_over, countdown, game_started)", () => {
+    const rejected = run([
+      { type: "room_state", payload: room() },
+      { type: "answer_result", payload: { accepted: false, reason: "duplicate" } },
+    ]);
+    expect(rejected.rejectMsg).toBe("Already named");
+    expect(matchReducer(rejected, { type: "game_over", payload: { winnerId: null, scores: {} } }).rejectMsg).toBeNull();
+    expect(matchReducer(rejected, { type: "countdown", payload: { seconds: 3 } }).rejectMsg).toBeNull();
+    const limited = matchReducer(rejected, { type: "error_msg", payload: { code: "rate_limited", message: "" } });
+    const started = matchReducer(limited, { type: "game_started", payload: { total: 196, endsAt: 9 } });
+    expect(started.rejectMsg).toBeNull();
+    expect(started.clearSignal).toBe(limited.clearSignal + 1);
+  });
+
   it("rematch_requested distinguishes my echo from someone else's request", () => {
     expect(run([{ type: "rematch_requested", payload: { playerId: "b" } }])).toMatchObject({
       othersRematch: true,
@@ -198,9 +214,26 @@ describe("matchReducer: single events", () => {
     expect(s.disconnected).toEqual({ b: 10_000, c: null });
   });
 
-  it("error_msg: join failures are fatal, anything else (e.g. rate_limited) is not", () => {
+  it("error_msg rate_limited: a transient reject ('Slow down!'), never fatal", () => {
+    const base = run([{ type: "room_state", payload: room() }]);
+    const s = matchReducer(base, {
+      type: "error_msg",
+      payload: { code: "rate_limited", message: "Slow down: too many requests." },
+    });
+    expect(s.fatalError).toBeNull();
+    expect(s.phase).toBe("playing");
+    expect(s.rejectMsg).toBe("Slow down!");
+    expect(s.rejectSignal).toBe(base.rejectSignal + 1);
+    expect(s.acceptSignal).toBe(base.acceptSignal);
+    expect(s.clearSignal).toBe(base.clearSignal);
+    // The next accepted answer clears the banner.
+    const ok = matchReducer(s, { type: "answer_result", payload: { accepted: true, isoCode: "fr" } });
+    expect(ok.rejectMsg).toBeNull();
+  });
+
+  it("error_msg: join failures are fatal, unknown codes are ignored", () => {
     const base = run([{ type: "socket_disconnected" }]);
-    expect(matchReducer(base, { type: "error_msg", payload: { code: "rate_limited", message: "Slow down" } })).toBe(base);
+    expect(matchReducer(base, { type: "error_msg", payload: { code: "bad_payload", message: "Bad" } })).toBe(base);
     expect(
       matchReducer(base, { type: "error_msg", payload: { code: "room_not_found", message: "No room." } }),
     ).toMatchObject({ fatalError: "No room.", reconnecting: false });

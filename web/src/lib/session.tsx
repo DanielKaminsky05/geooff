@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import type { PlayerSlot } from "./protocol";
 
 export interface Identity {
@@ -80,16 +80,23 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [identity, setIdentityState] = useState<Identity | null>(readIdentity);
   const identityRef = useRef<Identity | null>(identity);
 
-  const setPlayerName = (name: string) => {
+  // Stable setters + a memoized value: every consumer (each page, socket
+  // handlers' deps) re-renders only when the name or identity actually change.
+  const setPlayerName = useCallback((name: string) => {
     setPlayerNameState(name);
     writeName(name);
-  };
+  }, []);
 
-  const setIdentity = (id: Identity | null) => {
+  const setIdentity = useCallback((id: Identity | null) => {
     identityRef.current = id;
     setIdentityState(id);
     writeIdentity(id);
-  };
+  }, []);
+
+  const value = useMemo<SessionValue>(
+    () => ({ playerName, setPlayerName, identity, setIdentity, identityRef }),
+    [playerName, setPlayerName, identity, setIdentity],
+  );
 
   // NOTE: re-claiming the seat after a socket reconnect is owned by the page
   // holding it (Lobby / Match re-emit join_room on "connect"), not here — a
@@ -97,11 +104,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   // already left the room via browser navigation.
 
   return (
-    <SessionContext.Provider
-      value={{ playerName, setPlayerName, identity, setIdentity, identityRef }}
-    >
-      {children}
-    </SessionContext.Provider>
+    <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
   );
 }
 

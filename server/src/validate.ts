@@ -166,3 +166,11 @@ export function parseSubmitAnswer(payload: unknown): SubmitAnswerPayload | null 
   if (typeof payload.text !== "string") return null;
   return { text: payload.text };
 }
+
+/**
+ * time_sync's only argument is the socket.io acknowledgement callback. A client
+ * that emits without one (or with some other value) gets `bad_payload`.
+ */
+export function parseAck<A extends unknown[]>(raw: unknown): ((...args: A) => void) | null {
+  return typeof raw === "function" ? (raw as (...args: A) => void) : null;
+}

@@ -67,6 +67,7 @@ import {
 import { buildPromptPool } from "./prompts.js";
 import {
   MAX_ANSWER_LENGTH,
+  parseAck,
   parseCreateRoom,
   parseJoinRoom,
   parseSetReady,
@@ -479,6 +480,18 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
       }
       next();
     });
+
+    // Clock sync: answer with the server's wall clock so the client can
+    // estimate its offset and count down to our epoch-ms deadlines correctly
+    // even when the device clock is skewed. Rate-limited by the generic bucket.
+    socket.on(
+      "time_sync",
+      safe(socket, (raw: unknown) => {
+        const ack = parseAck<[serverNow: number]>(raw);
+        if (!ack) return badPayload(socket);
+        ack(Date.now());
+      }),
+    );
 
     socket.on(
       "create_room",

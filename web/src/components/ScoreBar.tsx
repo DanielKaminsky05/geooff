@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
 import type { PlayerPublic } from "../lib/protocol";
 import ProgressBar from "./ProgressBar";
 import Hearts from "./Hearts";
 import TurnTimer from "./TurnTimer";
 import { slotColor } from "../lib/colors";
+import { useServerCountdown } from "../lib/serverClock";
 
 export interface ScoreBarProps {
   p1?: PlayerPublic;
@@ -46,18 +46,6 @@ function fmt(ms: number): string {
   const m = Math.floor(s / 60);
   const sec = s % 60;
   return `${m}:${sec.toString().padStart(2, "0")}`;
-}
-
-function useCountdown(endsAt: number | null): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (endsAt == null) return;
-    // Resync immediately: `now` may be stale from mount (e.g. during countdown).
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(id);
-  }, [endsAt]);
-  return endsAt == null ? 0 : endsAt - now;
 }
 
 function PlayerScore({
@@ -152,7 +140,7 @@ export function ScoreBar({
   turnEndsAt,
   turnPausedMs,
 }: ScoreBarProps) {
-  const remaining = useCountdown(endsAt);
+  const remaining = useServerCountdown(endsAt);
   const p1Score = p1 ? (scores[p1.id] ?? p1.score ?? 0) : 0;
   const p2Score = p2 ? (scores[p2.id] ?? p2.score ?? 0) : 0;
   const low = endsAt != null && remaining <= 30_000;

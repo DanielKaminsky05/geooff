@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
 import ProgressBar from "../../components/ProgressBar";
 import { slotColor } from "../../lib/colors";
 import type { PlayerPublic } from "../../lib/protocol";
 import { SLOT_ORDER, displayName } from "./matchModel";
 import type { GameOver } from "./matchState";
+import { useDialogFocus } from "./useDialogFocus";
 
 interface Props {
   gameOver: GameOver;
@@ -51,7 +52,11 @@ export default function GameOverOverlay(props: Props) {
                 <span aria-hidden className="h-3 w-3 shrink-0 rounded-full" style={{ background: slotColor(p.slot) }} />
                 <span className="min-w-0 flex-1 truncate text-sm font-semibold">
                   {displayName(p, me?.id ?? null)}
-                  {isWinner && <span className="ml-1 text-xs text-muted">👑</span>}
+                  {isWinner && (
+                    <span className="ml-1 text-xs text-muted" role="img" aria-label="winner">
+                      👑
+                    </span>
+                  )}
                 </span>
                 <span className="shrink-0 text-xl font-bold tabular-nums" style={{ color: slotColor(p.slot) }}>
                   {score}
@@ -120,11 +125,24 @@ function SoloResult({ gameOver, gauntlet, total, me, myRematch, onRematch, onHom
   );
 }
 
+/** The modal card: a dialog titled by the result, with initial focus on the
+ *  first enabled action (Rematch / Play again, else Back to home). */
 function Card({ title, children }: { title: string; children: ReactNode }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useDialogFocus(true, cardRef);
   return (
     <div className="fade-in absolute inset-0 z-20 flex items-center justify-center bg-background/90 px-6">
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 text-center">
-        <h2 className="text-3xl font-bold">{title}</h2>
+      <div
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="w-full max-w-sm rounded-2xl border border-border bg-surface p-8 text-center"
+      >
+        <h2 id={titleId} className="text-3xl font-bold">
+          {title}
+        </h2>
         {children}
       </div>
     </div>
@@ -161,6 +179,7 @@ function PrimaryButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       className="rounded-xl bg-foreground px-6 py-3 font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
@@ -173,6 +192,7 @@ function PrimaryButton({
 function HomeButton({ onClick }: { onClick: () => void }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       className="rounded-xl bg-surface-raised px-6 py-3 font-semibold transition hover:brightness-125"
     >

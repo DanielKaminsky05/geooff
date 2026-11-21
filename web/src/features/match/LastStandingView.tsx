@@ -2,7 +2,6 @@ import { useMemo, type ReactNode } from "react";
 import WorldMap from "../../components/WorldMap";
 import LivesBar, { type LivesBarPlayer } from "../../components/LivesBar";
 import PromptBanner from "../../components/PromptBanner";
-import { slotColor } from "../../lib/colors";
 import { FloatingHud, MatchScoreBar } from "./MatchHud";
 import MapPane from "./MapPane";
 import { displayName, type MatchModel } from "./matchModel";
@@ -22,14 +21,16 @@ export default function LastStandingView({
   model: MatchModel;
   children?: ReactNode;
 }) {
-  const { state, players, myId, maxLives, gauntlet } = model;
+  // `roster` (id/slot/name only) rather than `players`, so a reconnect or score
+  // tick in a room_state doesn't rebuild the lives bar or the shared map colours.
+  const { state, roster, myId, maxLives, gauntlet } = model;
   const { lives, hits, currentPlayerId, filled, prompt } = state;
   const multi = model.playerCount > 2;
 
   // 3-4 players: the two-column ScoreBar can't fit everyone, add a lives bar.
   const livesBarPlayers = useMemo<LivesBarPlayer[]>(() => {
     if (!multi) return [];
-    return players.map((p) => {
+    return roster.map((p) => {
       const lv = lives[p.id] ?? maxLives;
       return {
         id: p.id,
@@ -42,17 +43,16 @@ export default function LastStandingView({
         hitKey: hits[p.id] ?? 0,
       };
     });
-  }, [multi, players, myId, lives, maxLives, currentPlayerId, hits]);
+  }, [multi, roster, myId, lives, maxLives, currentPlayerId, hits]);
 
   // One shared map: colour each claimed item by who took it.
   const claimedColors = useMemo(() => {
     const m = new Map<string, string>();
-    for (const p of players) {
-      const color = slotColor(p.slot);
-      for (const id of filled[p.id] ?? []) m.set(id, color);
+    for (const p of roster) {
+      for (const id of filled[p.id] ?? []) m.set(id, p.color);
     }
     return m;
-  }, [players, filled]);
+  }, [roster, filled]);
 
   return (
     <>

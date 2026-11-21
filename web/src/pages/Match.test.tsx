@@ -974,7 +974,7 @@ describe("<Match> audit fixes", () => {
     socket.__server("connect");
     socket.__server("error_msg", { code: "room_not_found", message: "No room with code ROOM01." });
     expect(screen.queryByText("Reconnecting…")).toBeNull();
-    const alert = screen.getByText("Game unavailable").closest("[role=alert]") as HTMLElement;
+    const alert = screen.getByText("Game unavailable").closest("[role=alertdialog]") as HTMLElement;
     await user.click(within(alert).getByRole("button", { name: "Back to home" }));
     expect(setIdentity).toHaveBeenCalledWith(null);
     expect(navigate).toHaveBeenCalledWith("/");

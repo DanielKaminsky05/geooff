@@ -12,6 +12,7 @@ import { MAX_HTTP_BUFFER_SIZE, type CreateServerOptions } from "../src/index.js"
 import {
   MAX_ANSWER_LENGTH,
   MAX_NAME_LENGTH,
+  parseAck,
   parseCreateRoom,
   parseJoinRoom,
   parseSetReady,
@@ -233,6 +234,44 @@ describe("rate limiting", () => {
     const ended = awaitEvent<any>(a, "game_over");
     a.emit("give_up");
     await ended;
+  });
+});
+
+describe("time_sync", () => {
+  it("parseAck accepts only functions", () => {
+    const fn = () => {};
+    expect(parseAck(fn)).toBe(fn);
+    for (const bad of [undefined, null, 1, "x", {}, []]) expect(parseAck(bad)).toBeNull();
+  });
+
+  it("acks with the server's Date.now()", async () => {
+    await boot();
+    const a = await client();
+    const before = Date.now();
+    const serverNow = await new Promise<number>((resolve) => a.emit("time_sync", resolve));
+    expect(typeof serverNow).toBe("number");
+    expect(serverNow).toBeGreaterThanOrEqual(before);
+    expect(serverNow).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("rejects a time_sync without an ack callback", async () => {
+    await boot();
+    const a = await client();
+    const err = awaitEvent<any>(a, "error_msg");
+    a.emit("time_sync", 123);
+    expect((await err).code).toBe("bad_payload");
+  });
+
+  it("goes through the generic rate-limit bucket", async () => {
+    let clock = 0;
+    await boot({ now: () => clock, rateLimits: { events: { burst: 2, refillPerSec: 1 } } });
+    const a = await client();
+    const errors = collect<any>(a, "error_msg");
+    const acks: number[] = [];
+    for (let i = 0; i < 4; i++) a.emit("time_sync", (t: number) => acks.push(t));
+    await tick();
+    expect(acks).toHaveLength(2);
+    expect(errors.map((e) => e.code)).toEqual(["rate_limited", "rate_limited"]);
   });
 });
 

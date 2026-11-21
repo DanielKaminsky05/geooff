@@ -17,16 +17,17 @@ import type { RoundResult } from "./matchState";
  * `children` are shared on-map extras (named button, away banner).
  */
 export default function ShowdownView({ model, children }: { model: MatchModel; children?: ReactNode }) {
-  const { state, players, myId, maxLives } = model;
+  const { state, roster, myId, maxLives } = model;
   const { lives, hits, scores, prompt, roundEndsAt, roundNum, roundResult } = state;
 
+  // Keyed on `roster` (id/slot/name), not the whole room: an unrelated
+  // room_state (reconnect, ready flag) leaves the status row cached.
   const statusPlayers = useMemo<LivesBarPlayer[]>(() => {
-    if (!state.room) return [];
     const countOf = (id: string) => scores[id] ?? 0;
-    const aliveCounts = players.filter((p) => (lives[p.id] ?? maxLives) > 0).map((p) => countOf(p.id));
+    const aliveCounts = roster.filter((p) => (lives[p.id] ?? maxLives) > 0).map((p) => countOf(p.id));
     const min = aliveCounts.length ? Math.min(...aliveCounts) : 0;
     const allEqual = aliveCounts.length > 0 && Math.max(...aliveCounts) === min;
-    return players.map((p) => {
+    return roster.map((p) => {
       const lv = lives[p.id] ?? maxLives;
       return {
         id: p.id,
@@ -41,7 +42,7 @@ export default function ShowdownView({ model, children }: { model: MatchModel; c
         inDanger: lv > 0 && !allEqual && countOf(p.id) === min,
       };
     });
-  }, [state.room, players, myId, lives, maxLives, hits, scores]);
+  }, [roster, myId, lives, maxLives, hits, scores]);
 
   return (
     <>

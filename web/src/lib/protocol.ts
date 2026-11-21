@@ -178,6 +178,9 @@ export interface ClientToServerEvents {
   give_up: () => void;
   request_rematch: () => void;
   leave_room: () => void;
+  /** Clock sync: the server acks with its current epoch ms, so clients can
+   *  correct for device clock skew when counting down to `endsAt` values. */
+  time_sync: (ack: (serverNow: number) => void) => void;
 }
 
 export interface ServerToClientEvents {

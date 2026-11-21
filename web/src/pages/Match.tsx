@@ -122,11 +122,14 @@ export default function Match() {
     joinIfNeeded();
   }, [socket, code]);
 
-  function handleSubmit(text: string) {
+  function handleSubmit(text: string): boolean {
     // Turn-based modes: a player may type ahead off-turn, but a guess is only
     // sent on their turn (the typed text is kept to fire when it's theirs).
-    if (!model.myTurn) return;
+    // Returns whether a guess was actually sent (CountryInput keeps the text
+    // in the field when it wasn't).
+    if (!model.myTurn) return false;
     socket.emit("submit_answer", { text });
+    return true;
   }
 
   function goHome() {
@@ -163,6 +166,7 @@ export default function Match() {
         <AnswerBar
           onSubmit={handleSubmit}
           clearSignal={state.clearSignal}
+          acceptSignal={state.acceptSignal}
           rejectSignal={state.rejectSignal}
           rejectMsg={state.rejectMsg}
           disabled={model.inputDisabled}

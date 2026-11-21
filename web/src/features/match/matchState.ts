@@ -76,7 +76,11 @@ export interface MatchState {
   disconnected: Record<string, number | null>;
 
   // Answer input feedback.
+  /** Hard reset of the answer field (new game / showdown round). */
   clearSignal: number;
+  /** One bump per accepted answer; never clears text being typed ahead. */
+  acceptSignal: number;
+  /** One bump per rejected answer (incl. a rate-limited, dropped one). */
   rejectSignal: number;
   rejectMsg: string | null;
 }
@@ -111,6 +115,11 @@ export const REJECT_MESSAGES: Partial<Record<RejectReason, string>> = {
   off_prompt: "Doesn't match the prompt",
 };
 
+/** Transient (non-fatal) error_msg codes, shown like an answer rejection. */
+const TRANSIENT_ERROR_MESSAGES: Record<string, string> = {
+  rate_limited: "Slow down!",
+};
+
 /** Join errors that mean this page can't (re)enter the game at all. */
 const FATAL_JOIN_ERRORS = new Set(["room_not_found", "in_progress", "not_joinable", "room_full"]);
 
@@ -140,6 +149,7 @@ export function initialMatchState(myId: string | null): MatchState {
     fatalError: null,
     disconnected: {},
     clearSignal: 0,
+    acceptSignal: 0,
     rejectSignal: 0,
     rejectMsg: null,
   };
@@ -217,6 +227,7 @@ export function matchReducer(s: MatchState, action: MatchAction): MatchState {
         countdown: action.payload.seconds,
         gameOver: null,
         myRematch: false,
+        rejectMsg: null,
       };
     case "game_started":
       // A fresh game (also solo "Play again", which restarts in place).
@@ -259,7 +270,7 @@ export function matchReducer(s: MatchState, action: MatchAction): MatchState {
         mine.add(p.isoCode);
         filled = withMyFilled(s, mine);
       }
-      return { ...s, filled, clearSignal: s.clearSignal + 1, rejectMsg: null };
+      return { ...s, filled, acceptSignal: s.acceptSignal + 1, rejectMsg: null };
     }
     case "score_update":
       return { ...s, scores: action.payload.scores };
@@ -330,6 +341,7 @@ export function matchReducer(s: MatchState, action: MatchAction): MatchState {
         roundEndsAt: null,
         roundResult: null,
         disconnected: {},
+        rejectMsg: null,
       };
     case "rematch_requested": {
       // Broadcast to the whole room: distinguish my request from theirs.
@@ -359,6 +371,10 @@ export function matchReducer(s: MatchState, action: MatchAction): MatchState {
       return { ...s, reconnecting: false };
     case "error_msg": {
       const { code, message } = action.payload;
+      const transient = TRANSIENT_ERROR_MESSAGES[code];
+      // Over the rate limit the server drops the packet (no answer_result), so
+      // treat it as a rejection of the in-flight guess: shake + brief banner.
+      if (transient) return { ...s, rejectSignal: s.rejectSignal + 1, rejectMsg: transient };
       if (!FATAL_JOIN_ERRORS.has(code)) return s;
       // in_progress / not_joinable on a rejoin mean our seat is gone (e.g. the
       // game ended and the server dropped it) — the server's "already in

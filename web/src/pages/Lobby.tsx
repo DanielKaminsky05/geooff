@@ -59,6 +59,9 @@ const FATAL_JOIN_ERRORS = new Set(["room_not_found", "room_full", "in_progress",
 /** How long a recoverable error notice stays on screen. */
 const NOTICE_MS = 4000;
 
+/** How long "Copied!" shows after sharing the room link. */
+const COPIED_MS = 1500;
+
 /** Category picker order (labels come from the shared geo table). */
 const CATEGORY_ORDER: CategoryId[] = [
   "countries",
@@ -234,13 +237,19 @@ export default function Lobby() {
   // All versus modes now seat up to MAX_PLAYERS.
   const seatCount = MAX_PLAYERS;
 
-  const [copied, setCopied] = useState(false);
+  // `copied` is a counter so a repeat copy restarts the reset timer; the
+  // effect's cleanup also clears it if we leave the lobby mid-way.
+  const [copied, setCopied] = useState(0);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(0), COPIED_MS);
+    return () => clearTimeout(t);
+  }, [copied]);
   async function copyCode() {
     try {
       const url = `${window.location.origin}/room/${code}`;
       await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      if (mountedRef.current) setCopied((n) => n + 1);
     } catch {
       /* clipboard may be unavailable */
     }
@@ -298,10 +307,11 @@ export default function Lobby() {
             <div className="mt-1 flex items-center justify-between gap-3">
               <span className="text-3xl font-bold tracking-widest">{code}</span>
               <button
+                type="button"
                 onClick={copyCode}
                 className="rounded-lg bg-surface-raised px-4 py-2 text-sm font-semibold transition hover:brightness-125"
               >
-                {copied ? "Copied!" : "Share link"}
+                <span aria-live="polite">{copied ? "Copied!" : "Share link"}</span>
               </button>
             </div>
           </section>
@@ -333,6 +343,8 @@ export default function Lobby() {
                 return (
                   <button
                     key={m.value}
+                    type="button"
+                    aria-pressed={active}
                     disabled={!isHost || !available}
                     onClick={() => socket.emit("update_settings", { mode: m.value })}
                     className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
@@ -356,6 +368,8 @@ export default function Lobby() {
             return (
               <button
                 key={c.value}
+                type="button"
+                aria-pressed={active}
                 disabled={!isHost}
                 onClick={() => socket.emit("update_settings", { categoryId: c.value })}
                 className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
@@ -381,6 +395,8 @@ export default function Lobby() {
                 return (
                   <button
                     key={s}
+                    type="button"
+                    aria-pressed={active}
                     disabled={!isHost}
                     onClick={() => socket.emit("update_settings", { turnSeconds: s })}
                     className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
@@ -405,6 +421,8 @@ export default function Lobby() {
                     return (
                       <button
                         key={n}
+                        type="button"
+                        aria-pressed={active}
                         disabled={!isHost}
                         onClick={() => socket.emit("update_settings", { lives: n })}
                         className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
@@ -430,6 +448,8 @@ export default function Lobby() {
                 return (
                   <button
                     key={p.seconds}
+                    type="button"
+                    aria-pressed={active}
                     disabled={!isHost}
                     onClick={() => socket.emit("update_settings", { timeLimitSeconds: p.seconds })}
                     className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
@@ -509,7 +529,7 @@ function PlayerCard({
       style={{ borderColor: player ? colorVar : "var(--color-border)" }}
     >
       <div className="flex items-center gap-2">
-        <span className="h-3 w-3 rounded-full" style={{ background: colorVar }} />
+        <span aria-hidden="true" className="h-3 w-3 rounded-full" style={{ background: colorVar }} />
         <span className="text-xs text-muted">{label}</span>
       </div>
       <p className="mt-2 truncate text-lg font-semibold" style={{ color: player ? colorVar : undefined }}>
@@ -517,10 +537,15 @@ function PlayerCard({
       </p>
       <p className="mt-1 text-sm">
         {player ? (
+          // Icon + word (not colour alone) for the ready state.
           player.ready ? (
-            <span className="text-foreground">Ready</span>
+            <span className="font-semibold text-foreground">
+              <span aria-hidden="true">✓ </span>Ready
+            </span>
           ) : (
-            <span className="text-muted">Not ready</span>
+            <span className="text-muted">
+              <span aria-hidden="true">○ </span>Not ready
+            </span>
           )
         ) : (
           <span className="text-muted">Empty seat</span>

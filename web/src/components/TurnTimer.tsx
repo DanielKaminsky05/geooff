@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useServerCountdown } from "../lib/serverClock";
 
 export interface TurnTimerProps {
   /** epoch ms when the current turn's clock expires; null = no active turn. */
@@ -10,24 +10,18 @@ export interface TurnTimerProps {
 
 /**
  * Per-turn countdown for last_standing. Counts down to `endsAt` (the same
- * server-authoritative deadline pattern as the race timer) and shows whole
- * seconds remaining.
+ * server-authoritative deadline pattern as the race timer, measured on the
+ * server-synced clock) and shows whole seconds remaining.
  */
 export function TurnTimer({ endsAt, pausedMs = null }: TurnTimerProps) {
   const paused = pausedMs != null;
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (endsAt == null || paused) return;
-    setNow(Date.now());
-    const id = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(id);
-  }, [endsAt, paused]);
+  const remaining = useServerCountdown(endsAt, paused);
 
   const secs = paused
     ? Math.max(0, Math.ceil(pausedMs / 1000))
     : endsAt == null
       ? null
-      : Math.max(0, Math.ceil((endsAt - now) / 1000));
+      : Math.max(0, Math.ceil(remaining / 1000));
   const low = !paused && secs != null && secs <= 5;
   return (
     <span className="inline-flex items-baseline gap-1">

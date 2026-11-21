@@ -4,13 +4,18 @@ import CountryInput from "../../components/CountryInput";
 export default function AnswerBar({
   onSubmit,
   clearSignal,
+  acceptSignal,
   rejectSignal,
   rejectMsg,
   disabled,
   onGiveUp,
 }: {
-  onSubmit: (text: string) => void;
+  /** Return `false` when the guess was not sent (the field keeps its text). */
+  onSubmit: (text: string) => boolean | void;
+  /** Hard reset of the field (new game / round). */
   clearSignal: number;
+  /** One bump per accepted answer (never clears what's being typed). */
+  acceptSignal?: number;
   rejectSignal: number;
   rejectMsg: string | null;
   disabled: boolean;
@@ -31,6 +36,7 @@ export default function AnswerBar({
           <CountryInput
             onSubmit={onSubmit}
             clearSignal={clearSignal}
+            acceptSignal={acceptSignal}
             rejectSignal={rejectSignal}
             disabled={disabled}
           />

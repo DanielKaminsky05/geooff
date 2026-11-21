@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import type { ClientToServerEvents, ServerToClientEvents } from "./protocol";
+import { attachServerClock } from "./serverClock";
 
 export type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -24,8 +25,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   );
 
   useEffect(() => {
+    // Estimate the server clock offset on every (re)connect so countdowns to
+    // the server's epoch-ms deadlines are right even on a skewed device clock.
+    const detachClock = attachServerClock(socket);
     socket.connect();
     return () => {
+      detachClock();
       socket.disconnect();
     };
   }, [socket]);

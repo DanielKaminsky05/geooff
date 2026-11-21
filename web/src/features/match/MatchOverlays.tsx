@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { PlayerPublic } from "../../lib/protocol";
 import type { Flash, Toast } from "./useMatchFx";
+import { useDialogFocus } from "./useDialogFocus";
 
 /** Life-loss FX: a vignette flash (red mine / green theirs) or, on my final
  *  life, a heart cracking apart before the lose screen. */
@@ -62,12 +63,28 @@ export function OpponentDisconnectedBanner({
   );
 }
 
-/** Own connection lost: keep the user here while socket.io retries. */
+/** Own connection lost: keep the user here while socket.io retries. A modal
+ *  alert dialog (focus parked on it, returned when the connection is back). */
 export function ReconnectingOverlay() {
+  const ref = useRef<HTMLDivElement>(null);
+  const id = useId();
+  useDialogFocus(true, ref);
   return (
-    <div role="alert" className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-background/90">
-      <p className="text-2xl font-bold">Reconnecting…</p>
-      <p className="text-sm text-muted">Hang tight — your seat is saved.</p>
+    <div
+      ref={ref}
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-desc`}
+      tabIndex={-1}
+      className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-background/90 outline-none"
+    >
+      <p id={`${id}-title`} className="text-2xl font-bold">
+        Reconnecting…
+      </p>
+      <p id={`${id}-desc`} className="text-sm text-muted">
+        Hang tight — your seat is saved.
+      </p>
     </div>
   );
 }
@@ -75,14 +92,26 @@ export function ReconnectingOverlay() {
 /** Re-join failed for good (room gone / grace expired): offer a way out
  *  instead of a dead game that drops every input. */
 export function FatalErrorOverlay({ message, onHome }: { message: string; onHome: () => void }) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const id = useId();
+  useDialogFocus(true, buttonRef);
   return (
     <div
-      role="alert"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-desc`}
       className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-background/95 px-6 text-center"
     >
-      <p className="text-2xl font-bold">Game unavailable</p>
-      <p className="max-w-sm text-sm text-muted">{message}</p>
+      <h2 id={`${id}-title`} className="text-2xl font-bold">
+        Game unavailable
+      </h2>
+      <p id={`${id}-desc`} className="max-w-sm text-sm text-muted">
+        {message}
+      </p>
       <button
+        ref={buttonRef}
+        type="button"
         onClick={onHome}
         className="rounded-xl bg-foreground px-6 py-3 font-semibold text-background transition hover:brightness-110"
       >

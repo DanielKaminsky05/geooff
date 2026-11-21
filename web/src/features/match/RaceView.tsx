@@ -4,6 +4,7 @@ import { slotColor } from "../../lib/colors";
 import { MatchScoreBar } from "./MatchHud";
 import MapPane from "./MapPane";
 import { EMPTY, SLOT_ORDER, paneTitle, type MatchModel } from "./matchModel";
+import { useIsDesktop } from "../../hooks/useMediaQuery";
 
 /**
  * Race: solo shows just your map; a 1-v-1 keeps the classic side-by-side maps
@@ -70,10 +71,14 @@ function DuelRace({
   const myTitle = paneTitle("You", me);
   const rivalTitle = paneTitle("Opponent", rival);
 
-  return (
-    <>
-      {/* Desktop: side by side */}
-      <div className="hidden h-full md:grid md:grid-cols-2">
+  // Render only the active layout: mounting both (one hidden via CSS) would
+  // keep three full WorldMaps alive and re-rendering on every guess.
+  const isDesktop = useIsDesktop();
+
+  if (isDesktop) {
+    // Desktop: side by side
+    return (
+      <div className="grid h-full grid-cols-2">
         <MapPane title={myTitle} colorVar={myColor} filled={myFilled} categoryId={categoryId} borderRight />
         <MapPane
           title={rivalTitle}
@@ -83,24 +88,26 @@ function DuelRace({
           revealNames={false}
         />
       </div>
+    );
+  }
 
-      {/* Mobile: single map + toggle */}
-      <div className="flex h-full flex-col md:hidden">
-        <MapPane
-          title={showOpponent ? rivalTitle : myTitle}
-          colorVar={showOpponent ? rivalColor : myColor}
-          filled={showOpponent ? rivalFilled : myFilled}
-          categoryId={categoryId}
-          revealNames={!showOpponent}
-        />
-        <button
-          onClick={onToggle}
-          className="absolute right-3 top-3 rounded-lg bg-surface-raised px-3 py-2 text-sm font-semibold shadow"
-        >
-          {showOpponent ? "View yours" : "View opponent"}
-        </button>
-      </div>
-    </>
+  // Mobile: single map + toggle
+  return (
+    <div className="flex h-full flex-col">
+      <MapPane
+        title={showOpponent ? rivalTitle : myTitle}
+        colorVar={showOpponent ? rivalColor : myColor}
+        filled={showOpponent ? rivalFilled : myFilled}
+        categoryId={categoryId}
+        revealNames={!showOpponent}
+      />
+      <button
+        onClick={onToggle}
+        className="absolute right-3 top-3 rounded-lg bg-surface-raised px-3 py-2 text-sm font-semibold shadow"
+      >
+        {showOpponent ? "View yours" : "View opponent"}
+      </button>
+    </div>
   );
 }
 

@@ -175,12 +175,26 @@ function regionMap(id: RegionId): GeoMap {
   return { viewBox: fitViewBox(locations), locations };
 }
 
-/** Maps keyed by CategoryId. Map-less sets simply have no entry. */
+/**
+ * Maps keyed by CategoryId. Map-less sets simply have no entry. Region maps are
+ * built on first access (a lazy, self-replacing getter): fitting each region's
+ * viewBox walks every one of its SVG paths, and a match only ever shows one.
+ */
 export const maps: Partial<Record<CategoryId, GeoMap>> = {
   countries: countriesMap,
   "us-states": usStatesMap,
-  ...Object.fromEntries(REGION_IDS.map((id) => [id, regionMap(id)])),
 };
+for (const id of REGION_IDS) {
+  Object.defineProperty(maps, id, {
+    enumerable: true,
+    configurable: true,
+    get() {
+      const map = regionMap(id);
+      Object.defineProperty(maps, id, { value: map, enumerable: true, writable: false });
+      return map;
+    },
+  });
+}
 
 /** Resolve a map for a category, falling back to countries. */
 export function mapFor(id: CategoryId): GeoMap {

@@ -15,7 +15,7 @@ export function bySlot(a: PlayerPublic, b: PlayerPublic): number {
 }
 
 /** "You" for the local player, otherwise their name. */
-export function displayName(p: PlayerPublic, myId: string | null): string {
+export function displayName(p: Pick<PlayerPublic, "id" | "name">, myId: string | null): string {
   return p.id === myId ? "You" : p.name;
 }
 
@@ -29,6 +29,18 @@ function otherSlot(slot: PlayerSlot | undefined): PlayerSlot {
   return slot === "p2" ? "p1" : "p2";
 }
 
+/**
+ * The identity part of a seat (who sits where), without the volatile fields
+ * (ready, connected, score). Derived maps that only care about who holds which
+ * colour key off this so a ready toggle or a reconnect doesn't rebuild them.
+ */
+export interface RosterEntry {
+  id: string;
+  slot: PlayerSlot;
+  name: string;
+  color: string;
+}
+
 /** Everything the views derive from the reducer state, computed once per render. */
 export interface MatchModel {
   state: MatchState;
@@ -36,6 +48,11 @@ export interface MatchModel {
   me: PlayerPublic | undefined;
   /** Every seated player, slot order. */
   players: PlayerPublic[];
+  /**
+   * Every seated player's id/slot/name/colour, slot order. Referentially
+   * stable while the seating is unchanged (see RosterEntry).
+   */
+  roster: RosterEntry[];
   /** Every seated player except me, slot order. */
   opponents: PlayerPublic[];
   playerCount: number;
@@ -72,15 +89,62 @@ export function sortedPlayers(players: readonly PlayerPublic[] | undefined): Pla
   return [...(players ?? [])].sort(bySlot);
 }
 
+export function toRoster(players: readonly PlayerPublic[]): RosterEntry[] {
+  return players.map((p) => ({ id: p.id, slot: p.slot, name: p.name, color: slotColor(p.slot) }));
+}
+
+/** Content key for the roster: changes only when a seat's id/slot/name does. */
+function rosterKey(players: readonly PlayerPublic[]): string {
+  return JSON.stringify(players.map((p) => [p.id, p.slot, p.name]));
+}
+
+/** Content key for the full player list (every field the views read). */
+function playersKey(players: readonly PlayerPublic[] | undefined): string {
+  return JSON.stringify(players ?? []);
+}
+
+/** Server scores, falling back to each seat's snapshot score. */
+export function computeEffectiveScores(
+  scores: Record<string, number>,
+  players: readonly PlayerPublic[],
+): Record<string, number> {
+  const out = { ...scores };
+  for (const p of players) {
+    if (out[p.id] == null) out[p.id] = p.score ?? 0;
+  }
+  return out;
+}
+
+// One `filledFor` per `filled` record, so it is a stable memo dependency for
+// as long as the filled sets themselves are unchanged.
+const filledForCache = new WeakMap<Record<string, Set<string>>, (playerId: string) => Set<string>>();
+function filledForOf(filled: Record<string, Set<string>>): (playerId: string) => Set<string> {
+  let fn = filledForCache.get(filled);
+  if (!fn) {
+    fn = (playerId: string) => filled[playerId] ?? EMPTY;
+    filledForCache.set(filled, fn);
+  }
+  return fn;
+}
+
+/** Pre-memoized pieces `useMatchModel` keeps stable across renders. */
+export interface MatchModelMemo {
+  players?: PlayerPublic[];
+  roster?: RosterEntry[];
+  effectiveScores?: Record<string, number>;
+}
+
 export function deriveMatchModel(
   state: MatchState,
   fallbackSlot?: PlayerSlot,
-  players: PlayerPublic[] = sortedPlayers(state.room?.players),
+  memo: MatchModelMemo = {},
 ): MatchModel {
   const { room, myId, filled, gameOver, phase, lives } = state;
+  const players = memo.players ?? sortedPlayers(room?.players);
+  const roster = memo.roster ?? toRoster(players);
   const me = players.find((p) => p.id === myId);
   const opponents = players.filter((p) => p.id !== myId);
-  const filledFor = (playerId: string) => filled[playerId] ?? EMPTY;
+  const filledFor = filledForOf(filled);
   const myFilled = myId ? filledFor(myId) : EMPTY;
 
   const solo = room?.solo === true;
@@ -94,10 +158,7 @@ export function deriveMatchModel(
   const maxLives = room?.settings.lives ?? 0;
   const mySlot = me?.slot ?? fallbackSlot;
 
-  const effectiveScores = { ...state.scores };
-  for (const p of players) {
-    if (effectiveScores[p.id] == null) effectiveScores[p.id] = p.score ?? 0;
-  }
+  const effectiveScores = memo.effectiveScores ?? computeEffectiveScores(state.scores, players);
 
   // In the turn-based modes it's my turn only when the server names me.
   const myTurn = !turnBased || (myId != null && state.currentPlayerId === myId);
@@ -120,6 +181,7 @@ export function deriveMatchModel(
     myId,
     me,
     players,
+    roster,
     opponents,
     playerCount: room?.players.length ?? 1,
     solo,
@@ -148,12 +210,23 @@ export function deriveMatchModel(
 }
 
 export function useMatchModel(state: MatchState, fallbackSlot?: PlayerSlot): MatchModel {
-  // Keep `players` referentially stable across events that don't touch the
-  // roster, so the views' memos (claim colours, leaderboard, …) stay cached.
-  const roster = state.room?.players;
-  const players = useMemo(() => sortedPlayers(roster), [roster]);
+  // Keep `players` referentially stable across events that don't change the
+  // roster's content (a room_state always carries a fresh array), and
+  // `roster` stable across ready/connected/score changes too, so the views'
+  // memos (claim colours, lives bars, leaderboard, …) stay cached.
+  const roomPlayers = state.room?.players;
+  const pKey = playersKey(roomPlayers);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on content
+  const players = useMemo(() => sortedPlayers(roomPlayers), [pKey]);
+  const rKey = rosterKey(players);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on content
+  const roster = useMemo(() => toRoster(players), [rKey]);
+  const effectiveScores = useMemo(
+    () => computeEffectiveScores(state.scores, players),
+    [state.scores, players],
+  );
   return useMemo(
-    () => deriveMatchModel(state, fallbackSlot, players),
-    [state, fallbackSlot, players],
+    () => deriveMatchModel(state, fallbackSlot, { players, roster, effectiveScores }),
+    [state, fallbackSlot, players, roster, effectiveScores],
   );
 }
