@@ -8,7 +8,7 @@ import {
   type Socket,
 } from "./fixtures/serverHarness.js";
 import { rooms, type Room } from "../src/rooms.js";
-import { promptById, validIdsFor, buildPromptPool } from "../src/prompts.js";
+import { promptById, validIdsFor, buildPromptPool, missedAnswersFor } from "../src/prompts.js";
 import { pickPrompt } from "../src/lastStanding.js";
 import { countries } from "../src/data/countries.js";
 
@@ -184,7 +184,7 @@ describe("gauntlet — 3 players", () => {
 
 describe("gauntlet — current player leaves (3 players)", () => {
   beforeEach(async () => {
-    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 60_000 });
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 60_000, revealMsOverride: 20 });
   });
 
   it("play passes to the next seat after the leaver, not back to p1", async () => {
@@ -334,7 +334,7 @@ describe("gauntlet — on/off prompt answers", () => {
 
 describe("gauntlet — timeout cycles the prompt", () => {
   it("a turn timeout costs a life AND cycles in a different prompt", async () => {
-    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 80 });
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 80, revealMsOverride: 20 });
     const ctx = await makeGauntletRoom();
     const { a, b, aId, bId } = ctx;
 
@@ -473,5 +473,88 @@ describe("gauntlet — solo", () => {
     const room = rooms.get(code)!;
     expect(room.phase).toBe("ended");
     expect(room.turnTimer).toBeUndefined();
+  }, 10000);
+});
+
+describe("missedAnswersFor", () => {
+  const sortedMissed = (isos: string[]) =>
+    isos
+      .map((iso) => ({ iso, name: isoToName.get(iso)! }))
+      .sort((x, y) => x.name.localeCompare(y.name));
+
+  it("returns the unclaimed valid answers as {iso, name}, sorted by name", () => {
+    const prompt = buildPromptPool(CATEGORY)[0]!;
+    const valid = [...validIdsFor(prompt, CATEGORY)];
+    expect(valid.length).toBeGreaterThan(1);
+
+    // Nothing claimed → every valid answer is missed.
+    expect(missedAnswersFor(prompt, CATEGORY, new Set())).toEqual(sortedMissed(valid));
+    // Everything claimed → nothing missed (a sweep).
+    expect(missedAnswersFor(prompt, CATEGORY, new Set(valid))).toEqual([]);
+    // All but one claimed → exactly that one remains.
+    const [first, ...rest] = valid;
+    expect(missedAnswersFor(prompt, CATEGORY, new Set(rest))).toEqual([
+      { iso: first, name: isoToName.get(first)! },
+    ]);
+  });
+});
+
+describe("gauntlet — end-of-prompt reveal", () => {
+  it("emits prompt_revealed with the unnamed answers when a prompt is retired", async () => {
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 80, revealMsOverride: 20 });
+    const ctx = await makeGauntletRoom();
+    const { a, b } = ctx;
+
+    a.emit("set_ready", { ready: true });
+    b.emit("set_ready", { ready: true });
+    await awaitEvent(a, "player_ready");
+
+    const firstPrompt = awaitEvent<any>(a, "prompt_changed", 8000);
+    const revealed = awaitEvent<any>(a, "prompt_revealed", 8000);
+    a.emit("start_game");
+    const p1 = await firstPrompt;
+
+    // A never answers → A's clock runs out → the prompt is retired + revealed.
+    const rev = await revealed;
+    expect(rev.id).toBe(p1.id);
+    expect(rev.swept).toBe(false);
+    // Nobody named anything, so every valid answer is on the missed list.
+    const expected = [...validIdsFor(promptById(p1.id)!, CATEGORY)]
+      .map((iso) => ({ iso, name: isoToName.get(iso)! }))
+      .sort((x, y) => x.name.localeCompare(y.name));
+    expect(rev.missed).toEqual(expected);
+  }, 10000);
+});
+
+describe("gauntlet — skip the reveal", () => {
+  it("advances early once every player votes to skip", async () => {
+    // Long reveal pause so only a unanimous skip (not the timer) can advance it.
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 80, revealMsOverride: 60_000 });
+    const ctx = await makeGauntletRoom();
+    const { a, b } = ctx;
+
+    a.emit("set_ready", { ready: true });
+    b.emit("set_ready", { ready: true });
+    await awaitEvent(a, "player_ready");
+
+    const firstPrompt = awaitEvent<any>(a, "prompt_changed", 8000);
+    const revealed = awaitEvent<any>(a, "prompt_revealed", 8000);
+    a.emit("start_game");
+    const p1 = await firstPrompt;
+    await revealed; // A times out → the reveal pause begins.
+    expect(rooms.get(ctx.code)!.revealEndsAt).toBeDefined();
+
+    // Both players are alive + connected, so a skip needs 2 votes. One isn't enough.
+    const skip1 = awaitEvent<any>(a, "reveal_skip", 8000);
+    a.emit("skip_reveal");
+    expect(await skip1).toEqual({ count: 1, needed: 2 });
+    expect(rooms.get(ctx.code)!.revealEndsAt).toBeDefined();
+
+    // The second vote advances NOW — a fresh prompt, long before the 60s timer.
+    const nextPrompt = awaitEvent<any>(a, "prompt_changed", 8000);
+    b.emit("skip_reveal");
+    const p2 = await nextPrompt;
+    expect(p2.id).not.toBe(p1.id);
+    expect(rooms.get(ctx.code)!.revealEndsAt).toBeUndefined();
   }, 10000);
 });

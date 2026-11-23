@@ -33,8 +33,10 @@ import {
   buildPromptPool,
   promptById,
   validIdsFor,
+  missedAnswersFor,
   type Prompt,
 } from "./prompts.js";
+import { beginReveal } from "./reveal.js";
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 
@@ -50,6 +52,8 @@ export interface LastStandingDeps {
   otherSeat: (room: Room, seat: Seat) => Seat | undefined;
   /** ms for a turn timeout; tests inject a tiny value, prod uses turnSeconds. */
   turnDurationMs: (room: Room) => number;
+  /** ms the end-of-prompt reveal pause holds before auto-advancing. */
+  revealMs: number;
   /** Broadcast a fresh room_state snapshot (e.g. after a turn starts paused). */
   broadcastState?: (room: Room) => void;
 }
@@ -167,10 +171,40 @@ function setPrompt(deps: LastStandingDeps, room: Room, prompt: Prompt): void {
   deps.io.to(room.code).emit("prompt_changed", { id: prompt.id, label: prompt.label, total });
 }
 
-/** Cycle to a fresh prompt (different id when possible), resetting its pool. */
-function cyclePrompt(deps: LastStandingDeps, room: Room): void {
+/** Pick a fresh prompt (different id when possible) and announce it. */
+function advancePrompt(deps: LastStandingDeps, room: Room): void {
   const next = pickPrompt(room, room.currentPromptId);
   if (next) setPrompt(deps, room, next);
+}
+
+/**
+ * Retire the current prompt: announce what was left on the board and HOLD the
+ * game on the reveal for a few seconds (the reveal pause), then run `advance`
+ * (which picks the next prompt and resumes play). The pause ends early if every
+ * connected, in-game player votes to skip (see reveal.ts). Safe to reveal the
+ * missed answers here — the prompt is retired, so they can't be scored.
+ *
+ * If there's no active prompt, just advance (nothing to reveal).
+ */
+function revealThenAdvance(deps: LastStandingDeps, room: Room, advance: () => void): void {
+  const prompt =
+    room.currentPromptId !== undefined ? promptById(room.currentPromptId) : undefined;
+  if (!prompt) {
+    advance();
+    return;
+  }
+  const claimed = room.claimedThisPrompt ?? new Set<string>();
+  const missed = missedAnswersFor(prompt, room.settings.categoryId, claimed);
+  beginReveal(room, deps.revealMs, advance);
+  deps.io.to(room.code).emit("prompt_revealed", {
+    id: prompt.id,
+    label: prompt.label,
+    missed,
+    swept: missed.length === 0,
+    endsAt: room.revealEndsAt!,
+  });
+  // Surface the pause (revealEndsAt) so a reconnecting client rehydrates it.
+  deps.broadcastState?.(room);
 }
 
 /**
@@ -262,10 +296,16 @@ function onTurnTimeout(deps: LastStandingDeps, room: Room): void {
     }
     // 3+ players: eliminated, but the game goes on with the survivors.
   }
-  // Gauntlet: a timeout means "can't answer" — cycle in a fresh prompt (new id,
-  // reset claimed pool) before the next (living) player's turn begins.
-  if (isGauntlet(room)) cyclePrompt(deps, room);
-  passTurn(deps, room);
+  // Gauntlet: a timeout means "can't answer" — reveal what was missed, pause,
+  // then cycle in a fresh prompt before the next (living) player's turn begins.
+  if (isGauntlet(room)) {
+    revealThenAdvance(deps, room, () => {
+      advancePrompt(deps, room);
+      passTurn(deps, room);
+    });
+  } else {
+    passTurn(deps, room);
+  }
 }
 
 /**
@@ -406,12 +446,16 @@ export function handleGauntletSubmit(
     filled: [...mineThisPrompt],
   });
 
-  // Prompt exhausted (every valid answer named) → cycle a fresh prompt, NO life
-  // lost, then pass the turn.
+  // Prompt exhausted (every valid answer named) → reveal (a clean sweep), pause,
+  // then a fresh prompt + pass the turn. NO life lost. Otherwise just pass.
   if (claimedThisPrompt.size >= validIds.size) {
-    cyclePrompt(deps, room);
+    revealThenAdvance(deps, room, () => {
+      advancePrompt(deps, room);
+      passTurn(deps, room);
+    });
+  } else {
+    passTurn(deps, room);
   }
-  passTurn(deps, room);
 }
 
 /** Reason for an answer that didn't resolve to any set item (empty vs wrong). */
@@ -471,8 +515,15 @@ export function resolveAfterLeave(
     return;
   }
   if (room.currentPlayerId === leftId) {
-    if (isGauntlet(room)) cyclePrompt(deps, room);
     // Resume from the leaver's slot so play goes to the seat after them.
-    armTurn(deps, room, nextPlayerAfterSlot(room, leftSlot) ?? nextPlayerId(room));
+    const resume = () => armTurn(deps, room, nextPlayerAfterSlot(room, leftSlot) ?? nextPlayerId(room));
+    if (isGauntlet(room)) {
+      revealThenAdvance(deps, room, () => {
+        advancePrompt(deps, room);
+        resume();
+      });
+    } else {
+      resume();
+    }
   }
 }

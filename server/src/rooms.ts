@@ -82,6 +82,16 @@ export interface Room {
   /* ---- showdown runtime (additive) ---- */
   /** current round number (1-based) in showdown. */
   round?: number;
+
+  /* ---- reveal pause (gauntlet + showdown, between prompts/rounds) ---- */
+  /** epoch ms when the reveal pause auto-advances. */
+  revealEndsAt?: number;
+  /** handle for the reveal-pause timer. */
+  revealTimer?: ReturnType<typeof setTimeout>;
+  /** player ids who voted to skip the current reveal. */
+  revealSkips?: Set<string>;
+  /** what to run when the reveal pause ends (advance the game). */
+  revealAdvance?: () => void;
 }
 
 const CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -213,6 +223,7 @@ export function roomStateOf(room: Room, opts: number | RoomStateOptions = {}): R
     total,
   };
   if (room.endsAt !== undefined) state.endsAt = room.endsAt;
+  if (room.revealEndsAt !== undefined) state.revealEndsAt = room.revealEndsAt;
   if (room.solo) state.solo = true;
   // last_standing: surface turn + lives so a reconnecting client rehydrates.
   if (room.currentPlayerId !== undefined && room.turnEndsAt !== undefined) {
@@ -253,16 +264,19 @@ export function clearRoomTimers(room: Room): void {
   if (room.roundTimer) clearTimeout(room.roundTimer);
   if (room.countdownTimer) clearInterval(room.countdownTimer);
   if (room.turnTimer) clearTimeout(room.turnTimer);
+  if (room.revealTimer) clearTimeout(room.revealTimer);
   for (const t of room.graceTimers.values()) clearTimeout(t);
   room.graceTimers.clear();
   room.roundTimer = undefined;
   room.countdownTimer = undefined;
   room.turnTimer = undefined;
+  room.revealTimer = undefined;
 }
 
 /** Wipe last_standing turn/lives runtime so no state leaks between rounds. */
 export function clearTurnRuntime(room: Room): void {
   if (room.turnTimer) clearTimeout(room.turnTimer);
+  if (room.revealTimer) clearTimeout(room.revealTimer);
   room.turnTimer = undefined;
   room.currentPlayerId = undefined;
   room.turnEndsAt = undefined;
@@ -273,6 +287,10 @@ export function clearTurnRuntime(room: Room): void {
   room.claimedThisPrompt = undefined;
   room.usedPromptIds = undefined;
   room.round = undefined;
+  room.revealEndsAt = undefined;
+  room.revealTimer = undefined;
+  room.revealSkips = undefined;
+  room.revealAdvance = undefined;
 }
 
 export function deleteRoom(room: Room): void {

@@ -65,6 +65,7 @@ import {
   allIdsFor,
 } from "./sets.js";
 import { buildPromptPool } from "./prompts.js";
+import { REVEAL_MS_DEFAULT, voteSkipReveal } from "./reveal.js";
 import {
   MAX_ANSWER_LENGTH,
   parseAck,
@@ -95,8 +96,10 @@ export interface CreateServerOptions {
   turnMsOverride?: number;
   /** showdown per-round duration in ms (default settings.turnSeconds * 1000). */
   roundMsOverride?: number;
-  /** showdown pause between rounds in ms (default 3500). */
+  /** showdown pause between rounds in ms (legacy alias for revealMsOverride). */
   interRoundMsOverride?: number;
+  /** end-of-prompt reveal pause in ms, gauntlet + showdown (default 10000). */
+  revealMsOverride?: number;
   /** race round duration in ms (default settings.timeLimitSeconds * 1000). */
   raceMsOverride?: number;
   /**
@@ -141,7 +144,9 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
   const graceSeconds = Math.max(1, Math.ceil(graceMs / 1000));
   const turnMsOverride = options.turnMsOverride;
   const roundMsOverride = options.roundMsOverride;
-  const interRoundMs = options.interRoundMsOverride ?? 3500;
+  // The reveal pause (gauntlet + showdown) holds the game on the end-of-prompt
+  // reveal. `interRoundMsOverride` is kept as a legacy alias for existing tests.
+  const revealMs = options.revealMsOverride ?? options.interRoundMsOverride ?? REVEAL_MS_DEFAULT;
   const raceMsOverride = options.raceMsOverride;
   const answerLimit = options.rateLimits?.answer ?? DEFAULT_ANSWER_LIMIT;
   const eventLimit = options.rateLimits?.events ?? DEFAULT_EVENT_LIMIT;
@@ -317,6 +322,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
     endGame,
     otherSeat,
     turnDurationMs: (room) => turnMsOverride ?? room.settings.turnSeconds * 1000,
+    revealMs,
     broadcastState: (room) => broadcastRoomState(room),
   };
 
@@ -325,7 +331,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
     io,
     endGame,
     roundDurationMs: (room) => roundMsOverride ?? room.settings.turnSeconds * 1000,
-    interRoundMs,
+    revealMs,
   };
 
   function startCountdownAndGame(room: Room): void {
@@ -749,6 +755,11 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
           socket.emit("answer_result", { accepted: false, reason: "not_playing" });
           return;
         }
+        // Held on the end-of-prompt reveal: no answers until play resumes.
+        if (room.revealEndsAt !== undefined) {
+          socket.emit("answer_result", { accepted: false, reason: "not_playing" });
+          return;
+        }
         const { text } = payload;
         // No real answer is anywhere near this long: reject as wrong before
         // spending any time normalizing it (and without any mode side effects).
@@ -824,6 +835,21 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
         }
         if (ctx.room.phase !== "playing" && ctx.room.phase !== "countdown") return;
         endGame(ctx.room);
+      }),
+    );
+
+    socket.on(
+      "skip_reveal",
+      safe0(socket, () => {
+        const ctx = seatForSocket(socket);
+        if (!ctx) return;
+        const { room, seat } = ctx;
+        if (room.phase !== "playing" || room.revealEndsAt === undefined) return;
+        // The reveal advances early once every connected, in-game player votes.
+        const eligible = room.players
+          .filter((p) => p.connected && (room.lives?.[p.id] ?? 0) > 0)
+          .map((p) => p.id);
+        voteSkipReveal(io, room, seat.id, eligible);
       }),
     );
 

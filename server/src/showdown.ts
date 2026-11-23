@@ -17,8 +17,9 @@ import { normalizeAnswer } from "./protocol.js";
 import type { Room, Seat } from "./rooms.js";
 import { matchAnswer } from "./matching.js";
 import { lookupFor, canonicalFor } from "./sets.js";
-import { promptById, validIdsFor } from "./prompts.js";
+import { promptById, validIdsFor, missedAnswersFor, labelAnswers } from "./prompts.js";
 import { pickPrompt } from "./lastStanding.js";
+import { beginReveal } from "./reveal.js";
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 
@@ -28,8 +29,8 @@ export interface ShowdownDeps {
   endGame: (room: Room, forcedWinnerId?: string | null) => void;
   /** ms for a round (tests inject a tiny value, prod uses turnSeconds). */
   roundDurationMs: (room: Room) => number;
-  /** pause between rounds so the result can be shown. */
-  interRoundMs: number;
+  /** ms the between-round reveal pause holds before auto-advancing. */
+  revealMs: number;
 }
 
 export function isShowdown(room: Room): boolean {
@@ -117,25 +118,56 @@ function endRound(deps: ShowdownDeps, room: Room): void {
 
   const survivors = aliveSeats(room);
   const over = survivors.length <= 1;
+  // The answers nobody got — shown on the between-round board. Safe now the
+  // round's clock has expired (they can't be copied into a score).
+  const missed = missedThisRound(room);
+  // What each player named this round — the round's over, so it's safe to
+  // reveal every board (click a player on the reveal screen to see their picks).
+  const named: Record<string, { iso: string; name: string }[]> = {};
+  for (const seat of room.players) named[seat.id] = labelAnswers(seat.filledThisPrompt ?? []);
+
+  if (over) {
+    deps.io.to(room.code).emit("round_result", {
+      counts,
+      losers: losers.map((s) => s.id),
+      eliminated,
+      tie,
+      nextInMs: 0,
+      missed,
+      named,
+      endsAt: 0,
+    });
+    deps.endGame(room, survivors[0]?.id ?? null);
+    return;
+  }
+
+  // Hold on the reveal (next round starts when the pause ends or all skip).
+  beginReveal(room, deps.revealMs, () => startRound(deps, room));
   deps.io.to(room.code).emit("round_result", {
     counts,
     losers: losers.map((s) => s.id),
     eliminated,
     tie,
-    nextInMs: over ? 0 : deps.interRoundMs,
+    nextInMs: deps.revealMs,
+    missed,
+    named,
+    endsAt: room.revealEndsAt!,
   });
+}
 
-  if (over) {
-    deps.endGame(room, survivors[0]?.id ?? null);
-    return;
+/**
+ * The valid answers no living player named this round. Boards are per-player in
+ * showdown, so "missed" is the valid set minus the UNION of everyone's claims.
+ */
+function missedThisRound(room: Room): { iso: string; name: string }[] {
+  const prompt =
+    room.currentPromptId !== undefined ? promptById(room.currentPromptId) : undefined;
+  if (!prompt) return [];
+  const claimed = new Set<string>();
+  for (const seat of room.players) {
+    for (const iso of seat.filledThisPrompt ?? []) claimed.add(iso);
   }
-  room.roundTimer = setTimeout(() => {
-    try {
-      startRound(deps, room);
-    } catch (err) {
-      console.error("showdown next-round error:", err);
-    }
-  }, deps.interRoundMs);
+  return missedAnswersFor(prompt, room.settings.categoryId, claimed);
 }
 
 /**

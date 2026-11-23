@@ -480,6 +480,49 @@ function computeValidIds(prompt: Prompt, categoryId: CategoryId): Set<string> {
   return out;
 }
 
+/** iso → display name, for turning a prompt's valid ids into readable answers. */
+const countryNameByIso = new Map(countries.map((c) => [c.iso, c.name]));
+
+/** A single unnamed answer for the reveal: the map key plus its display name. */
+export interface MissedAnswer {
+  /** Lowercase iso — the map key, so the client can highlight it. */
+  iso: string;
+  /** Display name, for the reveal's list. */
+  name: string;
+}
+
+/**
+ * The prompt's valid answers (within a category) that are NOT in `claimed` —
+ * i.e. what went unnamed before the prompt was retired — as {iso, name} pairs,
+ * alphabetised by name. Powers the end-of-prompt "here's what you missed"
+ * reveal: the isos light up the map, the names fill the list.
+ *
+ * ANTI-CHEAT: this returns UNGUESSED answers, so callers must only send it once
+ * the prompt is no longer active (on cycle) — never for the live prompt.
+ */
+export function missedAnswersFor(
+  prompt: Prompt,
+  categoryId: CategoryId,
+  claimed: ReadonlySet<string>,
+): MissedAnswer[] {
+  const missed: MissedAnswer[] = [];
+  for (const iso of validIdsFor(prompt, categoryId)) {
+    if (!claimed.has(iso)) missed.push({ iso, name: countryNameByIso.get(iso) ?? iso.toUpperCase() });
+  }
+  return missed.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Turn a player's claimed isos into {iso, name} pairs, alphabetised by name —
+ * for the end-of-round reveal "what did they name" view. Safe to send only once
+ * the round is over (its answers can no longer be copied).
+ */
+export function labelAnswers(isos: Iterable<string>): MissedAnswer[] {
+  const out: MissedAnswer[] = [];
+  for (const iso of isos) out.push({ iso, name: countryNameByIso.get(iso) ?? iso.toUpperCase() });
+  return out.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /**
  * The prompts playable for a category: those with at least MIN_VALID valid
  * answers within that set. Empty for sets with no attribute coverage (e.g.

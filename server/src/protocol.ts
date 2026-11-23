@@ -9,7 +9,10 @@
  *
  * Design notes (see docs/plan-and-requirements.md):
  *  - The SERVER is authoritative. The client never receives the answer list or
- *    unguessed country names — only ISO codes for countries already filled.
+ *    unguessed country names for a LIVE prompt/round — only ISO codes for
+ *    countries already filled. (The one exception: `prompt_revealed` lists the
+ *    names left on the board AFTER a gauntlet prompt is retired, when they can
+ *    no longer be scored.)
  *  - `isoCode` is ISO 3166-1 alpha-2, LOWERCASE (e.g. "us", "fr", "br").
  *    This matches the SVG world map keys (@svg-maps/world) on the frontend.
  *  - The timer is server-authoritative via `endsAt` (epoch ms). Clients count
@@ -131,6 +134,9 @@ export interface RoomState {
   players: PlayerPublic[];
   /** epoch ms when the current round ends; present during countdown/playing. */
   endsAt?: number;
+  /** gauntlet/showdown: epoch ms when the reveal pause auto-advances, while the
+   *  game is held on the end-of-prompt reveal (for rehydrate). */
+  revealEndsAt?: number;
   /** total number of answers in the active category (e.g. 196). */
   total?: number;
   /** ISO codes each player has already filled, by playerId (for rehydrate).
@@ -176,6 +182,9 @@ export interface ClientToServerEvents {
   start_game: () => void;
   submit_answer: (payload: { text: string }) => void;
   give_up: () => void;
+  /** gauntlet/showdown: vote to skip the end-of-prompt reveal pause. The server
+   *  advances early once every connected, in-game player has voted. */
+  skip_reveal: () => void;
   request_rematch: () => void;
   leave_room: () => void;
   /** Clock sync: the server acks with its current epoch ms, so clients can
@@ -210,13 +219,30 @@ export interface ServerToClientEvents {
   life_lost: (payload: { playerId: string; livesLeft: number }) => void;
   /** gauntlet: a new prompt cycled in — label + answer count (never the set). */
   prompt_changed: (p: { id: string; label: string; total: number }) => void;
+  /** gauntlet/showdown: a prompt was retired — `missed` are the valid answers
+   *  nobody named (`iso` lights up the map, `name` fills the list); `swept` when
+   *  every answer was named. Sent ONLY once the prompt is no longer active, so
+   *  it can't help answer the live prompt. */
+  prompt_revealed: (p: {
+    id: string;
+    label: string;
+    missed: { iso: string; name: string }[];
+    swept: boolean;
+    /** epoch ms when the reveal pause auto-advances to the next prompt. */
+    endsAt: number;
+  }) => void;
+  /** gauntlet/showdown: skip-vote progress for the active reveal pause —
+   *  `count` players (of `needed` connected, in-game) have voted to skip. */
+  reveal_skip: (p: { count: number; needed: number }) => void;
   /** showdown: a new simultaneous round began, ending at `endsAt` (epoch ms). */
   round_started: (payload: { endsAt: number; round: number }) => void;
   /**
    * showdown: a round ended. `counts` is each player's tally; `losers` are the
    * players who tied for the fewest and lost a heart (empty on a tie);
    * `eliminated` hit 0 hearts; `tie` = everyone equal (nobody lost). `nextInMs`
-   * is the pause before the next round (0 if the game is over).
+   * is the pause before the next round (0 if the game is over). `missed` are the
+   * valid answers NO player named (the end-of-round reveal) — safe to send now
+   * the round's clock has expired; empty when every answer was found.
    */
   round_result: (payload: {
     counts: Record<string, number>;
@@ -224,6 +250,13 @@ export interface ServerToClientEvents {
     eliminated: string[];
     tie: boolean;
     nextInMs: number;
+    missed: { iso: string; name: string }[];
+    /** Each player's answers this round, by playerId — for the "what did they
+     *  name" view on the reveal. Safe now the round's clock has expired. */
+    named: Record<string, { iso: string; name: string }[]>;
+    /** epoch ms when the reveal pause auto-advances to the next round (0 when
+     *  the game is over, so there's no pause). */
+    endsAt: number;
   }) => void;
   /** Result of YOUR guess only. canonical/isoCode present when accepted. */
   answer_result: (payload: {

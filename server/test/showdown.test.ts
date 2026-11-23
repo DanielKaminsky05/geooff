@@ -230,3 +230,51 @@ describe("showdown — room_state never leaks opponents' answers", () => {
     expect(stateA.roundCounts).toEqual({ [aId]: 1, [bId]: 0 });
   }, 10000);
 });
+
+describe("showdown — end-of-round reveal", () => {
+  beforeEach(async () => {
+    server = await startTestServer({
+      countdownTickMs: 10,
+      roundMsOverride: 300,
+      interRoundMsOverride: 40,
+    });
+  });
+
+  it("round_result carries missed answers AND each player's picks (named)", async () => {
+    const ctx = await makeShowdownRoom(3);
+    const { a, aId, others } = ctx;
+    const b = others[0].socket;
+    const bId = others[0].id;
+    await readyAll(a, [b]);
+
+    const prompt1 = awaitEvent<any>(a, "prompt_changed", 8000);
+    const roundStart = awaitEvent<any>(a, "round_started", 8000);
+    a.emit("start_game");
+    const prompt = await prompt1;
+    await roundStart;
+
+    const valid = [...validIdsFor(promptById(prompt.id)!, CATEGORY)];
+    const result = awaitEvent<any>(a, "round_result", 8000);
+
+    // A names valid[0], B names valid[1] (a tie → nobody out → game continues).
+    let ar = awaitEvent<any>(a, "answer_result");
+    a.emit("submit_answer", { text: nameOf(valid[0]) });
+    await ar;
+    ar = awaitEvent<any>(b, "answer_result");
+    b.emit("submit_answer", { text: nameOf(valid[1]) });
+    await ar;
+
+    // The round result lists the valid answers NEITHER player named.
+    const r = await result;
+    const claimed = new Set([valid[0], valid[1]]);
+    const expected = valid
+      .filter((iso) => !claimed.has(iso))
+      .map((iso) => ({ iso, name: isoToName.get(iso)! }))
+      .sort((x, y) => x.name.localeCompare(y.name));
+    expect(r.missed).toEqual(expected);
+
+    // ...and each player's own picks, so you can click them on the reveal.
+    expect(r.named[aId]).toEqual([{ iso: valid[0], name: nameOf(valid[0]) }]);
+    expect(r.named[bId]).toEqual([{ iso: valid[1], name: nameOf(valid[1]) }]);
+  }, 10000);
+});
