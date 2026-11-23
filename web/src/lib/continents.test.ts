@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { CONTINENTS, countryName, groupByContinent } from "./continents";
-import { WORLD_LOCATIONS } from "./worldMap";
+import { mapFor } from "./maps";
+import { REGION_ISO } from "./geo";
 
 describe("continents", () => {
   const all = Object.values(CONTINENTS).flat();
@@ -11,11 +12,19 @@ describe("continents", () => {
   });
 
   it("only uses codes that exist on the map", () => {
-    const mapIds = new Set(WORLD_LOCATIONS.map((l) => l.id));
+    const mapIds = new Set(mapFor("countries").locations.map((l) => l.id));
     expect(all.filter((iso) => !mapIds.has(iso))).toEqual([]);
   });
 
+  it("shares Africa with the africa region, and the Americas split exactly", () => {
+    expect([...CONTINENTS.Africa].sort()).toEqual([...REGION_ISO.africa].sort());
+    expect([...CONTINENTS["North America"], ...CONTINENTS["South America"]].sort()).toEqual(
+      [...REGION_ISO.americas].sort(),
+    );
+  });
+
   it("uses modern display names over the map package's", () => {
+    expect(countryName("cz")).toBe("Czechia");
     expect(countryName("sz")).toBe("Eswatini");
     expect(countryName("mk")).toBe("North Macedonia");
     expect(countryName("fr")).toBe("France");

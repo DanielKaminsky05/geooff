@@ -7,6 +7,8 @@ import {
   KNOWN_CATEGORIES,
 } from "../src/sets.js";
 import { normalizeAnswer } from "../src/protocol.js";
+import { CATEGORY_LABELS, REGION_IDS, REGION_ISO } from "../src/geo.js";
+import { countries } from "../src/data/countries.js";
 
 /**
  * Authoritative state id set: the @svg-maps/usa location ids MINUS `dc`.
@@ -200,5 +202,26 @@ describe("regional sets", () => {
 
   it("europe includes tr (transcontinental — has European territory)", () => {
     expect(new Set(allIdsFor("europe")).has("tr")).toBe(true);
+  });
+});
+
+describe("shared geo region lists (geo.ts)", () => {
+  const answerable = new Set(countries.map((c) => c.iso));
+
+  for (const id of REGION_IDS) {
+    it(`${id}: every listed id is an answerable country (no silent drops)`, () => {
+      // regionSet() filters countries by these ids, so an unknown id (e.g.
+      // Western Sahara "eh") would vanish server-side while the client still
+      // counted it — the raw list must be a subset of the countries data.
+      expect(REGION_ISO[id].filter((iso) => !answerable.has(iso))).toEqual([]);
+      expect(new Set(REGION_ISO[id]).size).toBe(REGION_ISO[id].length);
+      expect(totalFor(id)).toBe(REGION_ISO[id].length);
+    });
+  }
+
+  it("every registered set takes its label from CATEGORY_LABELS", () => {
+    for (const id of KNOWN_CATEGORIES) {
+      expect(getSet(id).label).toBe(CATEGORY_LABELS[id]);
+    }
   });
 });

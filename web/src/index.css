@@ -84,6 +84,9 @@ body {
 }
 
 /* Pop-in for each 3-2-1 countdown tick. */
+.countdown-pop {
+  animation: countdown-pop 0.9s ease-out;
+}
 @keyframes countdown-pop {
   0% {
     transform: scale(1.6);
@@ -151,13 +154,6 @@ body {
   94% { transform: translate(0.1em, 0.015em); }
   96% { transform: translate(0.04em, 0.05em); }
   98% { transform: translate(0.05em, 0.035em); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .wordmark-glitch::before,
-  .wordmark-glitch::after {
-    animation: none;
-  }
 }
 
 /*
@@ -237,12 +233,6 @@ body {
 @keyframes globe-breathe {
   0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
   50% { transform: translate(-50%, -50%) scale(1.025); opacity: 0.62; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .home-globe {
-    animation: none;
-  }
 }
 
 /* ---- Last Standing: lives ---- */
@@ -422,11 +412,36 @@ body {
   animation: fade-in 0.45s ease-out;
 }
 
+/*
+ * Reduced motion: one blanket rule rather than per-effect opt-outs, so it also
+ * covers inline Tailwind animations (e.g. the input's animate-[shake]),
+ * transitions (sheet slide, progress fill) and anything added later. Keyframe
+ * animations collapse to their end state (so `forwards` effects like the
+ * heart-break and "−1" pop simply vanish, the glitch ghosts sit still at their
+ * resting offset, and fades land fully visible).
+ */
 @media (prefers-reduced-motion: reduce) {
-  .heart-shake,
-  .hearts-hit,
-  .screen-shake,
-  .screen-shake-violent {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
   }
+
+  /* Keep a damage/gain cue, but as a soft, motionless fade instead of a
+     bright flash. */
+  .damage-flash,
+  .gain-flash {
+    animation: soft-flash 0.6s ease-out forwards !important;
+  }
+}
+
+@keyframes soft-flash {
+  0% { opacity: 0; }
+  30% { opacity: 0.45; }
+  100% { opacity: 0; }
 }

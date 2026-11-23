@@ -50,6 +50,8 @@ export interface LastStandingDeps {
   otherSeat: (room: Room, seat: Seat) => Seat | undefined;
   /** ms for a turn timeout; tests inject a tiny value, prod uses turnSeconds. */
   turnDurationMs: (room: Room) => number;
+  /** Broadcast a fresh room_state snapshot (e.g. after a turn starts paused). */
+  broadcastState?: (room: Room) => void;
 }
 
 /** True when this room is playing plain last_standing (no prompt layer). */
@@ -171,9 +173,15 @@ function cyclePrompt(deps: LastStandingDeps, room: Room): void {
   if (next) setPrompt(deps, room, next);
 }
 
-/** Point the turn at `playerId`, set a fresh deadline, emit + arm the timer. */
+/**
+ * Point the turn at `playerId`, set a fresh deadline, emit + arm the timer.
+ * If that player is currently disconnected, the turn starts PAUSED (full
+ * duration stored, no timer) so they don't lose a life while away;
+ * resumeTurnOnReconnect picks it up, and grace expiry handles abandonment.
+ */
 function armTurn(deps: LastStandingDeps, room: Room, playerId: string): void {
   clearTurnTimer(room);
+  room.pausedTurnMs = undefined;
   const durationMs = deps.turnDurationMs(room);
   room.currentPlayerId = playerId;
   room.turnEndsAt = Date.now() + durationMs;
@@ -181,6 +189,13 @@ function armTurn(deps: LastStandingDeps, room: Room, playerId: string): void {
     playerId,
     endsAt: room.turnEndsAt,
   });
+  const seat = room.players.find((p) => p.id === playerId);
+  if (seat && !seat.connected) {
+    room.pausedTurnMs = durationMs;
+    // Tell clients the clock is frozen (turn.pausedMs in the snapshot).
+    deps.broadcastState?.(room);
+    return;
+  }
   room.turnTimer = scheduleTurnTimeout(deps, room, durationMs);
 }
 
@@ -206,6 +221,16 @@ function nextPlayerId(room: Room): string {
   }
   // No other living seat → the current player keeps the turn (solo survival).
   return room.currentPlayerId ?? room.hostId;
+}
+
+/**
+ * The next LIVING seat strictly after `slot` in seat order (wrapping). Used when
+ * the current player left: their seat is gone, so we resume from their slot.
+ */
+function nextPlayerAfterSlot(room: Room, slot: string): string | undefined {
+  const order = [...room.players].sort((a, b) => a.slot.localeCompare(b.slot));
+  const alive = order.filter((p) => (room.lives?.[p.id] ?? 0) > 0);
+  return (alive.find((p) => p.slot.localeCompare(slot) > 0) ?? alive[0])?.id;
 }
 
 /** Pass play to the next living player with a fresh clock. */
@@ -430,10 +455,15 @@ export function resumeTurnOnReconnect(deps: LastStandingDeps, room: Room, seat: 
  * A player left / was removed from a turn-based game mid-match (voluntary leave
  * or grace expiry). If 1 or fewer players remain, end the match (last survivor
  * wins). Otherwise, if the leaver held the turn, advance play to the next living
- * player with a fresh clock. Call AFTER the seat has been removed from
+ * player AFTER the leaver's slot (`leftSlot`) with a fresh clock. Call AFTER the seat has been removed from
  * room.players. No-op outside a live turn-based match.
  */
-export function resolveAfterLeave(deps: LastStandingDeps, room: Room, leftId: string): void {
+export function resolveAfterLeave(
+  deps: LastStandingDeps,
+  room: Room,
+  leftId: string,
+  leftSlot: string,
+): void {
   if (!isTurnBased(room) || room.phase !== "playing") return;
   const alive = aliveSeats(room);
   if (alive.length <= 1) {
@@ -442,6 +472,7 @@ export function resolveAfterLeave(deps: LastStandingDeps, room: Room, leftId: st
   }
   if (room.currentPlayerId === leftId) {
     if (isGauntlet(room)) cyclePrompt(deps, room);
-    armTurn(deps, room, nextPlayerId(room));
+    // Resume from the leaver's slot so play goes to the seat after them.
+    armTurn(deps, room, nextPlayerAfterSlot(room, leftSlot) ?? nextPlayerId(room));
   }
 }

@@ -178,12 +178,29 @@ export function seatToPublic(seat: Seat): PlayerPublic {
   };
 }
 
-export function roomStateOf(room: Room, total: number = totalFor(room.settings.categoryId)): RoomState {
+/** Options for building a room snapshot. */
+export interface RoomStateOptions {
+  /** total answers in the category (defaults to the live count). */
+  total?: number;
+  /**
+   * showdown: the player this snapshot is for. Only their own `filled` entry is
+   * included (opponents' answers must never reach a client). Without a viewer,
+   * a showdown snapshot carries no `filled` entries at all.
+   */
+  viewerId?: string;
+}
+
+export function roomStateOf(room: Room, opts: number | RoomStateOptions = {}): RoomState {
+  const { total = totalFor(room.settings.categoryId), viewerId } =
+    typeof opts === "number" ? { total: opts, viewerId: undefined } : opts;
+  const showdown = room.settings.mode === "showdown";
   // Gauntlet and showdown show a per-prompt/per-round board, so restore the
   // current set (not the all-time one) to keep a reconnecting map in sync.
-  const perPrompt = room.settings.mode === "gauntlet" || room.settings.mode === "showdown";
+  const perPrompt = room.settings.mode === "gauntlet" || showdown;
   const filled: Record<string, string[]> = {};
   for (const seat of room.players) {
+    // Showdown: only the viewer's own board — never an opponent's answers.
+    if (showdown && seat.id !== viewerId) continue;
     filled[seat.id] = [...(perPrompt ? seat.filledThisPrompt ?? [] : seat.filled)];
   }
   const state: RoomState = {
@@ -200,6 +217,15 @@ export function roomStateOf(room: Room, total: number = totalFor(room.settings.c
   // last_standing: surface turn + lives so a reconnecting client rehydrates.
   if (room.currentPlayerId !== undefined && room.turnEndsAt !== undefined) {
     state.turn = { currentPlayerId: room.currentPlayerId, endsAt: room.turnEndsAt };
+    // Clock frozen (current player away): surface the remaining ms.
+    if (room.pausedTurnMs !== undefined) state.turn.pausedMs = room.pausedTurnMs;
+  }
+  // showdown: everyone's tally (counts only) + the round number for rehydrate.
+  if (showdown && room.round !== undefined) {
+    const roundCounts: Record<string, number> = {};
+    for (const seat of room.players) roundCounts[seat.id] = seat.filledThisPrompt?.size ?? 0;
+    state.roundCounts = roundCounts;
+    state.round = room.round;
   }
   if (room.lives !== undefined) state.lives = { ...room.lives };
   // gauntlet: surface the active prompt (label only — the valid set is never

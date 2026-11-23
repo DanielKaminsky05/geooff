@@ -99,6 +99,20 @@ describe("SessionProvider identity persistence", () => {
     expect(captured.session!.identityRef.current).toEqual(ID);
   });
 
+  it.each(["p3", "p4"] as const)("restores a %s identity from sessionStorage", (slot) => {
+    const id: Identity = { ...ID, slot };
+    sessionStorage.setItem(IDENTITY_KEY, JSON.stringify(id));
+    renderSession();
+    expect(captured.session!.identity).toEqual(id);
+    expect(captured.session!.identityRef.current).toEqual(id);
+  });
+
+  it("ignores a stored identity with an unknown slot", () => {
+    sessionStorage.setItem(IDENTITY_KEY, JSON.stringify({ ...ID, slot: "p5" }));
+    renderSession();
+    expect(captured.session!.identity).toBeNull();
+  });
+
   it("ignores malformed stored identity", () => {
     sessionStorage.setItem(IDENTITY_KEY, "{not json");
     renderSession();
@@ -116,58 +130,20 @@ describe("SessionProvider identity persistence", () => {
   });
 });
 
-describe("SessionProvider auto-rejoin", () => {
+describe("SessionProvider does not own seat re-claiming", () => {
   beforeEach(() => {
     sessionStorage.clear();
     localStorage.clear();
     socket = createFakeSocket();
   });
 
-  it("emits join_room with the reconnect token on Manager reconnect", () => {
-    renderSession();
-    act(() => {
-      captured.session!.setPlayerName("Alice");
-      captured.session!.setIdentity(ID);
-    });
-    socket.io.fire("reconnect");
-    expect(socket.emit).toHaveBeenCalledWith("join_room", {
-      code: "ABCD",
-      playerName: "Alice",
-      reconnectToken: "tok-1",
-    });
-  });
-
-  it("does not emit when identity has no roomCode", () => {
-    renderSession();
-    act(() => captured.session!.setIdentity({ ...ID, roomCode: undefined }));
-    socket.io.fire("reconnect");
-    expect(socket.emit).not.toHaveBeenCalled();
-  });
-
-  it("does not emit when there is no identity", () => {
-    renderSession();
-    socket.io.fire("reconnect");
-    expect(socket.emit).not.toHaveBeenCalled();
-  });
-
-  it("does not emit on the initial connect", () => {
+  // The page holding the seat (Lobby / Match) re-emits join_room on the
+  // socket's "connect"; the session must not add a second, global rejoin.
+  it("emits nothing on a Manager reconnect", () => {
     sessionStorage.setItem(IDENTITY_KEY, JSON.stringify(ID));
     renderSession();
-    socket.io.fire("open");
+    socket.io.fire("reconnect");
     expect(socket.emit).not.toHaveBeenCalled();
-  });
-
-  it("removes the reconnect listener on unmount", () => {
-    const { unmount } = renderSession();
-    expect(socket.io.count("reconnect")).toBe(1);
-    unmount();
     expect(socket.io.count("reconnect")).toBe(0);
-  });
-
-  it("tolerates a socket without a Manager (.io)", () => {
-    socket = { emit: vi.fn(), on: vi.fn(), off: vi.fn() } as unknown as ReturnType<
-      typeof createFakeSocket
-    >;
-    expect(() => renderSession()).not.toThrow();
   });
 });

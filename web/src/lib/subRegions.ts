@@ -4,10 +4,10 @@
 // countries" list can render grouped, colored, columnar sections instead of one
 // flat list.
 //
-// Only ISO codes live here (no display names): names come from the shared
-// country-name source, as in continents.ts. Every id present in a region's map
-// MUST appear in exactly one group — the tables below are exhaustive against
-// maps.ts REGION_ISO.
+// Only ISO codes live here (no display names): names come from countryName()
+// in continents.ts. Every playable id of a region (geo.ts REGION_ISO) MUST
+// appear in exactly one group, and nothing else may — subRegions.test.ts
+// enforces this. Map-only shapes (e.g. Western Sahara) are never grouped.
 import type { CategoryId } from "./protocol";
 
 /** A region's grouping: ordered groups, a color + member ids per group, and a
@@ -50,8 +50,9 @@ export const SUB_REGIONS: Partial<Record<CategoryId, SubRegionConfig>> = {
 
   africa: {
     groups: {
-      // Western Sahara ("eh") sits in Northern per the task brief.
-      Northern: ["dz", "eg", "ly", "ma", "sd", "tn", "eh"],
+      // Western Sahara ("eh") is drawn on the map but isn't playable, so it is
+      // not grouped (it would leave Northern permanently one short).
+      Northern: ["dz", "eg", "ly", "ma", "sd", "tn"],
       Western: ["bj", "bf", "cv", "ci", "gm", "gh", "gn", "gw", "lr", "ml", "mr", "ne", "ng", "sn", "sl", "tg"],
       Central: ["ao", "cm", "cf", "td", "cg", "cd", "gq", "ga", "st"],
       Eastern: ["bi", "km", "dj", "er", "et", "ke", "mg", "mw", "mu", "mz", "rw", "sc", "so", "ss", "tz", "ug", "zm", "zw"],

@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession, defaultName } from "../lib/session";
 import GlitchWordmark from "../components/GlitchWordmark";
 import type { PlayerSlot } from "../lib/protocol";
+
+/** Give up on "Starting…" if the server hasn't answered create_room by then. */
+const CREATE_TIMEOUT_MS = 10_000;
 
 export default function Home() {
   const socket = useSocket();
@@ -11,6 +14,11 @@ export default function Home() {
   const { playerName, setPlayerName, setIdentity } = useSession();
   const [code, setCode] = useState("");
   const [creating, setCreating] = useState<"versus" | "solo" | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const creatingRef = useRef(creating);
+  useEffect(() => {
+    creatingRef.current = creating;
+  }, [creating]);
 
   useEffect(() => {
     function onJoined(payload: {
@@ -29,15 +37,40 @@ export default function Home() {
       // multiplayer lobby depending on the room's `solo` flag.
       navigate(`/room/${payload.state.code}`);
     }
+    function onError(payload: { code: string; message: string }) {
+      setCreating(null);
+      setCreateError(payload.message);
+    }
+    function onConnectError() {
+      // Only relevant while a create is pending; otherwise ignore blips.
+      if (!creatingRef.current) return;
+      setCreating(null);
+      setCreateError("Couldn't reach the server. Please try again.");
+    }
     socket.on("joined", onJoined);
+    socket.on("error_msg", onError);
+    socket.on("connect_error", onConnectError);
     return () => {
       socket.off("joined", onJoined);
+      socket.off("error_msg", onError);
+      socket.off("connect_error", onConnectError);
     };
   }, [socket, navigate, setIdentity]);
+
+  // Fallback: if neither joined nor an error arrives, stop "Starting…".
+  useEffect(() => {
+    if (!creating) return;
+    const t = setTimeout(() => {
+      setCreating(null);
+      setCreateError("The server didn't respond. Please try again.");
+    }, CREATE_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [creating]);
 
   function handleCreate(solo: boolean) {
     const name = playerName.trim() || defaultName();
     setPlayerName(name);
+    setCreateError(null);
     setCreating(solo ? "solo" : "versus");
     socket.emit("create_room", { playerName: name, solo });
   }
@@ -109,6 +142,12 @@ export default function Home() {
         >
           {creating === "solo" ? "Starting…" : "Play solo"}
         </button>
+
+        {createError && (
+          <p role="alert" className="text-center text-sm text-accent">
+            {createError}
+          </p>
+        )}
 
         <form className="flex gap-2" onSubmit={handleJoin}>
           <input

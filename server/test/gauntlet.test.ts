@@ -182,6 +182,64 @@ describe("gauntlet — 3 players", () => {
   }, 15000);
 });
 
+describe("gauntlet — current player leaves (3 players)", () => {
+  beforeEach(async () => {
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 60_000 });
+  });
+
+  it("play passes to the next seat after the leaver, not back to p1", async () => {
+    const ctx = await makeGauntletRoom3();
+    const { a, b, c, aId, bId, cId } = ctx;
+    a.emit("set_ready", { ready: true });
+    await awaitEvent(a, "player_ready");
+    b.emit("set_ready", { ready: true });
+    await awaitEvent(b, "player_ready");
+    c.emit("set_ready", { ready: true });
+    await awaitEvent(c, "player_ready");
+
+    const promptP = awaitEvent<any>(a, "prompt_changed", 8000);
+    const turn1 = awaitEvent<any>(a, "turn_started", 8000);
+    a.emit("start_game");
+    const prompt = await promptP;
+    expect((await turn1).playerId).toBe(aId);
+
+    const valid = [...validIdsFor(promptById(prompt.id)!, CATEGORY)];
+    let next = awaitEvent<any>(a, "turn_started", 8000);
+    a.emit("submit_answer", { text: isoToName.get(valid[0])! });
+    expect((await next).playerId).toBe(bId);
+
+    // B (current, p2) leaves → C (p3) is next, not A (p1).
+    next = awaitEvent<any>(a, "turn_started", 8000);
+    b.emit("leave_room");
+    expect((await next).playerId).toBe(cId);
+    expect(rooms.get(ctx.code)!.currentPlayerId).toBe(cId);
+  }, 15000);
+});
+
+describe("gauntlet — category without prompts", () => {
+  beforeEach(async () => {
+    server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 60_000 });
+  });
+
+  for (const mode of ["gauntlet", "showdown"] as const) {
+    it(`switching to a prompt-less category resets ${mode} to race`, async () => {
+      expect(buildPromptPool("us-states")).toHaveLength(0);
+      const ctx = await makeGauntletRoom();
+      const { a, code } = ctx;
+      let rs = awaitEvent<any>(a, "room_state");
+      a.emit("update_settings", { mode });
+      expect((await rs).settings.mode).toBe(mode);
+
+      rs = awaitEvent<any>(a, "room_state");
+      a.emit("update_settings", { categoryId: "us-states" });
+      const state = await rs;
+      expect(state.settings.categoryId).toBe("us-states");
+      expect(state.settings.mode).toBe("race");
+      expect(rooms.get(code)!.settings.mode).toBe("race");
+    });
+  }
+});
+
 describe("gauntlet — prompt setup", () => {
   beforeEach(async () => {
     server = await startTestServer({ countdownTickMs: 10, turnMsOverride: 60_000 });

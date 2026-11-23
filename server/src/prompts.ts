@@ -442,10 +442,33 @@ export function promptById(id: string): Prompt | undefined {
 }
 
 /**
+ * Memo caches. Prompts and category membership are static for the process
+ * lifetime, so these are computed once per (prompt, category) / category
+ * instead of on every turn, snapshot and submission.
+ */
+const validIdsCache = new Map<CategoryId, WeakMap<Prompt, Set<string>>>();
+const poolCache = new Map<CategoryId, Prompt[]>();
+
+/**
  * The prompt's valid isos intersected with a category's item ids — the valid
- * answers when playing that prompt within that set.
+ * answers when playing that prompt within that set. Memoized per
+ * (prompt, category); the returned Set is shared, so callers must NOT mutate it.
  */
 export function validIdsFor(prompt: Prompt, categoryId: CategoryId): Set<string> {
+  let byPrompt = validIdsCache.get(categoryId);
+  if (!byPrompt) {
+    byPrompt = new WeakMap();
+    validIdsCache.set(categoryId, byPrompt);
+  }
+  let out = byPrompt.get(prompt);
+  if (!out) {
+    out = computeValidIds(prompt, categoryId);
+    byPrompt.set(prompt, out);
+  }
+  return out;
+}
+
+function computeValidIds(prompt: Prompt, categoryId: CategoryId): Set<string> {
   // Prompts are country-scoped: their validIds are country isos. Non-country
   // sets (e.g. "us-states") use colliding postal codes, so no prompt applies.
   if (!COUNTRY_CATEGORIES.has(categoryId)) return new Set<string>();
@@ -460,8 +483,14 @@ export function validIdsFor(prompt: Prompt, categoryId: CategoryId): Set<string>
 /**
  * The prompts playable for a category: those with at least MIN_VALID valid
  * answers within that set. Empty for sets with no attribute coverage (e.g.
- * "us-states").
+ * "us-states"). Memoized per category; returns a fresh copy of the cached
+ * array so callers can't corrupt the cache by mutating it.
  */
 export function buildPromptPool(categoryId: CategoryId): Prompt[] {
-  return prompts.filter((p) => validIdsFor(p, categoryId).size >= MIN_VALID);
+  let pool = poolCache.get(categoryId);
+  if (!pool) {
+    pool = prompts.filter((p) => validIdsFor(p, categoryId).size >= MIN_VALID);
+    poolCache.set(categoryId, pool);
+  }
+  return [...pool];
 }

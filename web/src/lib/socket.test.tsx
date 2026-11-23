@@ -4,6 +4,9 @@ import { render } from "@testing-library/react";
 
 const calls: string[] = [];
 const fakeSocket = {
+  connected: false,
+  on: vi.fn(() => fakeSocket),
+  off: vi.fn(() => fakeSocket),
   connect: vi.fn(() => {
     calls.push("connect");
     return fakeSocket;

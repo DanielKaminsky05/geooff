@@ -87,5 +87,36 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
   );
 }
 
-export const WorldMap = memo(WorldMapInner);
+function sameSet(a: Set<string>, b: Set<string>): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}
+
+function sameColors(a: Map<string, string> | undefined, b: Map<string, string> | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.size !== b.size) return false;
+  for (const [k, v] of a) if (b.get(k) !== v) return false;
+  return true;
+}
+
+/**
+ * Re-rendering a map walks every path (~250 for the world), so compare the
+ * fill inputs by CONTENT: a room_state snapshot rebuilds every filled Set even
+ * when nothing changed, and that must not repaint all the maps. Comparing a
+ * ≤250-entry set is far cheaper than reconciling the SVG.
+ */
+function propsEqual(prev: WorldMapProps, next: WorldMapProps): boolean {
+  return (
+    prev.color === next.color &&
+    prev.categoryId === next.categoryId &&
+    prev.revealNames === next.revealNames &&
+    prev.className === next.className &&
+    sameSet(prev.filledIso, next.filledIso) &&
+    sameColors(prev.colorByIso, next.colorByIso)
+  );
+}
+
+export const WorldMap = memo(WorldMapInner, propsEqual);
 export default WorldMap;

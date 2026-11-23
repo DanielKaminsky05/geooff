@@ -1,22 +1,24 @@
 import { memo, useMemo } from "react";
 import { groupByContinent, countryName, type Continent } from "../lib/continents";
 import { groupByRegion, stateName, type UsRegion } from "../lib/usStates";
-import { mapFor } from "../lib/maps";
 import { SUB_REGIONS, subRegionOf } from "../lib/subRegions";
+import { REGION_ISO, isRegionId, type RegionId } from "../lib/geo";
 import type { CategoryId } from "../lib/protocol";
 
-/** A region set is any mapped category that isn't countries or us-states. */
-function isRegion(categoryId: CategoryId): boolean {
-  return categoryId !== "countries" && categoryId !== "us-states";
-}
-
-/** Display names for a region's items, keyed by id (from its map locations). */
-function regionNames(categoryId: CategoryId): Map<string, string> {
-  return new Map(mapFor(categoryId).locations.map((l) => [l.id, l.name]));
+/**
+ * Display names for a region's PLAYABLE items, keyed by id. Membership comes
+ * from the shared REGION_ISO (not the map's locations, which may include
+ * non-playable shapes like Western Sahara); names use countryName() so regions
+ * and the world set agree ("Czechia", not "Czech Republic").
+ */
+function regionNames(regionId: RegionId): Map<string, string> {
+  return new Map(REGION_ISO[regionId].map((id) => [id, countryName(id)]));
 }
 
 /** One player's named items, in the order they named them. */
 export interface NamedPlayer {
+  /** Stable unique player id — used as the React key (names can repeat). */
+  id?: string;
   name: string;
   color: string;
   ids: string[];
@@ -87,7 +89,7 @@ const REGION_COLUMNS: UsRegion[][] = [["Northeast"], ["Midwest"], ["South"], ["W
 
 /** Build the heading + column sections for the active set. */
 function build(categoryId: CategoryId, filled: Set<string>): { heading: string; columns: Section[][] } {
-  if (isRegion(categoryId)) {
+  if (isRegionId(categoryId)) {
     // Region sets: group the region's items by geographic sub-region, mirroring
     // how the global set groups by continent — a colored, columnar list per
     // sub-region, named items filling each from the top alphabetically.
@@ -226,8 +228,10 @@ function NamedCountriesInner({ filled, categoryId = "countries", versus, flat }:
       >
         <h2 className="text-xl font-bold">Named {noun}</h2>
         <div className="mt-6 grid grid-cols-1 items-start gap-3 sm:grid-cols-2">
-          {versus.map((p) => (
-            <div key={p.name} data-testid={`named-${p.name}`}>
+          {versus.map((p, i) => (
+            // Key by player id: two players may share a display name. Fall
+            // back to slot position (the list is in stable slot order).
+            <div key={p.id ?? `slot-${i}`} data-testid={`named-${p.name}`}>
               <h3
                 className="flex items-baseline justify-between gap-2 px-3 py-1.5 text-sm font-semibold text-white"
                 style={{ background: p.color }}

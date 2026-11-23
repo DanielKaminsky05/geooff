@@ -116,6 +116,8 @@ export interface RoomSettings {
   categoryId: CategoryId;
   mode: GameMode;
   timeLimitSeconds: number; // always within [MIN, MAX]; used by race
+  // NOTE: the server resets `mode` to "race" when a category change leaves the
+  // current mode unavailable (gauntlet/showdown need a prompt pool).
   turnSeconds: number; // always within [TURN_SECONDS_MIN, MAX]; used by last_standing
   lives: number; // always within [LIVES_MIN, MAX]; used by last_standing
 }
@@ -131,12 +133,20 @@ export interface RoomState {
   endsAt?: number;
   /** total number of answers in the active category (e.g. 196). */
   total?: number;
-  /** ISO codes each player has already filled, by playerId (for rehydrate). */
+  /** ISO codes each player has already filled, by playerId (for rehydrate).
+   *  showdown: only the RECEIVING player's own entry is present, so opponents'
+   *  answers never reach the client (use `roundCounts` for their tallies). */
   filled?: Record<string, string[]>;
+  /** showdown: each player's tally for the current round (for rehydrate). */
+  roundCounts?: Record<string, number>;
+  /** showdown: the current round number (1-based, for rehydrate). */
+  round?: number;
   /** true when the current/last round was started by a lone player (solo mode). */
   solo?: boolean;
-  /** last_standing: whose turn it is and when their per-turn clock expires. */
-  turn?: { currentPlayerId: string; endsAt: number };
+  /** last_standing: whose turn it is and when their per-turn clock expires.
+   *  `pausedMs` is set while the clock is frozen (the current player is
+   *  disconnected); `endsAt` is then meaningless until a fresh turn_started. */
+  turn?: { currentPlayerId: string; endsAt: number; pausedMs?: number };
   /** last_standing: remaining lives by playerId (for rehydrate). */
   lives?: Record<string, number>;
   /** gauntlet: the active prompt — label + how many answers it has in the set
@@ -168,6 +178,9 @@ export interface ClientToServerEvents {
   give_up: () => void;
   request_rematch: () => void;
   leave_room: () => void;
+  /** Clock sync: the server acks with its current epoch ms, so clients can
+   *  correct for device clock skew when counting down to `endsAt` values. */
+  time_sync: (ack: (serverNow: number) => void) => void;
 }
 
 export interface ServerToClientEvents {
