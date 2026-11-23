@@ -1,0 +1,178 @@
+import { useEffect, useId, useRef, useState } from "react";
+import type { PlayerPublic } from "../../lib/protocol";
+import type { Flash, Toast } from "./useMatchFx";
+import { useDialogFocus } from "./useDialogFocus";
+
+/** Life-loss FX: a vignette flash (red mine / green theirs) or, on my final
+ *  life, a heart cracking apart before the lose screen. */
+export function LifeLossFx({ flash, breaking }: { flash: Flash | null; breaking: boolean }) {
+  return (
+    <>
+      {flash && (
+        <div key={flash.key} aria-hidden className={flash.kind === "damage" ? "damage-flash" : "gain-flash"} />
+      )}
+      {breaking && (
+        <div className="heartbreak" aria-hidden>
+          <span className="heartbreak-half heartbreak-left">♥</span>
+          <span className="heartbreak-half heartbreak-right">♥</span>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Brief unobtrusive toast centered above the input; never blocks typing. */
+export function MatchToast({ toast }: { toast: Toast }) {
+  return (
+    <div
+      key={toast.key}
+      role="status"
+      className="pointer-events-none absolute bottom-24 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-surface-raised px-4 py-2 text-sm font-semibold shadow"
+    >
+      {toast.text}
+    </div>
+  );
+}
+
+/** Each disconnected opponent with a live grace countdown. */
+export function OpponentDisconnectedBanner({
+  players,
+  label,
+}: {
+  /** Each disconnected opponent with their grace deadline (null = unknown). */
+  players: Array<{ player: PlayerPublic; endsAt: number | null }>;
+  label: (p: PlayerPublic) => string;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div
+      role="status"
+      className="absolute left-1/2 top-14 z-10 flex -translate-x-1/2 flex-col items-center gap-0.5 whitespace-nowrap rounded-lg border border-accent bg-surface px-4 py-2 text-sm font-semibold text-accent shadow"
+    >
+      {players.map(({ player, endsAt }) => (
+        <span key={player.id}>
+          {label(player)} disconnected — waiting
+          {/* round, not ceil: `now` can be up to one tick (250ms) stale when a
+              fresh deadline lands, which ceil would show as 61s of a 60s grace. */}
+          {endsAt != null ? ` ${Math.max(0, Math.round((endsAt - now) / 1000))}s` : "…"}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Own connection lost: keep the user here while socket.io retries. A modal
+ *  alert dialog (focus parked on it, returned when the connection is back). */
+export function ReconnectingOverlay() {
+  const ref = useRef<HTMLDivElement>(null);
+  const id = useId();
+  useDialogFocus(true, ref);
+  return (
+    <div
+      ref={ref}
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-desc`}
+      tabIndex={-1}
+      className="fixed inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-background/90 outline-none"
+    >
+      <p id={`${id}-title`} className="text-2xl font-bold">
+        Reconnecting…
+      </p>
+      <p id={`${id}-desc`} className="text-sm text-muted">
+        Hang tight — your seat is saved.
+      </p>
+    </div>
+  );
+}
+
+/** Re-join failed for good (room gone / grace expired): offer a way out
+ *  instead of a dead game that drops every input. */
+export function FatalErrorOverlay({ message, onHome }: { message: string; onHome: () => void }) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const id = useId();
+  useDialogFocus(true, buttonRef);
+  return (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-desc`}
+      className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-background/95 px-6 text-center"
+    >
+      <h2 id={`${id}-title`} className="text-2xl font-bold">
+        Game unavailable
+      </h2>
+      <p id={`${id}-desc`} className="max-w-sm text-sm text-muted">
+        {message}
+      </p>
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={onHome}
+        className="rounded-xl bg-foreground px-6 py-3 font-semibold text-background transition hover:brightness-110"
+      >
+        Back to home
+      </button>
+    </div>
+  );
+}
+
+/** Confirm leaving a live multiplayer match. In a 1v1 it's a forfeit; with
+ *  3+ players the seat is dropped and the rest play on. */
+export function LeaveConfirmDialog({
+  forfeit,
+  onConfirm,
+  onCancel,
+}: {
+  forfeit: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const stayRef = useRef<HTMLButtonElement>(null);
+  const id = useId();
+  // Focus "Stay" first so a stray Enter can't forfeit the match.
+  useDialogFocus(true, stayRef, onCancel);
+  return (
+    <div
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-desc`}
+      className="fixed inset-0 z-40 flex items-center justify-center bg-background/80 px-6"
+    >
+      <div className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 text-center shadow-xl">
+        <h2 id={`${id}-title`} className="text-xl font-bold">
+          Leave the match?
+        </h2>
+        <p id={`${id}-desc`} className="mt-2 text-sm text-muted">
+          {forfeit
+            ? "Leaving now forfeits — your opponent wins."
+            : "You'll be removed from the match and the others will play on."}
+        </p>
+        <div className="mt-5 flex flex-col gap-2">
+          <button
+            ref={stayRef}
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl bg-foreground px-6 py-3 font-semibold text-background transition hover:brightness-110"
+          >
+            Stay
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="rounded-xl bg-surface-raised px-6 py-3 font-semibold text-accent transition hover:brightness-125"
+          >
+            {forfeit ? "Forfeit and leave" : "Leave match"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

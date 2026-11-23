@@ -4,6 +4,7 @@
 import worldData from "@svg-maps/world/index.js";
 import usaData from "@svg-maps/usa/index.js";
 import type { CategoryId } from "./protocol";
+import { REGION_IDS, REGION_ISO, type RegionId } from "./geo";
 
 export interface MapLocation {
   id: string; // map key, LOWERCASE (matches server item ids / isoCodes)
@@ -39,40 +40,18 @@ const usStatesMap: GeoMap = {
 };
 
 // Regional sets reuse the world SVG paths, filtered to the region's ids, with a
-// viewBox cropped to those paths so the region fills the pane. Membership
-// mirrors continents.ts (Middle East is curated, cross-continental).
-const REGION_ISO: Record<string, string[]> = {
-  europe: [
-    "al", "ad", "at", "by", "be", "ba", "bg", "hr", "cy", "cz", "dk", "ee", "fi",
-    "fr", "de", "gr", "hu", "is", "ie", "it", "xk", "lv", "li", "lt", "lu", "mt",
-    "md", "mc", "me", "nl", "mk", "no", "pl", "pt", "ro", "ru", "sm", "rs", "sk",
-    "si", "es", "se", "ch", "tr", "ua", "gb", "va",
-  ],
-  africa: [
-    "dz", "ao", "bj", "bw", "bf", "bi", "cv", "cm", "cf", "td", "km", "cg", "cd",
-    "ci", "dj", "eg", "gq", "er", "sz", "et", "ga", "gm", "gh", "gn", "gw", "ke",
-    "ls", "lr", "ly", "mg", "mw", "ml", "mr", "mu", "ma", "mz", "na", "ne", "ng",
-    "rw", "st", "sn", "sc", "sl", "so", "za", "ss", "sd", "tz", "tg", "tn", "ug",
-    "zm", "zw",
-    // Western Sahara carries its own shape but isn't answerable; it auto-fills
-    // with Morocco via TERRITORY_PARENT (eh→ma).
-    "eh",
-  ],
-  asia: [
-    "af", "am", "az", "bh", "bd", "bt", "bn", "kh", "cn", "cy", "ge", "in", "id",
-    "ir", "iq", "il", "jp", "jo", "kz", "kw", "kg", "la", "lb", "my", "mv", "mn",
-    "mm", "np", "kp", "om", "pk", "ps", "ph", "qa", "sa", "sg", "kr", "lk", "sy", "tj",
-    "th", "tl", "tw", "tr", "tm", "ae", "uz", "vn", "ye",
-  ],
-  "middle-east": [
-    "tr", "sy", "lb", "il", "ps", "jo", "iq", "ir", "sa", "ye", "om", "ae", "qa",
-    "bh", "kw", "eg",
-  ],
-  americas: [
-    "ag", "ar", "bs", "bb", "bz", "bo", "br", "ca", "cl", "co", "cr", "cu", "dm",
-    "do", "ec", "sv", "gd", "gt", "gy", "ht", "hn", "jm", "mx", "ni", "pa", "pe",
-    "kn", "lc", "vc", "sr", "tt", "us", "uy", "ve", "py",
-  ],
+// viewBox cropped to those paths so the region fills the pane. Playable
+// membership comes from the shared geo module (REGION_ISO, the same lists the
+// server answers against).
+
+/**
+ * Non-playable shapes drawn on a region's map for geographic completeness.
+ * They are NOT part of the region's playable set (never counted in totals or
+ * groups); each fills with its parent via TERRITORY_PARENT.
+ */
+const REGION_MAP_EXTRAS: Partial<Record<RegionId, string[]>> = {
+  // Western Sahara: own shape, not answerable; fills with Morocco (eh->ma).
+  africa: ["eh"],
 };
 
 /**
@@ -190,22 +169,32 @@ export function fitViewBox(locations: MapLocation[]): string {
   return `${minX - padX} ${minY - padY} ${w + 2 * padX} ${h + 2 * padY}`;
 }
 
-function regionMap(iso: string[]): GeoMap {
-  const want = new Set(iso);
+function regionMap(id: RegionId): GeoMap {
+  const want = new Set([...REGION_ISO[id], ...(REGION_MAP_EXTRAS[id] ?? [])]);
   const locations = world.locations.filter((loc) => want.has(loc.id));
   return { viewBox: fitViewBox(locations), locations };
 }
 
-/** Maps keyed by CategoryId. Map-less sets simply have no entry. */
+/**
+ * Maps keyed by CategoryId. Map-less sets simply have no entry. Region maps are
+ * built on first access (a lazy, self-replacing getter): fitting each region's
+ * viewBox walks every one of its SVG paths, and a match only ever shows one.
+ */
 export const maps: Partial<Record<CategoryId, GeoMap>> = {
   countries: countriesMap,
   "us-states": usStatesMap,
-  europe: regionMap(REGION_ISO.europe),
-  africa: regionMap(REGION_ISO.africa),
-  asia: regionMap(REGION_ISO.asia),
-  "middle-east": regionMap(REGION_ISO["middle-east"]),
-  americas: regionMap(REGION_ISO.americas),
 };
+for (const id of REGION_IDS) {
+  Object.defineProperty(maps, id, {
+    enumerable: true,
+    configurable: true,
+    get() {
+      const map = regionMap(id);
+      Object.defineProperty(maps, id, { value: map, enumerable: true, writable: false });
+      return map;
+    },
+  });
+}
 
 /** Resolve a map for a category, falling back to countries. */
 export function mapFor(id: CategoryId): GeoMap {

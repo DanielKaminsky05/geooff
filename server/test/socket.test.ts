@@ -342,19 +342,24 @@ describe("submit_answer", () => {
 });
 
 describe("game_over", () => {
-  it("give_up ends the game for both clients and names the higher scorer as winner", async () => {
+  // Short race clock so the round timer (not give_up, which is solo-only) ends
+  // multiplayer games quickly.
+  beforeEach(async () => {
+    await server.close();
+    server = await startTestServer({ countdownTickMs: 20, raceMsOverride: 400 });
+  });
+
+  it("the round timer ends the game for both clients and names the higher scorer as winner", async () => {
     const ctx = await makeRoom();
+    const overA = awaitEvent<any>(ctx.a, "game_over", 4000);
+    const overB = awaitEvent<any>(ctx.b, "game_over", 4000);
     await startGame(ctx);
-    const { a, b, aId } = ctx;
+    const { a, aId } = ctx;
 
     // A scores once so A is the clear leader.
     const resA = awaitEvent<any>(a, "answer_result");
     a.emit("submit_answer", { text: CORRECT.text });
     await resA;
-
-    const overA = awaitEvent<any>(a, "game_over");
-    const overB = awaitEvent<any>(b, "game_over");
-    b.emit("give_up");
 
     const go = await overA;
     await overB;
@@ -364,22 +369,19 @@ describe("game_over", () => {
 
   it("game_over.winnerId is null on a 0-0 tie", async () => {
     const ctx = await makeRoom();
+    const overA = awaitEvent<any>(ctx.a, "game_over", 4000);
     await startGame(ctx);
-    const { a } = ctx;
-    const overA = awaitEvent<any>(a, "game_over");
-    a.emit("give_up");
     expect((await overA).winnerId).toBeNull();
   }, 10000);
 
   it("[anti-cheat boundary] game_over.missedByPlayer reveals only ISO codes", async () => {
     const ctx = await makeRoom();
+    const overA = awaitEvent<any>(ctx.a, "game_over", 4000);
     await startGame(ctx);
     const { a, aId } = ctx;
     const resA = awaitEvent<any>(a, "answer_result");
     a.emit("submit_answer", { text: CORRECT.text });
     await resA;
-    const overA = awaitEvent<any>(a, "game_over");
-    a.emit("give_up");
     const go = await overA;
     const missed: string[] = go.missedByPlayer[aId];
     expect(missed).not.toContain("fr"); // the one A filled
@@ -390,10 +392,9 @@ describe("game_over", () => {
 
   it("rejects submit_answer after game_over", async () => {
     const ctx = await makeRoom();
+    const overA = awaitEvent<any>(ctx.a, "game_over", 4000);
     await startGame(ctx);
     const { a } = ctx;
-    const overA = awaitEvent<any>(a, "game_over");
-    a.emit("give_up");
     await overA;
     const res = awaitEvent<any>(a, "answer_result");
     a.emit("submit_answer", { text: CORRECT.text });
@@ -402,15 +403,19 @@ describe("game_over", () => {
 });
 
 describe("rematch", () => {
+  beforeEach(async () => {
+    await server.close();
+    server = await startTestServer({ countdownTickMs: 20, raceMsOverride: 400 });
+  });
+
   it("request_rematch broadcasts rematch_requested; both requests trigger rematch_start back to lobby", async () => {
     const ctx = await makeRoom();
-    await startGame(ctx);
     const { a, b } = ctx;
     const overBoth = Promise.all([
-      awaitEvent(a, "game_over"),
-      awaitEvent(b, "game_over"),
+      awaitEvent(a, "game_over", 4000),
+      awaitEvent(b, "game_over", 4000),
     ]);
-    a.emit("give_up");
+    await startGame(ctx);
     await overBoth;
 
     const reqB = awaitEvent<any>(b, "rematch_requested");
@@ -424,6 +429,44 @@ describe("rematch", () => {
     const snap = await stateA;
     expect(snap.phase).toBe("lobby");
     for (const p of snap.players) expect(p.score).toBe(0);
+  }, 10000);
+
+  it("a seat that disconnected mid-match is dropped at game over so the rest can rematch", async () => {
+    await server.close();
+    // Long grace so the disconnected seat is still held when the round ends.
+    server = await startTestServer({ countdownTickMs: 20, raceMsOverride: 500, graceMs: 60_000 });
+    const ctx = await makeRoom();
+    const { a, b, code } = ctx;
+    const c = client();
+    await awaitEvent(c, "connect");
+    c.emit("join_room", { code, playerName: "Cara" });
+    const cId = (await awaitEvent<any>(c, "joined")).playerId as string;
+
+    a.emit("set_ready", { ready: true });
+    await awaitEvent(a, "player_ready");
+    b.emit("set_ready", { ready: true });
+    await awaitEvent(b, "player_ready");
+    c.emit("set_ready", { ready: true });
+    await awaitEvent(c, "player_ready");
+    const started = awaitEvent<any>(a, "game_started", 4000);
+    a.emit("start_game");
+    await started;
+
+    // C drops mid-match; the game ends on the round timer while C is away.
+    const disc = awaitEvent<any>(a, "opponent_disconnected");
+    c.disconnect();
+    await disc;
+    const leftC = awaitEvent<any>(a, "player_left", 4000);
+    await awaitEvent(a, "game_over", 4000);
+    expect((await leftC).playerId).toBe(cId);
+    expect(rooms.get(code)!.players.map((p) => p.id)).not.toContain(cId);
+
+    // The two connected players can now rematch.
+    const startA = awaitEvent(a, "rematch_start");
+    a.emit("request_rematch");
+    b.emit("request_rematch");
+    await startA;
+    expect(rooms.get(code)!.phase).toBe("lobby");
   }, 10000);
 });
 
@@ -625,6 +668,20 @@ describe("regressions", () => {
     a.emit("update_settings", { categoryId: "capitals" as any, timeLimitSeconds: 120 });
     expect((await err).code).toBe("bad_category");
     expect(rooms.get(code)!.settings.categoryId).toBe("countries");
+  });
+
+  it("give_up is ignored in a multiplayer game (not_solo)", async () => {
+    const ctx = await makeRoom();
+    await startGame(ctx);
+    const { a, b, code } = ctx;
+    const err = awaitEvent<any>(a, "error_msg");
+    const noOverA = expectNoEvent(a, "game_over", 250);
+    const noOverB = expectNoEvent(b, "game_over", 250);
+    a.emit("give_up");
+    expect((await err).code).toBe("not_solo");
+    await noOverA;
+    await noOverB;
+    expect(rooms.get(code)!.phase).toBe("playing");
   });
 
   it("leave_room mid-match ends the game with the remaining player as winner", async () => {

@@ -5,7 +5,8 @@
 // names. Transcontinental calls follow the usual quiz convention: Russia,
 // Cyprus → Europe; Turkey, Kazakhstan, the Caucasus → Asia; Egypt → Africa;
 // Central America + Caribbean → North America.
-import { WORLD_LOCATIONS } from "./worldMap";
+import { mapFor } from "./maps";
+import { REGION_ISO } from "./geo";
 
 export type Continent =
   | "Africa"
@@ -16,13 +17,8 @@ export type Continent =
   | "Oceania";
 
 export const CONTINENTS: Record<Continent, string[]> = {
-  Africa: [
-    "dz", "ao", "bj", "bw", "bf", "bi", "cv", "cm", "cf", "td", "km", "cg", "cd",
-    "ci", "dj", "eg", "gq", "er", "sz", "et", "ga", "gm", "gh", "gn", "gw", "ke",
-    "ls", "lr", "ly", "mg", "mw", "ml", "mr", "mu", "ma", "mz", "na", "ne", "ng",
-    "rw", "st", "sn", "sc", "sl", "so", "za", "ss", "sd", "tz", "tg", "tn", "ug",
-    "zm", "zw",
-  ],
+  // The Africa continent and the africa region set are the same 54 countries.
+  Africa: [...REGION_ISO.africa],
   Asia: [
     "af", "am", "az", "bh", "bd", "bt", "bn", "kh", "cn", "ge", "in", "id", "ir",
     "iq", "il", "jp", "jo", "kz", "kw", "kg", "la", "lb", "my", "mv", "mn", "mm",
@@ -62,8 +58,13 @@ const NAME_OVERRIDES: Record<string, string> = {
   ps: "Palestine",
 };
 
-const MAP_NAMES = new Map(WORLD_LOCATIONS.map((l) => [l.id, l.name]));
+const MAP_NAMES = new Map(mapFor("countries").locations.map((l) => [l.id, l.name]));
 
+/**
+ * Display name for a country iso. The ONE naming function for countries (world
+ * and region sets alike) so every list shows e.g. "Czechia", never the map
+ * package's "Czech Republic".
+ */
 export function countryName(iso: string): string {
   return NAME_OVERRIDES[iso] ?? MAP_NAMES.get(iso) ?? iso.toUpperCase();
 }

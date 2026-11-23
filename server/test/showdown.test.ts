@@ -182,3 +182,51 @@ describe("showdown — round scoring", () => {
     void bId;
   }, 10000);
 });
+
+describe("showdown — room_state never leaks opponents' answers", () => {
+  beforeEach(async () => {
+    server = await startTestServer({
+      countdownTickMs: 10,
+      roundMsOverride: 10_000,
+      interRoundMsOverride: 40,
+    });
+  });
+
+  it("each socket's room_state carries only its own filled set, plus roundCounts + round", async () => {
+    const ctx = await makeShowdownRoom(3);
+    const { a, aId, others } = ctx;
+    const b = others[0].socket;
+    const bId = others[0].id;
+    await readyAll(a, [b]);
+
+    const prompt1 = awaitEvent<any>(a, "prompt_changed", 8000);
+    const roundStart = awaitEvent<any>(b, "round_started", 8000);
+    a.emit("start_game");
+    const prompt = await prompt1;
+    await roundStart;
+
+    const valid = [...validIdsFor(promptById(prompt.id)!, CATEGORY)];
+    const ar = awaitEvent<any>(a, "answer_result");
+    a.emit("submit_answer", { text: nameOf(valid[0]) });
+    expect((await ar).accepted).toBe(true);
+
+    // Any state broadcast (set_ready works mid-game) reaches both sockets.
+    const rsA = awaitEvent<any>(a, "room_state");
+    const rsB = awaitEvent<any>(b, "room_state");
+    b.emit("set_ready", { ready: true });
+    const stateA = await rsA;
+    const stateB = await rsB;
+
+    // B never sees A's iso codes, only A's tally.
+    expect(stateB.filled[aId]).toBeUndefined();
+    expect(stateB.filled[bId]).toEqual([]);
+    expect(JSON.stringify(stateB)).not.toContain(`"${valid[0]}"`);
+    expect(stateB.roundCounts).toEqual({ [aId]: 1, [bId]: 0 });
+    expect(stateB.round).toBe(1);
+
+    // A sees its own board.
+    expect(stateA.filled[aId]).toEqual([valid[0]]);
+    expect(stateA.filled[bId]).toBeUndefined();
+    expect(stateA.roundCounts).toEqual({ [aId]: 1, [bId]: 0 });
+  }, 10000);
+});

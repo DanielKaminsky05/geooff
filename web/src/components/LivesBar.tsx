@@ -42,6 +42,7 @@ export default function LivesBar({
           <div
             key={p.id}
             data-testid={`lives-${p.id}`}
+            aria-current={p.isCurrent ? "true" : undefined}
             className={`rounded-lg border px-2.5 py-1 transition ${
               p.isCurrent ? "border-foreground bg-surface-raised" : "border-border bg-surface/70"
             } ${p.eliminated ? "opacity-40" : ""}`}
@@ -50,6 +51,8 @@ export default function LivesBar({
               <span className="truncate text-xs font-semibold" style={{ color }}>
                 {p.name}
                 {p.eliminated ? " · out" : ""}
+                {/* Highlight/danger are colour-only visually; say them too. */}
+                {p.isCurrent && !p.eliminated && <span className="sr-only">, current turn</span>}
               </span>
               {p.count != null && (
                 <span
@@ -57,6 +60,7 @@ export default function LivesBar({
                   style={{ color: p.inDanger && !p.eliminated ? "var(--color-accent)" : color }}
                 >
                   {p.count}
+                  {p.inDanger && !p.eliminated && <span className="sr-only"> (in danger)</span>}
                 </span>
               )}
             </div>

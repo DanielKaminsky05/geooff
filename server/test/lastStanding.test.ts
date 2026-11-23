@@ -67,6 +67,7 @@ async function makeLsRoom() {
     aId: joinedA.playerId as string,
     bId: joinedB.playerId as string,
     tokenA: joinedA.reconnectToken as string,
+    tokenB: joinedB.reconnectToken as string,
   };
 }
 
@@ -262,6 +263,63 @@ describe("last standing — disconnect pause / resume", () => {
     const snap = rooms.get(code)!;
     expect(snap.currentPlayerId).toBe(aId);
     expect(snap.lives![aId]).toBe(1);
+  }, 10000);
+});
+
+describe("last standing — turn passes to a disconnected player", () => {
+  const GRACE_MS = 2000;
+  const TURN_MS = 120;
+
+  beforeEach(async () => {
+    server = await startTestServer({
+      countdownTickMs: 10,
+      turnMsOverride: TURN_MS,
+      graceMs: GRACE_MS,
+    });
+  });
+
+  it("starts the absent player's turn paused (no life lost) and resumes it on reconnect", async () => {
+    const ctx = await makeLsRoom();
+    await startLs(ctx);
+    const { a, b, bId, code, tokenB } = ctx;
+
+    // B drops while it's A's turn.
+    const disc = awaitEvent<any>(a, "opponent_disconnected");
+    b.disconnect();
+    await disc;
+
+    // A answers → the turn passes to the absent B. It must start paused.
+    const turnB = awaitEvent<any>(a, "turn_started");
+    const pausedState = new Promise<any>((resolve) => {
+      a.on("room_state", function onRs(rs: any) {
+        if (rs.turn?.currentPlayerId === bId && rs.turn?.pausedMs !== undefined) {
+          a.off("room_state", onRs);
+          resolve(rs);
+        }
+      });
+    });
+    a.emit("submit_answer", { text: FR.text });
+    expect((await turnB).playerId).toBe(bId);
+    const rs = await pausedState;
+    expect(rs.turn.pausedMs).toBe(TURN_MS);
+
+    // Well past a full turn: B must NOT lose a life while away.
+    await expectNoEvent(a, "life_lost", TURN_MS * 3);
+    const room = rooms.get(code)!;
+    expect(room.currentPlayerId).toBe(bId);
+    expect(room.turnTimer).toBeUndefined();
+    expect(room.pausedTurnMs).toBe(TURN_MS);
+    expect(room.lives![bId]).toBe(1);
+
+    // B reconnects → the turn resumes with a live clock.
+    const b2 = client();
+    await awaitEvent(b2, "connect");
+    const resumed = awaitEvent<any>(b2, "turn_started", 4000);
+    b2.emit("join_room", { code, playerName: "Bob", reconnectToken: tokenB });
+    await awaitEvent(b2, "joined");
+    expect((await resumed).playerId).toBe(bId);
+    expect(rooms.get(code)!.turnTimer).toBeTruthy();
+    expect(rooms.get(code)!.pausedTurnMs).toBeUndefined();
   }, 10000);
 });
 

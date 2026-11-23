@@ -82,9 +82,9 @@ const THREE = [
   player({ id: "c", slot: "p3", name: "Cara" }),
 ];
 
-function renderMatch() {
+function renderMatch(path = "/game/ROOM01") {
   return render(
-    <MemoryRouter initialEntries={["/game/ROOM01"]}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/game/:code" element={<Match />} />
       </Routes>
@@ -397,6 +397,25 @@ describe("<Match>", () => {
       code: "ROOM01",
       reconnectToken: "tok",
     });
+  });
+
+  it("emits exactly one join_room per reconnect", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.emit.mockClear();
+    socket.__emitted.length = 0;
+
+    socket.__server("disconnect", "transport close");
+    socket.__server("connect");
+    expect(socket.__emitted.filter((e) => e.event === "join_room")).toHaveLength(1);
+  });
+
+  it("a rate_limited error is not treated as fatal", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.__server("error_msg", { code: "rate_limited", message: "Slow down" });
+    expect(screen.queryByText("Game unavailable")).toBeNull();
+    expect(screen.getByLabelText("Country guess")).toBeEnabled();
   });
 
   it("surfaces a fatal error and offers home when the room is gone", async () => {
@@ -760,5 +779,286 @@ describe("<Match> showdown", () => {
     // Next round → input back on.
     socket.__server("round_started", { endsAt: Date.now() + 30_000, round: 2 });
     expect(screen.getByLabelText("Country guess")).toBeEnabled();
+  });
+});
+
+describe("<Match> audit fixes", () => {
+  const lsSettings = {
+    categoryId: "countries" as const,
+    mode: "last_standing" as const,
+    timeLimitSeconds: 300,
+    turnSeconds: 15,
+    lives: 5,
+  };
+
+  beforeEach(() => {
+    socket = createMockSocket();
+    identity = { playerId: "a", slot: "p1", reconnectToken: "tok" };
+    navigate.mockClear();
+    setIdentity.mockClear();
+  });
+
+  it("showdown: rehydrates the round number and live round counts from room_state", () => {
+    renderMatch();
+    socket.__server(
+      "room_state",
+      roomState({
+        settings: { categoryId: "countries", mode: "showdown", timeLimitSeconds: 300, turnSeconds: 30, lives: 3 },
+        players: THREE,
+        lives: { a: 3, b: 3, c: 3 },
+        endsAt: Date.now() + 30_000,
+        prompt: { id: "island", label: "Island nations", total: 46 },
+        round: 3,
+        roundCounts: { a: 2, b: 4, c: 1 },
+        filled: { a: ["jp", "gb"] },
+      }),
+    );
+    expect(screen.getByText("Round 3")).toBeInTheDocument();
+    expect(screen.getByTestId("lives-a")).toHaveTextContent("2");
+    expect(screen.getByTestId("lives-b")).toHaveTextContent("4");
+    expect(screen.getByTestId("lives-c")).toHaveTextContent("1");
+  });
+
+  it("2-player game with seats p1 vs p3 shows the opponent in the score bar in their slot color", () => {
+    renderMatch();
+    socket.__server(
+      "room_state",
+      roomState({
+        players: [
+          player({ id: "a", slot: "p1", name: "Alice" }),
+          player({ id: "c", slot: "p3", name: "Cara" }),
+        ],
+      }),
+    );
+    expect(screen.queryByText("Waiting…")).toBeNull();
+    const cara = screen.getAllByText("Cara")[0];
+    expect(cara.getAttribute("style")).toContain("var(--color-player3)");
+  });
+
+  it("2-player game where I hold p3 and the opponent p2 shows both players", () => {
+    identity = { playerId: "c", slot: "p3", reconnectToken: "tok" };
+    renderMatch();
+    socket.__server(
+      "room_state",
+      roomState({
+        players: [
+          player({ id: "b", slot: "p2", name: "Bob" }),
+          player({ id: "c", slot: "p3", name: "Cara" }),
+        ],
+      }),
+    );
+    expect(screen.queryByText("Waiting…")).toBeNull();
+    expect(screen.getAllByText("Bob")[0].getAttribute("style")).toContain("var(--color-player2)");
+    expect(screen.getAllByText("Cara")[0].getAttribute("style")).toContain("var(--color-player3)");
+  });
+
+  it("gauntlet: the prompt count sums every player's named items (3 players)", () => {
+    renderMatch();
+    socket.__server(
+      "room_state",
+      roomState({
+        settings: { ...lsSettings, mode: "gauntlet" },
+        players: THREE,
+        turn: { currentPlayerId: "b", endsAt: Date.now() + 15_000 },
+        lives: { a: 5, b: 5, c: 5 },
+        prompt: { id: "landlocked", label: "Landlocked countries", total: 44 },
+      }),
+    );
+    socket.__server("answer_result", { accepted: true, isoCode: "at" });
+    socket.__server("opponent_progress", { playerId: "b", isoCode: "ch" });
+    socket.__server("opponent_progress", { playerId: "c", isoCode: "bo" });
+    expect(screen.getByTestId("gauntlet-count")).toHaveTextContent("3 / 44");
+  });
+
+  it("colors the turn label with the CURRENT player's slot color (3 players)", () => {
+    renderMatch();
+    socket.__server(
+      "room_state",
+      roomState({
+        settings: lsSettings,
+        players: THREE,
+        turn: { currentPlayerId: "c", endsAt: Date.now() + 15_000 },
+        lives: { a: 5, b: 5, c: 5 },
+      }),
+    );
+    expect(screen.getByText("Cara's turn").getAttribute("style")).toContain("var(--color-player3)");
+  });
+
+  it("tracks each disconnected player separately (3 players)", () => {
+    renderMatch();
+    socket.__server("room_state", roomState({ players: THREE }));
+    socket.__server("opponent_disconnected", { playerId: "b", graceSeconds: 30 });
+    socket.__server("opponent_disconnected", { playerId: "c", graceSeconds: 30 });
+    socket.__server("opponent_reconnected", { playerId: "b" });
+    // Cara is still away — the banner must stay up for her.
+    expect(screen.getByText(/Cara disconnected/)).toBeInTheDocument();
+    expect(screen.queryByText(/Bob disconnected/)).toBeNull();
+    socket.__server("opponent_reconnected", { playerId: "c" });
+    expect(screen.queryByText(/disconnected/)).toBeNull();
+  });
+
+  it("rehydrates a disconnected opponent from room_state after a refresh", () => {
+    renderMatch();
+    socket.__server(
+      "room_state",
+      roomState({
+        players: [
+          player({ id: "a", slot: "p1", name: "Alice" }),
+          player({ id: "b", slot: "p2", name: "Bob", connected: false }),
+        ],
+      }),
+    );
+    expect(screen.getByText(/Opponent disconnected/)).toBeInTheDocument();
+    // A later snapshot showing them back clears it.
+    socket.__server("room_state", roomState());
+    expect(screen.queryByText(/Opponent disconnected/)).toBeNull();
+  });
+
+  it("shows a paused turn clock frozen at pausedMs instead of a stale endsAt", () => {
+    renderMatch();
+    socket.__server(
+      "room_state",
+      roomState({
+        settings: lsSettings,
+        turn: { currentPlayerId: "b", endsAt: Date.now() - 60_000, pausedMs: 7_000 },
+        lives: { a: 5, b: 5 },
+      }),
+    );
+    expect(screen.getByTestId("turn-timer")).toHaveTextContent("7");
+    expect(screen.getByText(/paused/i)).toBeInTheDocument();
+
+    // A fresh turn_started resumes the live clock.
+    socket.__server("turn_started", { playerId: "b", endsAt: Date.now() + 10_000 });
+    expect(screen.queryByText(/paused/i)).toBeNull();
+    expect(screen.getByTestId("turn-timer")).toHaveTextContent("10");
+  });
+
+  it("solo Play again resets per-game transient state (reject banner)", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server(
+      "room_state",
+      roomState({ solo: true, players: [player({ id: "a", slot: "p1", name: "Alice" })] }),
+    );
+    socket.__server("answer_result", { accepted: false, reason: "wrong" });
+    expect(screen.getByText("Not a match")).toBeInTheDocument();
+    socket.__server("game_over", { winnerId: "a", scores: { a: 0 } });
+    await user.click(screen.getByRole("button", { name: "Play again" }));
+    socket.__server("countdown", { seconds: 3 });
+    socket.__server("game_started", { categoryId: "countries", total: 196, endsAt: Date.now() + 300_000 });
+    expect(screen.queryByText("Not a match")).toBeNull();
+  });
+
+  it("rematch: a lobby-phase room_state goes to the lobby without flashing the dead board", () => {
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.__server("game_over", { winnerId: "a", scores: { a: 3, b: 1 } });
+    socket.__server("room_state", roomState({ phase: "lobby" }));
+    expect(screen.getByText("You win!")).toBeInTheDocument();
+    expect(navigate).toHaveBeenCalledWith("/room/ROOM01");
+  });
+
+  it("uppercases the room code from the URL", () => {
+    renderMatch("/game/room01");
+    expect(socket.__lastEmit("join_room")).toMatchObject({ code: "ROOM01" });
+    socket.__server("joined", { playerId: "a", slot: "p1", reconnectToken: "tok", state: roomState() });
+    expect(setIdentity).toHaveBeenCalledWith(expect.objectContaining({ roomCode: "ROOM01" }));
+  });
+
+  it("after game over, a rejoin to a deleted room offers a clean way home", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", roomState());
+    socket.__server("game_over", { winnerId: "a", scores: { a: 3, b: 1 } });
+    socket.__server("disconnect", "transport close");
+    socket.__server("connect");
+    socket.__server("error_msg", { code: "room_not_found", message: "No room with code ROOM01." });
+    expect(screen.queryByText("Reconnecting…")).toBeNull();
+    const alert = screen.getByText("Game unavailable").closest("[role=alertdialog]") as HTMLElement;
+    await user.click(within(alert).getByRole("button", { name: "Back to home" }));
+    expect(setIdentity).toHaveBeenCalledWith(null);
+    expect(navigate).toHaveBeenCalledWith("/");
+  });
+
+  it("an ended room that dropped my seat reads as unavailable, not 'in progress'", () => {
+    renderMatch();
+    socket.__server("error_msg", { code: "in_progress", message: "That game is already in progress." });
+    expect(screen.getByText("Game unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("That game is already in progress.")).toBeNull();
+  });
+});
+
+describe("<Match> leave mid-match", () => {
+  beforeEach(() => {
+    socket = createMockSocket();
+    identity = { playerId: "a", slot: "p1", reconnectToken: "tok" };
+    navigate.mockClear();
+    setIdentity.mockClear();
+  });
+
+  const left = () => socket.__emitted.some((e) => e.event === "leave_room");
+
+  it("1v1: Leave asks to confirm a forfeit; Stay keeps you in the match", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", roomState());
+
+    await user.click(screen.getByRole("button", { name: "Leave" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Leave the match?" });
+    expect(within(dialog).getByText(/forfeits/)).toBeInTheDocument();
+    // "Stay" has focus so a stray Enter can't forfeit.
+    expect(within(dialog).getByRole("button", { name: "Stay" })).toHaveFocus();
+
+    await user.click(within(dialog).getByRole("button", { name: "Stay" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(left()).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("Escape cancels the confirm dialog", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", roomState());
+    await user.click(screen.getByRole("button", { name: "Leave" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(left()).toBe(false);
+  });
+
+  it("confirming emits leave_room, clears the identity and goes home", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", roomState());
+    await user.click(screen.getByRole("button", { name: "Leave" }));
+    await user.click(screen.getByRole("button", { name: "Forfeit and leave" }));
+    expect(left()).toBe(true);
+    expect(setIdentity).toHaveBeenCalledWith(null);
+    expect(navigate).toHaveBeenCalledWith("/");
+  });
+
+  it("3+ players: the dialog says the others play on (no forfeit)", async () => {
+    const user = userEvent.setup();
+    renderMatch();
+    socket.__server("room_state", roomState({ players: THREE }));
+    await user.click(screen.getByRole("button", { name: "Leave" }));
+    expect(screen.getByText(/others will play on/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Leave match" })).toBeInTheDocument();
+  });
+
+  it("is offered during the countdown too", () => {
+    renderMatch();
+    socket.__server("room_state", roomState({ phase: "countdown" }));
+    expect(screen.getByRole("button", { name: "Leave" })).toBeInTheDocument();
+  });
+
+  it("is not offered in solo (Give up instead) or after game over", () => {
+    renderMatch();
+    socket.__server("room_state", roomState({ solo: true, players: [player({ id: "a", slot: "p1", name: "Alice" })] }));
+    expect(screen.queryByRole("button", { name: "Leave" })).toBeNull();
+
+    socket.__server("room_state", roomState());
+    expect(screen.getByRole("button", { name: "Leave" })).toBeInTheDocument();
+    socket.__server("game_over", { winnerId: "a", scores: { a: 1, b: 0 } });
+    expect(screen.queryByRole("button", { name: "Leave" })).toBeNull();
   });
 });

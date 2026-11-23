@@ -22,5 +22,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Real-server integration tests also compile server/src: tsconfig.integration.json
+  "exclude": ["src/test/integration"]
 }
