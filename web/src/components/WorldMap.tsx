@@ -22,6 +22,16 @@ export interface WorldMapProps {
    * maps pass false (anti-cheat-lite).
    */
   revealNames?: boolean;
+  /**
+   * When false, render a plain (non-zoom/pan) svg — used by the end-of-prompt
+   * reveal, which just needs a static highlighted snapshot. Defaults true.
+   */
+  interactive?: boolean;
+  /**
+   * Overrides the container test id (default "world-map"). The reveal map passes
+   * its own so it is not mistaken for a player's board in queries/tests.
+   */
+  testId?: string;
   className?: string;
 }
 
@@ -30,7 +40,7 @@ export interface WorldMapProps {
  * Filled countries use `color` (or `colorByIso` per item); the rest use the
  * land token. Wrapped in react-zoom-pan-pinch for independent zoom/pan.
  */
-function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries", revealNames = true, className }: WorldMapProps) {
+function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries", revealNames = true, interactive = true, testId = "world-map", className }: WorldMapProps) {
   const { viewBox, locations } = mapFor(categoryId);
   // Pin absolutely to fill the pane without contributing an intrinsic size.
   // A portrait region viewBox (the Americas run Arctic→Patagonia) gave the
@@ -39,6 +49,53 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
   // scrolled to the top with South America below the fold. Taking it out of
   // flow (inset-0 over the `relative` pane) makes it track the pane's real box;
   // `xMidYMid meet` then fits the whole region, portrait or wide.
+  const svg = (
+    <svg
+      viewBox={viewBox}
+      width="100%"
+      height="100%"
+      role="img"
+      aria-label="World map"
+      preserveAspectRatio="xMidYMid meet"
+      style={{ display: "block" }}
+    >
+      {locations.map((loc) => {
+        // A dependent territory fills with its sovereign (Greenland→dk, …).
+        const key = TERRITORY_PARENT[loc.id] ?? loc.id;
+        const perItem = colorByIso?.get(key);
+        const filled = colorByIso ? perItem !== undefined : filledIso.has(key);
+        const fill = perItem ?? (filled ? color : "var(--color-land)");
+        return (
+          <path
+            key={loc.id}
+            id={loc.id}
+            data-iso={loc.id}
+            data-filled={filled ? "true" : "false"}
+            d={loc.path}
+            fill={fill}
+            stroke="var(--color-border)"
+            strokeWidth={0.3}
+          >
+            {/* Only reveal names of countries already guessed —
+                a tooltip on unguessed ones would leak the answer. And
+                only on your own map: an opponent's hover tooltip would
+                otherwise leak spellings you haven't named yet. */}
+            {filled && revealNames && <title>{loc.name}</title>}
+          </path>
+        );
+      })}
+    </svg>
+  );
+
+  // Static snapshot (the reveal): no zoom/pan layer, just the svg.
+  if (!interactive) {
+    return (
+      <div className={`${className ?? ""} absolute inset-0`} data-testid={testId}>
+        {svg}
+      </div>
+    );
+  }
+
   return (
     <div className={`${className ?? ""} absolute inset-0`} data-testid="world-map">
       <TransformWrapper minScale={1} maxScale={8} centerOnInit disablePadding doubleClick={{ mode: "zoomIn" }}>
@@ -46,41 +103,7 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
           wrapperStyle={{ width: "100%", height: "100%" }}
           contentStyle={{ width: "100%", height: "100%" }}
         >
-          <svg
-            viewBox={viewBox}
-            width="100%"
-            height="100%"
-            role="img"
-            aria-label="World map"
-            preserveAspectRatio="xMidYMid meet"
-            style={{ display: "block" }}
-          >
-            {locations.map((loc) => {
-              // A dependent territory fills with its sovereign (Greenland→dk, …).
-              const key = TERRITORY_PARENT[loc.id] ?? loc.id;
-              const perItem = colorByIso?.get(key);
-              const filled = colorByIso ? perItem !== undefined : filledIso.has(key);
-              const fill = perItem ?? (filled ? color : "var(--color-land)");
-              return (
-                <path
-                  key={loc.id}
-                  id={loc.id}
-                  data-iso={loc.id}
-                  data-filled={filled ? "true" : "false"}
-                  d={loc.path}
-                  fill={fill}
-                  stroke="var(--color-border)"
-                  strokeWidth={0.3}
-                >
-                  {/* Only reveal names of countries already guessed —
-                      a tooltip on unguessed ones would leak the answer. And
-                      only on your own map: an opponent's hover tooltip would
-                      otherwise leak spellings you haven't named yet. */}
-                  {filled && revealNames && <title>{loc.name}</title>}
-                </path>
-              );
-            })}
-          </svg>
+          {svg}
         </TransformComponent>
       </TransformWrapper>
     </div>
@@ -112,6 +135,8 @@ function propsEqual(prev: WorldMapProps, next: WorldMapProps): boolean {
     prev.color === next.color &&
     prev.categoryId === next.categoryId &&
     prev.revealNames === next.revealNames &&
+    prev.interactive === next.interactive &&
+    prev.testId === next.testId &&
     prev.className === next.className &&
     sameSet(prev.filledIso, next.filledIso) &&
     sameColors(prev.colorByIso, next.colorByIso)

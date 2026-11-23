@@ -13,7 +13,15 @@ import { useIsDesktop } from "../../hooks/useMediaQuery";
  *
  * `children` are shared on-map extras (named button, away banner).
  */
-export default function RaceView({ model, children }: { model: MatchModel; children?: ReactNode }) {
+export default function RaceView({
+  model,
+  children,
+}: {
+  model: MatchModel;
+  children?: ReactNode;
+  /** Accepted for a uniform View signature; race has no reveal pause. */
+  onSkipReveal?: () => void;
+}) {
   // Kept here (not in the sub-layouts) so it survives a 2↔3 player switch.
   const [focusedPlayerId, setFocusedPlayerId] = useState<string | null>(null);
   const [showOpponent, setShowOpponent] = useState(false);

@@ -27,7 +27,7 @@ export function MatchToast({ toast }: { toast: Toast }) {
     <div
       key={toast.key}
       role="status"
-      className="pointer-events-none absolute bottom-24 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-surface-raised px-4 py-2 text-sm font-semibold shadow"
+      className="pointer-events-none absolute bottom-24 left-1/2 z-20 max-w-[88vw] -translate-x-1/2 text-balance rounded-lg border border-border bg-surface-raised px-4 py-2 text-center text-sm font-semibold shadow"
     >
       {toast.text}
     </div>

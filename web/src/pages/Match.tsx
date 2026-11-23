@@ -16,6 +16,7 @@ import AnswerBar from "../features/match/AnswerBar";
 import CountdownOverlay from "../features/match/CountdownOverlay";
 import GameOverOverlay from "../features/match/GameOverOverlay";
 import { NamedButton, NamedSheet } from "../features/match/NamedSheet";
+import RevealScreen, { RevealControls } from "../features/match/PromptReveal";
 import {
   FatalErrorOverlay,
   LeaveConfirmDialog,
@@ -98,6 +99,10 @@ export default function Match() {
       fx.lifeLost(p.playerId === state.myId, p.livesLeft);
     },
     prompt_changed: forward("prompt_changed"),
+    // The prompt just retired: hold on the reveal (map + names) until play
+    // resumes or everyone skips. Showdown's reveal rides on round_result.
+    prompt_revealed: forward("prompt_revealed"),
+    reveal_skip: forward("reveal_skip"),
     round_started: forward("round_started"),
     round_result: forward("round_result"),
     game_over: forward("game_over"),
@@ -134,6 +139,13 @@ export default function Match() {
     return true;
   }
 
+  // Vote to skip the reveal pause; the server advances once everyone has voted.
+  function skipReveal(): void {
+    if (state.iSkipped) return;
+    socket.emit("skip_reveal");
+    dispatch({ type: "reveal_skip_voted" });
+  }
+
   function goHome() {
     setIdentity(null);
     navigate("/");
@@ -167,7 +179,7 @@ export default function Match() {
         }`}
       >
         {/* HUD + maps, per mode; the shared on-map extras ride along inside. */}
-        <View model={model}>
+        <View model={model} onSkipReveal={skipReveal}>
           <NamedButton model={model} onOpen={() => setShowNamed(true)} />
           {awayPlayers.length > 0 && !state.gameOver && (
             <OpponentDisconnectedBanner
@@ -190,6 +202,41 @@ export default function Match() {
 
         {state.countdown != null && !state.gameOver && <CountdownOverlay countdown={state.countdown} />}
         {fx.toast && <MatchToast toast={fx.toast} />}
+        {/* Gauntlet reveal pause: the board lights up red with the missed
+            countries, a list down the side, a countdown + skip at the foot. */}
+        {state.reveal && !state.gameOver && (
+          <RevealScreen
+            title={state.reveal.swept ? "Board swept!" : "Left on the board"}
+            subtitle={
+              state.reveal.swept
+                ? undefined
+                : `${state.reveal.label} · ${state.reveal.missed.length} missed`
+            }
+            missed={state.reveal.missed}
+            swept={state.reveal.swept}
+            categoryId={model.categoryId}
+            controls={{
+              endsAt: state.revealEndsAt,
+              votes: state.revealVotes,
+              iSkipped: state.iSkipped,
+              onSkip: skipReveal,
+            }}
+          />
+        )}
+        {/* Reconnected mid-pause (no reveal content in the snapshot): timer + skip only. */}
+        {state.revealEndsAt != null && !state.reveal && !state.roundResult && !state.gameOver && (
+          <div className="pointer-events-none absolute inset-x-0 top-16 z-20 flex justify-center px-4">
+            <div className="fade-in pointer-events-auto flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface/95 px-5 py-4 text-center shadow-xl backdrop-blur">
+              <p className="text-sm font-semibold">Next prompt coming up…</p>
+              <RevealControls
+                endsAt={state.revealEndsAt}
+                votes={state.revealVotes}
+                iSkipped={state.iSkipped}
+                onSkip={skipReveal}
+              />
+            </div>
+          </div>
+        )}
 
         {state.gameOver && !fx.breaking && (
           <GameOverOverlay

@@ -148,18 +148,18 @@ describe("matchReducer: single events", () => {
     expect(s.roundEndsAt).toBe(500);
     s = matchReducer(s, {
       type: "round_result",
-      payload: { counts: { a: 3, b: 1 }, losers: ["b"], eliminated: [], tie: false, nextInMs: 3000 },
+      payload: { counts: { a: 3, b: 1 }, losers: ["b"], eliminated: [], tie: false, nextInMs: 3000, missed: [], named: {}, endsAt: 0 },
     });
     expect(s.roundEndsAt).toBeNull();
     expect(s.scores).toEqual({ a: 3, b: 1 });
-    expect(s.roundResult).toEqual({ counts: { a: 3, b: 1 }, losers: ["b"], eliminated: [], tie: false });
+    expect(s.roundResult).toEqual({ counts: { a: 3, b: 1 }, losers: ["b"], eliminated: [], tie: false, missed: [], named: {} });
   });
 
   it("game_over ends the game and drops round + away state", () => {
     const s = run([
       { type: "room_state", payload: room() },
       { type: "opponent_disconnected", payload: { playerId: "b", graceSeconds: 30 }, now: 0 },
-      { type: "round_result", payload: { counts: {}, losers: [], eliminated: [], tie: true, nextInMs: 0 } },
+      { type: "round_result", payload: { counts: {}, losers: [], eliminated: [], tie: true, nextInMs: 0, missed: [], named: {}, endsAt: 0 } },
       { type: "game_over", payload: { winnerId: "a", scores: { a: 4, b: 2 } } },
     ]);
     expect(s.phase).toBe("ended");

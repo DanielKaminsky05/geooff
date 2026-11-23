@@ -29,6 +29,10 @@ export interface RoundResult {
   losers: string[];
   eliminated: string[];
   tie: boolean;
+  /** Valid answers no player named this round — the end-of-round reveal. */
+  missed: { iso: string; name: string }[];
+  /** Each player's answers this round (by playerId) — click a player to see them. */
+  named: Record<string, { iso: string; name: string }[]>;
 }
 
 /** 3-2-1 overlay: seconds left, "ready" (in countdown but no tick seen yet), or null. */
@@ -60,6 +64,16 @@ export interface MatchState {
   roundEndsAt: number | null;
   roundNum: number;
   roundResult: RoundResult | null;
+
+  // end-of-prompt reveal pause (gauntlet + showdown).
+  /** gauntlet: the retired prompt's reveal (map + names); null outside a reveal. */
+  reveal: { label: string; missed: { iso: string; name: string }[]; swept: boolean } | null;
+  /** epoch ms the reveal pause auto-advances; null when the game isn't paused. */
+  revealEndsAt: number | null;
+  /** skip-vote progress for the active reveal, or null. */
+  revealVotes: { count: number; needed: number } | null;
+  /** whether I've voted to skip the current reveal. */
+  iSkipped: boolean;
 
   gameOver: GameOver | null;
   myRematch: boolean;
@@ -96,6 +110,9 @@ export type MatchAction =
   | { type: "turn_started"; payload: Payload<"turn_started"> }
   | { type: "life_lost"; payload: Payload<"life_lost"> }
   | { type: "prompt_changed"; payload: Payload<"prompt_changed"> }
+  | { type: "prompt_revealed"; payload: Payload<"prompt_revealed"> }
+  | { type: "reveal_skip"; payload: Payload<"reveal_skip"> }
+  | { type: "reveal_skip_voted" }
   | { type: "round_started"; payload: Payload<"round_started"> }
   | { type: "round_result"; payload: Payload<"round_result"> }
   | { type: "game_over"; payload: Payload<"game_over"> }
@@ -141,6 +158,10 @@ export function initialMatchState(myId: string | null): MatchState {
     roundEndsAt: null,
     roundNum: 0,
     roundResult: null,
+    reveal: null,
+    revealEndsAt: null,
+    revealVotes: null,
+    iSkipped: false,
     gameOver: null,
     myRematch: false,
     othersRematch: false,
@@ -205,6 +226,14 @@ function applyRoomState(s: MatchState, room: RoomState): MatchState {
   next.disconnected = disconnected;
   if (room.lives) next.lives = room.lives;
   if (room.prompt) next.prompt = room.prompt;
+  // Reveal pause: rehydrate its countdown (the missed list isn't in the
+  // snapshot, so a client that reconnects mid-pause shows the timer + skip only).
+  next.revealEndsAt = room.revealEndsAt ?? null;
+  if (room.revealEndsAt === undefined) {
+    next.reveal = null;
+    next.revealVotes = null;
+    next.iSkipped = false;
+  }
   return next;
 }
 
@@ -252,6 +281,10 @@ export function matchReducer(s: MatchState, action: MatchAction): MatchState {
         roundEndsAt: null,
         roundNum: 0,
         roundResult: null,
+        reveal: null,
+        revealEndsAt: null,
+        revealVotes: null,
+        iSkipped: false,
         clearSignal: s.clearSignal + 1,
       };
     case "answer_result": {
@@ -289,11 +322,16 @@ export function matchReducer(s: MatchState, action: MatchAction): MatchState {
       return { ...s, filled: { ...s.filled, [p.playerId]: set } };
     }
     case "turn_started":
+      // A turn starting also means any gauntlet reveal pause has ended.
       return {
         ...s,
         currentPlayerId: action.payload.playerId,
         turnEndsAt: action.payload.endsAt,
         turnPausedMs: null,
+        reveal: null,
+        revealEndsAt: null,
+        revealVotes: null,
+        iSkipped: false,
         rejectMsg: null,
       };
     case "life_lost": {
@@ -309,6 +347,21 @@ export function matchReducer(s: MatchState, action: MatchAction): MatchState {
       // A fresh prompt is a clean slate: every player's claims + stale reject.
       return { ...s, prompt: { id, label, total }, filled: {}, rejectMsg: null };
     }
+    case "prompt_revealed": {
+      // gauntlet: the prompt retired — hold on the reveal until play resumes.
+      const { label, missed, swept, endsAt } = action.payload;
+      return {
+        ...s,
+        reveal: { label, missed, swept },
+        revealEndsAt: endsAt,
+        revealVotes: null,
+        iSkipped: false,
+      };
+    }
+    case "reveal_skip":
+      return { ...s, revealVotes: action.payload };
+    case "reveal_skip_voted":
+      return { ...s, iSkipped: true };
     case "round_started":
       // A new showdown round: clean board + input, start the round clock.
       return {
@@ -316,18 +369,26 @@ export function matchReducer(s: MatchState, action: MatchAction): MatchState {
         roundEndsAt: action.payload.endsAt,
         roundNum: action.payload.round,
         roundResult: null,
+        reveal: null,
+        revealEndsAt: null,
+        revealVotes: null,
+        iSkipped: false,
         filled: withMyFilled(s, new Set()),
         scores: {},
         rejectMsg: null,
         clearSignal: s.clearSignal + 1,
       };
     case "round_result": {
-      const { counts, losers, eliminated, tie } = action.payload;
+      const { counts, losers, eliminated, tie, missed, named, endsAt } = action.payload;
       return {
         ...s,
         scores: counts,
         roundEndsAt: null, // round's over → input off during the pause
-        roundResult: { counts, losers, eliminated, tie },
+        // The between-round pause is a reveal: surface its countdown + skip.
+        revealEndsAt: endsAt > 0 ? endsAt : null,
+        revealVotes: null,
+        iSkipped: false,
+        roundResult: { counts, losers, eliminated, tie, missed, named },
       };
     }
     case "game_over":
@@ -340,6 +401,10 @@ export function matchReducer(s: MatchState, action: MatchAction): MatchState {
         endsAt: null,
         roundEndsAt: null,
         roundResult: null,
+        reveal: null,
+        revealEndsAt: null,
+        revealVotes: null,
+        iSkipped: false,
         disconnected: {},
         rejectMsg: null,
       };

@@ -95,7 +95,7 @@ describe("last standing against the real server", () => {
 describe("gauntlet against the real server", () => {
   it("applies prompt changes in server order (prompt before turn, board reset on cycle)", async () => {
     const TURN_MS = 2500;
-    server = await startServer({ ...FAST, turnMsOverride: TURN_MS });
+    server = await startServer({ ...FAST, turnMsOverride: TURN_MS, revealMsOverride: 150 });
     const { code, myId, bob, bobId } = await hostLobbyWithBot(server.url, "Gauntlet");
 
     // Record the order the server emits the game's opening + cycling events.

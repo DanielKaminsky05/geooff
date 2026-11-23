@@ -63,12 +63,13 @@ export function useMatchFx() {
     [later],
   );
 
-  /** Show a brief toast; `key` re-triggers the fade on repeats. */
+  /** Show a brief toast; `key` re-triggers the fade on repeats. `ms` overrides
+   *  the default dwell (the end-of-prompt reveal lingers a little longer). */
   const showToast = useCallback(
-    (text: string) => {
+    (text: string, ms: number = TOAST_MS) => {
       const key = (seq.current += 1);
       setToast({ text, key });
-      later(() => setToast((cur) => (cur && cur.key === key ? null : cur)), TOAST_MS);
+      later(() => setToast((cur) => (cur && cur.key === key ? null : cur)), ms);
     },
     [later],
   );

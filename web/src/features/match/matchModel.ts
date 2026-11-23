@@ -167,7 +167,11 @@ export function deriveMatchModel(
   // rounds and once I'm eliminated.
   const iAmEliminated = showdown && myId != null && (lives[myId] ?? maxLives) <= 0;
   const inputDisabled =
-    gameOver != null || phase !== "playing" || (showdown && (state.roundEndsAt == null || iAmEliminated));
+    gameOver != null ||
+    phase !== "playing" ||
+    (showdown && (state.roundEndsAt == null || iAmEliminated)) ||
+    // Held on the end-of-prompt reveal pause (both modes).
+    state.revealEndsAt != null;
 
   // A live race hides opponents' lists; shared-pool modes (and race at game
   // over) reveal everyone. Showdown never reveals opponents' answers.

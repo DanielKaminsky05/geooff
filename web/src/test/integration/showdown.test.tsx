@@ -37,7 +37,9 @@ const ROUND_MS = 3000;
 
 describe("showdown against the real server", () => {
   it("restores round number + counts after a reconnect mid-round, never leaking the opponent's answers", async () => {
-    server = await startServer({ ...FAST, roundMsOverride: ROUND_MS, interRoundMsOverride: 150, graceMs: 10_000 });
+    // A comfortable reveal pause so the between-round screen is reliably observable
+    // (prod is 10s; 150ms is too tight for findByText to catch the transient card).
+    server = await startServer({ ...FAST, roundMsOverride: ROUND_MS, revealMsOverride: 600, graceMs: 10_000 });
     const { code, myId, bob, bobId } = await hostLobbyWithBot(server.url, "Showdown");
     const round1Result = nextEvent(bob, "round_result", () => true, ROUND_MS + 3000);
     const round2 = nextEvent(bob, "round_started", (p) => p.round === 2, ROUND_MS + 3000);

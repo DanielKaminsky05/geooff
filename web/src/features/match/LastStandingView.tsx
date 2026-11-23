@@ -20,6 +20,9 @@ export default function LastStandingView({
 }: {
   model: MatchModel;
   children?: ReactNode;
+  /** Accepted for a uniform View signature; unused here (gauntlet reveal rides
+   *  on a separate overlay in the match container). */
+  onSkipReveal?: () => void;
 }) {
   // `roster` (id/slot/name only) rather than `players`, so a reconnect or score
   // tick in a room_state doesn't rebuild the lives bar or the shared map colours.

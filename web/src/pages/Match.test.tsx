@@ -755,6 +755,9 @@ describe("<Match> showdown", () => {
       eliminated: [],
       tie: false,
       nextInMs: 3000,
+      missed: [],
+      named: {},
+      endsAt: 0,
     });
     expect(screen.getByText("Round over")).toBeInTheDocument();
     expect(screen.getByTestId("round-row-c")).toHaveTextContent("♥"); // "−1 ♥"
@@ -773,6 +776,9 @@ describe("<Match> showdown", () => {
       eliminated: [],
       tie: true,
       nextInMs: 3000,
+      missed: [],
+      named: {},
+      endsAt: 0,
     });
     expect(screen.getByLabelText("Country guess")).toBeDisabled();
 
