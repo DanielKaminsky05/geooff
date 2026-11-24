@@ -12,6 +12,8 @@ import {
   matchAnswer,
   scoreGuess,
   determineWinner,
+  damerauLevenshtein,
+  fuzzyThreshold,
   total,
 } from "../src/matching.js";
 
@@ -67,6 +69,61 @@ describe("matchAnswer", () => {
   });
   it("returns canonical display name", () => {
     expect(matchAnswer("america", lookup, names).canonical).toBe("United States");
+  });
+});
+
+describe("damerauLevenshtein", () => {
+  it("counts a transposition as one edit", () => {
+    expect(damerauLevenshtein("indoneisa", "indonesia", 2)).toBe(1);
+  });
+  it("counts an insertion/deletion/substitution as one edit each", () => {
+    expect(damerauLevenshtein("kyrgystan", "kyrgyzstan", 2)).toBe(1); // insertion
+    expect(damerauLevenshtein("portugalx", "portugal", 2)).toBe(1); // deletion
+    expect(damerauLevenshtein("belgiun", "belgium", 2)).toBe(1); // substitution
+  });
+  it("returns max+1 once the cap is blown (early bail)", () => {
+    expect(damerauLevenshtein("france", "germany", 2)).toBe(3);
+  });
+});
+
+describe("fuzzyThreshold", () => {
+  it("gives short inputs no slack and longer inputs more", () => {
+    expect(fuzzyThreshold(4)).toBe(0);
+    expect(fuzzyThreshold(7)).toBe(1);
+    expect(fuzzyThreshold(8)).toBe(2);
+  });
+});
+
+describe("matchAnswer — typo tolerance", () => {
+  it("forgives single-edit typos in longer names", () => {
+    expect(matchAnswer("indoneisa", lookup, names)).toMatchObject({ found: true, iso: "id" });
+    expect(matchAnswer("phillipines", lookup, names)).toMatchObject({ found: true, iso: "ph" });
+    expect(matchAnswer("kyrgystan", lookup, names)).toMatchObject({ found: true, iso: "kg" });
+    expect(matchAnswer("azerbijan", lookup, names)).toMatchObject({ found: true, iso: "az" });
+    expect(matchAnswer("liechtenstien", lookup, names)).toMatchObject({ found: true, iso: "li" });
+  });
+
+  it("never fuzzes short names into a different country", () => {
+    // Iran/Iraq are one edit apart — a 4-letter input gets no slack at all.
+    expect(matchAnswer("irap", lookup, names).found).toBe(false);
+    expect(matchAnswer("mard", lookup, names).found).toBe(false);
+  });
+
+  it("rejects a typo that sits equally close to two countries", () => {
+    // "slovania" is one edit from both Slovakia and Slovenia → ambiguous.
+    expect(matchAnswer("slovania", lookup, names).found).toBe(false);
+    // "nigeri" is one edit from both Niger and Nigeria.
+    expect(matchAnswer("nigeri", lookup, names).found).toBe(false);
+  });
+
+  it("still rejects genuine garbage", () => {
+    expect(matchAnswer("notacountry", lookup, names).found).toBe(false);
+    expect(matchAnswer("xqzpt land", lookup, names).found).toBe(false);
+  });
+
+  it("prefers an exact name/alias over any fuzzy neighbour", () => {
+    // "niger" is a real country, so it resolves to Niger, never Nigeria.
+    expect(matchAnswer("niger", lookup, names)).toMatchObject({ found: true, iso: "ne" });
   });
 });
 
