@@ -400,6 +400,40 @@ describe("gauntlet — prompts don't repeat until the pool is exhausted", () => 
     const afterReset = pickPrompt(room, last);
     expect(afterReset!.id).not.toBe(last);
   });
+
+  it("surfaces the hard capital-starts prompts later than the rest (weighted draw)", () => {
+    const pool = buildPromptPool("countries");
+    const isCapital = (id: string) => id.startsWith("capital-starts-");
+    const capitalIds = pool.filter((p) => isCapital(p.id)).map((p) => p.id);
+    expect(capitalIds.length).toBeGreaterThan(0);
+
+    // Average, over many fresh bags, the draw position (1-based) of each family.
+    // The weighting should push capital-starts prompts toward the end of a bag.
+    const RUNS = 200;
+    let capitalPosSum = 0;
+    let capitalCount = 0;
+    let otherPosSum = 0;
+    let otherCount = 0;
+    for (let run = 0; run < RUNS; run++) {
+      const room = { settings: { categoryId: "countries" }, usedPromptIds: new Set<string>() } as unknown as Room;
+      let last: string | undefined;
+      for (let pos = 1; pos <= pool.length; pos++) {
+        const p = pickPrompt(room, last)!;
+        if (isCapital(p.id)) {
+          capitalPosSum += pos;
+          capitalCount++;
+        } else {
+          otherPosSum += pos;
+          otherCount++;
+        }
+        last = p.id;
+      }
+    }
+    const capitalAvg = capitalPosSum / capitalCount;
+    const otherAvg = otherPosSum / otherCount;
+    // Comfortably later on average — not a coin-flip margin.
+    expect(capitalAvg).toBeGreaterThan(otherAvg + 10);
+  });
 });
 
 describe("gauntlet — elimination", () => {

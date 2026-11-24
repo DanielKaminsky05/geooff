@@ -133,11 +133,42 @@ export function beginFirstTurn(deps: LastStandingDeps, room: Room): void {
 /* ------------------------------------------------------------------ */
 
 /**
+ * Prompts whose id starts with this are drawn less often than the rest — the
+ * "capital starts with X" family, which players find harder than the others.
+ * They stay fully in the shuffle-bag (so they still appear, and the no-repeat
+ * guarantee is untouched); the low weight just pushes them toward the end of a
+ * bag, and real games rarely draw the whole 120-prompt pool.
+ */
+const RARE_PROMPT_PREFIX = "capital-starts-";
+/** Relative draw weight of a rare-family prompt vs the default weight of 1. */
+export const RARE_PROMPT_WEIGHT = 0.25;
+
+function promptWeight(p: Prompt): number {
+  return p.id.startsWith(RARE_PROMPT_PREFIX) ? RARE_PROMPT_WEIGHT : 1;
+}
+
+/** Pick one prompt from `candidates` with probability proportional to weight. */
+function weightedPick(candidates: Prompt[]): Prompt {
+  let total = 0;
+  for (const p of candidates) total += promptWeight(p);
+  let r = Math.random() * total;
+  for (const p of candidates) {
+    r -= promptWeight(p);
+    if (r < 0) return p;
+  }
+  return candidates[candidates.length - 1];
+}
+
+/**
  * Pick a prompt at random, never repeating one until the whole pool has been
  * shown (a shuffle-bag): track used ids on the room and draw only from the
  * unused remainder. When the bag empties we reset it, keeping the just-finished
  * prompt (excludeId) out of the first draw so it can't immediately repeat across
  * the reshuffle boundary. Returns undefined only for an empty pool.
+ *
+ * The draw is weighted (see promptWeight), so some families surface less often
+ * within a bag; weighting affects ORDER only — every prompt still appears
+ * exactly once per bag, so the no-repeat/full-coverage guarantee holds.
  */
 export function pickPrompt(room: Room, excludeId?: string): Prompt | undefined {
   const pool = buildPromptPool(room.settings.categoryId);
@@ -152,7 +183,7 @@ export function pickPrompt(room: Room, excludeId?: string): Prompt | undefined {
     if (candidates.length === 0) candidates = pool; // pool of one
   }
 
-  const choice = candidates[Math.floor(Math.random() * candidates.length)] ?? pool[0];
+  const choice = weightedPick(candidates) ?? pool[0];
   used.add(choice.id);
   return choice;
 }
