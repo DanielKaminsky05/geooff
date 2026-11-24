@@ -125,6 +125,17 @@ describe("matchAnswer — typo tolerance", () => {
     // "niger" is a real country, so it resolves to Niger, never Nigeria.
     expect(matchAnswer("niger", lookup, names)).toMatchObject({ found: true, iso: "ne" });
   });
+
+  it("resolves curated alternate names exactly", () => {
+    expect(matchAnswer("ceylon", lookup, names)).toMatchObject({ iso: "lk" });
+    expect(matchAnswer("siam", lookup, names)).toMatchObject({ iso: "th" });
+    expect(matchAnswer("formosa", lookup, names)).toMatchObject({ iso: "tw" });
+    expect(matchAnswer("eire", lookup, names)).toMatchObject({ iso: "ie" });
+    expect(matchAnswer("oz", lookup, names)).toMatchObject({ iso: "au" });
+    // "dominican" is a curated alias, so it means the Republic — never Dominica.
+    expect(matchAnswer("dominican", lookup, names)).toMatchObject({ iso: "do" });
+    expect(matchAnswer("dominica", lookup, names)).toMatchObject({ iso: "dm" });
+  });
 });
 
 describe("scoreGuess", () => {
