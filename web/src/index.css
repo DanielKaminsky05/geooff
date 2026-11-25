@@ -10,15 +10,23 @@
   --color-surface: #1a2838; /* panels, inputs, buttons */
   --color-surface-raised: #223449; /* hovered/raised surface */
   --color-border: #415169; /* dividers, panel borders */
-  --color-land: #30425a; /* unguessed country fill — calm neutral land */
+  --color-land: #e8d8b4; /* unguessed country fill — warm parchment/tan */
 
-  /* Flat-modern map (Datawrapper / Mapbox-light feel). The water is a calm,
-     low-contrast blue-grey gradient painted full-bleed on the map container
-     (see .map-ocean); the land gets a crisp hairline border. Kept as their own
-     tokens so the map reads as a quiet surface without restyling app chrome. */
-  --map-ocean-top: #16273a; /* water, top — quiet blue-grey */
-  --map-ocean-bottom: #101e2e; /* water, bottom — a touch deeper */
-  --map-land-border: #46597a; /* crisp hairline country border */
+  /* Victoria-3-style printed atlas on aged paper. The sea is a faint
+     desaturated blue-grey WASH over warm cream paper (not a saturated navy),
+     painted full-bleed on the map container (see .map-ocean). The land is a
+     warm parchment tan with thin sepia-brown coastlines. Kept as their own
+     tokens so the map reads as a painted page without restyling app chrome. */
+  --map-paper: #efe4c9; /* warm cream/ivory aged paper base */
+  --map-paper-warm: #e7d6b0; /* mottled warm patch in the paper */
+  --map-ocean-top: #c9d6cf; /* faint blue-grey sea wash, top */
+  --map-ocean-bottom: #b9cbc8; /* sea wash, bottom — a touch cooler/deeper */
+  --map-land-border: #8a6a44; /* thin sepia-brown coastline */
+  --map-ink: #6b5536; /* sepia ink for graticule / labels / equator */
+  --map-terracotta: #a9623f; /* dashed equator line */
+
+  /* Classic serif stack for the atlas's decorative text (ocean labels, etc.). */
+  --font-serif: Georgia, "Times New Roman", "Iowan Old Style", "Palatino Linotype", serif;
 
   --color-foreground: #e6edf3; /* primary text */
   --color-muted: #8b98a5; /* secondary text, counters */
@@ -455,16 +463,35 @@ body {
 }
 
 /*
- * Flat-modern world map.
+ * Victoria-3-style printed atlas world map.
  *
- * The water is painted as a FULL-BLEED layer on the map container (100% of the
- * absolute inset-0 wrapper), NOT as a viewBox-sized <rect>. The land <svg> uses
- * `preserveAspectRatio="xMidYMid meet"` and is letterboxed when the pane is a
- * different aspect than the map; painting the ocean on the container means the
- * water fills the whole pane edge-to-edge with no bare side bands, and (in
+ * The backdrop is painted as a FULL-BLEED layer on the map container (100% of
+ * the absolute inset-0 wrapper), NOT as a viewBox-sized <rect>. The land <svg>
+ * uses `preserveAspectRatio="xMidYMid meet"` and is letterboxed when the pane is
+ * a different aspect than the map; painting the paper + sea on the container
+ * means it fills the whole pane edge-to-edge with no bare side bands, and (in
  * interactive mode) stays fixed behind the panning/zooming land.
+ *
+ * Layering (top → bottom): a corner vignette, a faint paper-grain texture, a
+ * soft mottling of warm patches, the pale sea wash, then the cream paper base.
  */
 .map-ocean {
   background:
-    linear-gradient(180deg, var(--map-ocean-top), var(--map-ocean-bottom));
+    /* corner vignette — subtly darkens the pane corners */
+    radial-gradient(
+      ellipse 120% 120% at 50% 50%,
+      transparent 55%,
+      rgb(70 52 30 / 0.16) 100%
+    ),
+    /* paper grain: a fine cross-hatch of near-invisible lines */
+    repeating-linear-gradient(0deg, rgb(120 96 56 / 0.025) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgb(120 96 56 / 0.02) 0 1px, transparent 1px 3px),
+    /* soft warm mottling of the paper */
+    radial-gradient(ellipse 40% 50% at 18% 26%, var(--map-paper-warm) 0%, transparent 60%),
+    radial-gradient(ellipse 45% 40% at 78% 72%, var(--map-paper-warm) 0%, transparent 62%),
+    radial-gradient(ellipse 35% 45% at 62% 14%, var(--map-paper-warm) 0%, transparent 60%),
+    /* pale sea wash over the paper */
+    linear-gradient(180deg, var(--map-ocean-top), var(--map-ocean-bottom)),
+    /* cream paper base */
+    var(--map-paper);
 }
