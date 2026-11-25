@@ -27,6 +27,23 @@
   --color-walnut: #7a5a3a;
   --color-walnut-dark: #5e4328;
 
+  /* In-game world map (Victoria-3-style printed atlas on aged paper). The sea
+     is a faint desaturated blue-grey WASH over warm cream paper, painted
+     full-bleed on the map container (see .map-ocean); land is warm parchment
+     tan with thin sepia coastlines. Kept as their own --map-* tokens so the
+     playing map reads as a painted page without restyling the journal chrome.
+     (--color-land above doubles as the land fill, in the journal's tone.) */
+  --map-paper: #efe4c9; /* warm cream/ivory aged paper base */
+  --map-paper-warm: #e7d6b0; /* mottled warm patch in the paper */
+  --map-ocean-top: #c9d6cf; /* faint blue-grey sea wash, top */
+  --map-ocean-bottom: #b9cbc8; /* sea wash, bottom — a touch cooler/deeper */
+  --map-land-border: #8a6a44; /* thin sepia-brown coastline */
+  --map-ink: #6b5536; /* sepia ink for graticule / labels / ocean names */
+  --map-terracotta: #a9623f; /* dashed equator line */
+
+  /* Classic serif stack for the atlas's decorative text (ocean labels, etc.). */
+  --font-serif: Georgia, "Times New Roman", "Iowan Old Style", "Palatino Linotype", serif;
+
   /* Plus Jakarta Sans (self-hosted via @fontsource-variable) — a friendly,
      rounded humanist sans; supports tabular figures for the timer/scores. */
   --font-sans: "Plus Jakarta Sans Variable", system-ui, Arial, Helvetica, sans-serif;
@@ -169,6 +186,136 @@ body {
   94% { transform: translate(0.1em, 0.015em); }
   96% { transform: translate(0.04em, 0.05em); }
   98% { transform: translate(0.05em, 0.035em); }
+}
+
+/* ---- In-game world map: Victoria-3-style printed atlas ------------------- */
+
+/*
+ * The backdrop is painted as a FULL-BLEED layer on the map container (100% of
+ * the absolute inset-0 wrapper), NOT as a viewBox-sized <rect>, so it fills the
+ * pane edge-to-edge with no bare side bands and stays fixed behind the panning
+ * land. Layering (top → bottom): corner vignette, organic paper speckle, warm
+ * mottling, pale sea wash, cream paper base. The grain is a feTurbulence
+ * fractal-noise speckle tiled on a non-square tile — organic fibre, no grid.
+ */
+.map-ocean {
+  background:
+    /* corner vignette — subtly darkens the pane corners */
+    radial-gradient(
+      ellipse 120% 120% at 50% 50%,
+      transparent 55%,
+      rgb(70 52 30 / 0.16) 100%
+    ),
+    /* paper grain: soft organic fractal-noise speckle (no grid/mesh) */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.47  0 0 0 0 0.38  0 0 0 0 0.22  0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
+    /* soft warm mottling of the paper */
+    radial-gradient(ellipse 40% 50% at 18% 26%, var(--map-paper-warm) 0%, transparent 60%),
+    radial-gradient(ellipse 45% 40% at 78% 72%, var(--map-paper-warm) 0%, transparent 62%),
+    radial-gradient(ellipse 35% 45% at 62% 14%, var(--map-paper-warm) 0%, transparent 60%),
+    /* pale sea wash over the paper */
+    linear-gradient(180deg, var(--map-ocean-top), var(--map-ocean-bottom)),
+    /* cream paper base */
+    var(--map-paper);
+  background-size:
+    auto,
+    160px 140px,
+    auto, auto, auto,
+    auto,
+    auto;
+}
+
+/*
+ * Decorative atlas furniture pinned to the map CONTAINER (the absolute inset-0
+ * pane), OUTSIDE the zoom/pan transform, so it hugs the pane edges/corners at
+ * any aspect and stays put while the land pans. pointer-events:none so it never
+ * intercepts clicks/drag. Kept in the margins so it never covers the land.
+ */
+.map-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  font-family: var(--font-serif);
+  color: var(--map-ink);
+}
+
+/* Neatline: a decorative double border hugging the pane edges — an outer heavier
+   rule and a finer inner rule in aged sepia ink, both constant-width. */
+.map-neatline-outer {
+  position: absolute;
+  inset: 0.5rem;
+  border: 2px solid color-mix(in srgb, var(--map-ink) 70%, transparent);
+  border-radius: 1px;
+}
+.map-neatline-inner {
+  position: absolute;
+  inset: 0.95rem;
+  border: 0.75px solid color-mix(in srgb, var(--map-ink) 48%, transparent);
+}
+
+/* Title cartouche: a small framed serif label in the top margin. */
+.map-cartouche {
+  position: absolute;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.15rem 0.9rem;
+  background: color-mix(in srgb, var(--map-paper) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--map-ink) 62%, transparent);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--map-paper) 86%, transparent),
+    0 0 0 3.25px color-mix(in srgb, var(--map-ink) 40%, transparent);
+  text-align: center;
+  white-space: nowrap;
+  max-width: calc(100% - 3rem);
+  overflow: hidden;
+}
+.map-cartouche-title {
+  font-style: italic;
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+}
+.map-cartouche-rule {
+  margin: 0.1rem auto 0;
+  width: 60%;
+  height: 0;
+  border-top: 0.75px solid color-mix(in srgb, var(--map-ink) 45%, transparent);
+}
+
+/* Scale bar: a small aged alternating-segment bar in a bottom corner. */
+.map-scale {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  text-align: left;
+}
+.map-scale-label {
+  font-style: italic;
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
+  opacity: 0.8;
+  margin-bottom: 0.1rem;
+}
+.map-scale-bar {
+  display: flex;
+  height: 0.4rem;
+  width: 4.5rem;
+  border: 0.75px solid color-mix(in srgb, var(--map-ink) 70%, transparent);
+}
+.map-scale-seg {
+  flex: 1;
+}
+.map-scale-seg:nth-child(odd) {
+  background: color-mix(in srgb, var(--map-ink) 70%, transparent);
+}
+.map-scale-ticks {
+  display: flex;
+  justify-content: space-between;
+  width: 4.5rem;
+  font-size: 0.5rem;
+  opacity: 0.8;
+  margin-top: 0.05rem;
 }
 
 /* ---- Field Journal: walnut cover frame ---------------------------------- */

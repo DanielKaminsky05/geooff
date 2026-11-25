@@ -63,6 +63,28 @@ describe("WorldMap", () => {
     expect(container.querySelector('path[data-iso="sj"]')?.getAttribute("data-filled")).toBe("false");
   });
 
+  it("renders exactly ONE identifiable path per country despite the wrap clones", () => {
+    // The cylindrical wrap flanks the real tile with ±WORLD_W clones. Those
+    // clones must stay invisible to every board/test query and the anti-cheat
+    // <title> gate: no id / data-iso / data-filled / <title>.
+    // Brazil has no dependent territories → exactly one filled country/title.
+    const { container } = render(
+      <WorldMap filledIso={new Set(["br"])} color="var(--color-player1)" />,
+    );
+    // Brazil appears once as an identifiable path (the clones carry no id/iso).
+    expect(container.querySelectorAll('path[data-iso="br"]')).toHaveLength(1);
+    expect(container.querySelectorAll("#br")).toHaveLength(1);
+    // Every data-iso path is a real country code (no clone sneaks one in).
+    const isoPaths = container.querySelectorAll("path[data-iso]");
+    expect(isoPaths.length).toBeGreaterThan(100);
+    // There are strictly MORE total paths than identifiable ones — the clones
+    // exist (tripled geometry) but reveal nothing queryable.
+    const allPaths = container.querySelectorAll("path");
+    expect(allPaths.length).toBeGreaterThan(isoPaths.length);
+    // Still exactly ONE <title> (Brazil), none leaked by the two clone tiles.
+    expect(container.querySelectorAll("path > title")).toHaveLength(1);
+  });
+
   it("colours a territory with its sovereign's colour via colorByIso", () => {
     const { container } = render(
       <WorldMap

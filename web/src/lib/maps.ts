@@ -169,6 +169,57 @@ export function fitViewBox(locations: MapLocation[]): string {
   return `${minX - padX} ${minY - padY} ${w + 2 * padX} ${h + 2 * padY}`;
 }
 
+/**
+ * The size (larger of bbox width/height, viewBox units) of a country's LARGEST
+ * single sub-shape — i.e. its biggest landmass/island, NOT the spread of a
+ * scattered archipelago. For Cabo Verde / Maldives this is one small island, so
+ * the border stroke can be shrunk to match; for the USA it's the mainland, so
+ * the stroke stays full. Walks subpaths directly (splitting on each moveto) and
+ * only treats SINGLE-letter tokens as commands, so scientific-notation
+ * coordinates like "10e-4" aren't misread as a command. Memoized by path.
+ */
+const pathSpanCache = new Map<string, number>();
+export function pathSpan(d: string): number {
+  const cached = pathSpanCache.get(d);
+  if (cached !== undefined) return cached;
+  const tok = d.match(/[a-zA-Z]|-?(?:\d*\.\d+|\d+)(?:[eE]-?\d+)?/g);
+  let best = 0;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const flush = () => {
+    if (maxX > minX || maxY > minY) best = Math.max(best, Math.max(maxX - minX, maxY - minY));
+    minX = Infinity; minY = Infinity; maxX = -Infinity; maxY = -Infinity;
+  };
+  const acc = (x: number, y: number) => {
+    if (x < minX) minX = x;
+    if (y < minY) minY = y;
+    if (x > maxX) maxX = x;
+    if (y > maxY) maxY = y;
+  };
+  if (tok) {
+    let cx = 0, cy = 0, sx = 0, sy = 0, cmd = "", i = 0;
+    const n = () => Number(tok[i++]);
+    while (i < tok.length) {
+      const t = tok[i];
+      if (/^[a-zA-Z]$/.test(t)) { cmd = t; i++; continue; }
+      const c = cmd.toLowerCase();
+      const rel = cmd === cmd.toLowerCase();
+      if (c === "m" || c === "l") {
+        let x = n(), y = n();
+        if (rel) { x += cx; y += cy; }
+        cx = x; cy = y;
+        if (c === "m") { flush(); sx = cx; sy = cy; cmd = rel ? "l" : "L"; }
+        acc(cx, cy);
+      } else if (c === "h") { let x = n(); if (rel) x += cx; cx = x; acc(cx, cy); }
+      else if (c === "v") { let y = n(); if (rel) y += cy; cy = y; acc(cx, cy); }
+      else if (c === "z") { cx = sx; cy = sy; }
+      else { i++; }
+    }
+    flush();
+  }
+  pathSpanCache.set(d, best);
+  return best;
+}
+
 function regionMap(id: RegionId): GeoMap {
   const want = new Set([...REGION_ISO[id], ...(REGION_MAP_EXTRAS[id] ?? [])]);
   const locations = world.locations.filter((loc) => want.has(loc.id));
