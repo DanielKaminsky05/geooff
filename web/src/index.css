@@ -472,8 +472,13 @@ body {
  * means it fills the whole pane edge-to-edge with no bare side bands, and (in
  * interactive mode) stays fixed behind the panning/zooming land.
  *
- * Layering (top → bottom): a corner vignette, a faint paper-grain texture, a
+ * Layering (top → bottom): a corner vignette, a faint organic paper speckle, a
  * soft mottling of warm patches, the pale sea wash, then the cream paper base.
+ *
+ * The grain used to be two perpendicular repeating-linear-gradients whose
+ * intersection read as "faint squares in the ocean". It is now a feTurbulence
+ * fractal-noise speckle (an inline SVG data-URI), tiled on a deliberately
+ * NON-square tile — organic fibre, no grid.
  */
 .map-ocean {
   background:
@@ -483,9 +488,8 @@ body {
       transparent 55%,
       rgb(70 52 30 / 0.16) 100%
     ),
-    /* paper grain: a fine cross-hatch of near-invisible lines */
-    repeating-linear-gradient(0deg, rgb(120 96 56 / 0.025) 0 1px, transparent 1px 3px),
-    repeating-linear-gradient(90deg, rgb(120 96 56 / 0.02) 0 1px, transparent 1px 3px),
+    /* paper grain: soft organic fractal-noise speckle (no grid/mesh) */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.47  0 0 0 0 0.38  0 0 0 0 0.22  0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E"),
     /* soft warm mottling of the paper */
     radial-gradient(ellipse 40% 50% at 18% 26%, var(--map-paper-warm) 0%, transparent 60%),
     radial-gradient(ellipse 45% 40% at 78% 72%, var(--map-paper-warm) 0%, transparent 62%),
@@ -494,4 +498,107 @@ body {
     linear-gradient(180deg, var(--map-ocean-top), var(--map-ocean-bottom)),
     /* cream paper base */
     var(--map-paper);
+  background-size:
+    auto,
+    160px 140px,
+    auto, auto, auto,
+    auto,
+    auto;
+}
+
+/*
+ * Decorative atlas furniture pinned to the map CONTAINER (the absolute inset-0
+ * pane), OUTSIDE the zoom/pan transform, so it hugs the pane edges/corners at
+ * any aspect and stays put while the land pans. The whole layer is
+ * pointer-events:none so it never intercepts clicks/drag on the map. Kept in
+ * the margins so it never covers the land/gameplay.
+ */
+.map-frame {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  font-family: var(--font-serif);
+  color: var(--map-ink);
+}
+
+/* Neatline: a decorative double border hugging the pane edges. An outer heavier
+   rule and a finer inner rule in aged sepia ink, both constant-width (CSS
+   borders) so they stay crisp at any pane aspect. */
+.map-neatline-outer {
+  position: absolute;
+  inset: 0.5rem;
+  border: 2px solid color-mix(in srgb, var(--map-ink) 70%, transparent);
+  border-radius: 1px;
+}
+.map-neatline-inner {
+  position: absolute;
+  inset: 0.95rem;
+  border: 0.75px solid color-mix(in srgb, var(--map-ink) 48%, transparent);
+}
+
+/* Title cartouche: a small framed serif label in a corner. A warm paper panel
+   with a thin inked double edge, sitting in the top margin. */
+.map-cartouche {
+  position: absolute;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.15rem 0.9rem;
+  background: color-mix(in srgb, var(--map-paper) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--map-ink) 62%, transparent);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--map-paper) 86%, transparent),
+    0 0 0 3.25px color-mix(in srgb, var(--map-ink) 40%, transparent);
+  text-align: center;
+  white-space: nowrap;
+  max-width: calc(100% - 3rem);
+  overflow: hidden;
+}
+.map-cartouche-title {
+  font-style: italic;
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+}
+.map-cartouche-rule {
+  margin: 0.1rem auto 0;
+  width: 60%;
+  height: 0;
+  border-top: 0.75px solid color-mix(in srgb, var(--map-ink) 45%, transparent);
+}
+
+/* Scale bar: a small aged alternating-segment bar in a bottom corner. */
+.map-scale {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  text-align: left;
+}
+.map-scale-label {
+  font-style: italic;
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
+  opacity: 0.8;
+  margin-bottom: 0.1rem;
+}
+.map-scale-bar {
+  display: flex;
+  height: 0.4rem;
+  width: 4.5rem;
+  border: 0.75px solid color-mix(in srgb, var(--map-ink) 70%, transparent);
+}
+.map-scale-seg {
+  flex: 1;
+}
+.map-scale-seg:nth-child(odd) {
+  background: color-mix(in srgb, var(--map-ink) 70%, transparent);
+}
+.map-scale-ticks {
+  display: flex;
+  justify-content: space-between;
+  width: 4.5rem;
+  font-size: 0.5rem;
+  opacity: 0.8;
+  margin-top: 0.05rem;
 }

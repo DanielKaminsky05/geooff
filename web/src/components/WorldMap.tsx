@@ -54,27 +54,14 @@ const PX_PER_DEG_LAT = EQUATOR_Y / 83.6;
 const latToY = (lat: number): number => EQUATOR_Y - lat * PX_PER_DEG_LAT;
 
 /**
- * Faint lat/long graticule + dashed sepia equator, drawn in world coordinates.
- * Low-contrast so it reads as printed grid lines on the atlas page, not UI.
- * World-only (positions suit the full equirectangular viewBox).
+ * Dashed terracotta equator line, drawn in world coordinates. The former
+ * lat/long grid of meridians/parallels was dropped (its square cells read as
+ * "faint squares in the ocean"); the single equator line stands on its own,
+ * alongside the labeled reference parallels. World-only.
  */
 function Graticule(): ReactElement {
-  const lines: ReactElement[] = [];
-  // Meridians every ~84px (≈ every 30° of longitude).
-  for (let x = 0; x <= WORLD_W; x += WORLD_W / 12) {
-    lines.push(
-      <line key={`v${x}`} x1={x} y1={0} x2={x} y2={WORLD_H} stroke="var(--map-ink)" strokeWidth={0.25} strokeOpacity={0.14} />,
-    );
-  }
-  // Parallels every ~95px (≈ every 20° of latitude).
-  for (let y = 0; y <= WORLD_H; y += WORLD_H / 7) {
-    lines.push(
-      <line key={`h${y}`} x1={0} y1={y} x2={WORLD_W} y2={y} stroke="var(--map-ink)" strokeWidth={0.25} strokeOpacity={0.14} />,
-    );
-  }
   return (
     <g aria-hidden="true">
-      {lines}
       {/* Dashed terracotta equator */}
       <line
         x1={0}
@@ -248,6 +235,60 @@ function Compass(): ReactElement {
   );
 }
 
+// Decorative cartouche title per category. The world gets the classic "The
+// World"; region / us-states maps get their own name so we never mislabel the
+// pane (e.g. "The World" over the US). Falls back to a neutral "The Map".
+const CARTOUCHE_TITLES: Partial<Record<CategoryId, string>> = {
+  countries: "The World",
+  "us-states": "The United States",
+  europe: "Europe",
+  africa: "Africa",
+  asia: "Asia",
+  "middle-east": "The Middle East",
+  americas: "The Americas",
+};
+
+/**
+ * Decorative atlas "furniture" pinned to the map CONTAINER (the pane), OUTSIDE
+ * the zoom/pan transform: a double-ruled neatline hugging the pane edges, a
+ * small title cartouche in the top margin, and an aged alternating-segment
+ * scale bar in a bottom corner. Pure SVG/CSS, pointer-events:none, kept in the
+ * margins so it never obscures the land/gameplay and tracks the pane at any
+ * aspect (CSS edge/corner pinning, not viewBox-space). Present on both the
+ * interactive map and the static reveal.
+ */
+function PaneFrame({ categoryId }: { categoryId: CategoryId }): ReactElement {
+  const title = CARTOUCHE_TITLES[categoryId] ?? "The Map";
+  return (
+    <div className="map-frame" aria-hidden="true">
+      {/* Neatline: outer heavy rule + finer inner rule. */}
+      <div className="map-neatline-outer" />
+      <div className="map-neatline-inner" />
+
+      {/* Title cartouche in the top margin. */}
+      <div className="map-cartouche">
+        <div className="map-cartouche-title">{title}</div>
+        <div className="map-cartouche-rule" />
+      </div>
+
+      {/* Aged scale bar (alternating segments) in the bottom-left margin. */}
+      <div className="map-scale">
+        <div className="map-scale-label">Scale of Leagues</div>
+        <div className="map-scale-bar">
+          <span className="map-scale-seg" />
+          <span className="map-scale-seg" />
+          <span className="map-scale-seg" />
+          <span className="map-scale-seg" />
+        </div>
+        <div className="map-scale-ticks">
+          <span>0</span>
+          <span>1000</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Renders the world map as an <svg> with one <path> per country, styled as a
  * light printed political ATLAS on aged paper (Victoria-3 look).
@@ -398,6 +439,7 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
       <div className={`${className ?? ""} absolute inset-0`} data-testid={testId}>
         {backdrop}
         <div className="absolute inset-0">{svg}</div>
+        <PaneFrame categoryId={categoryId} />
       </div>
     );
   }
@@ -415,6 +457,9 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
           {svg}
         </TransformComponent>
       </TransformWrapper>
+      {/* Atlas furniture pinned to the pane, OUTSIDE the transform so it stays
+          fixed in the margins while the land pans/zooms. */}
+      <PaneFrame categoryId={categoryId} />
     </div>
   );
 }
