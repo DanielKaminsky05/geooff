@@ -11,7 +11,7 @@
 import { useMemo, useState } from "react";
 import { maps } from "../../lib/maps";
 import { fitViewBox, project } from "./geo";
-import type { DailySet, DailyRoute, JourneyId } from "./contract";
+import type { DailySet, JourneyId } from "./contract";
 
 const ORDER: JourneyId[] = ["short", "medium", "long"];
 
@@ -20,11 +20,6 @@ const FEEL: Record<JourneyId, { title: string; blurb: string }> = {
   medium: { title: "The long road", blurb: "Begin farther out. A real stretch." },
   long: { title: "The far road", blurb: "A world away — only if you know your geography." },
 };
-
-/** Project a route's waypoints to an SVG points string. */
-function routePoints(route: DailyRoute): string {
-  return route.points.map((p) => project(p)).map((p) => `${p.x},${p.y}`).join(" ");
-}
 
 export interface JourneySelectProps {
   set: DailySet;
@@ -36,7 +31,7 @@ export interface JourneySelectProps {
 export default function JourneySelect({ set, onSelect, className }: JourneySelectProps) {
   // The route highlighted on the map (hover, defaulting to medium so the map is
   // never bare). Picking a card starts the run.
-  const [focus, setFocus] = useState<JourneyId>("medium");
+  const [focus, setFocus] = useState<JourneyId>("long");
   const dest = project(set.destination.at);
   const routeOf = (id: JourneyId) => set.routes.find((r) => r.journeyId === id);
   const land = maps.countries?.locations ?? [];
@@ -86,18 +81,34 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
             const route = routeOf(id);
             if (!route) return null;
             const on = focus === id;
+            const pts = route.points.map(project);
+            const stroke = on ? "var(--color-chrome-gold)" : "var(--map-terracotta)";
             return (
-              <polyline
-                key={id}
-                points={routePoints(route)}
-                fill="none"
-                stroke={on ? "var(--color-chrome-gold)" : "var(--map-terracotta)"}
-                strokeWidth={on ? 3 : 1.6}
-                strokeOpacity={on ? 0.95 : 0.4}
-                strokeDasharray={on ? undefined : "5 5"}
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-              />
+              <g key={id} opacity={on ? 1 : 0.5}>
+                {/* Dotted road. */}
+                <polyline
+                  points={pts.map((p) => `${p.x},${p.y}`).join(" ")}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={on ? 3 : 1.8}
+                  strokeDasharray="1 7"
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+                {/* Each stop along the way. */}
+                {pts.map((p, i) => (
+                  <circle
+                    key={i}
+                    cx={p.x}
+                    cy={p.y}
+                    r={(on ? 1.8 : 1.3) * u}
+                    fill={stroke}
+                    stroke="var(--map-paper)"
+                    strokeWidth={0.8}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+              </g>
             );
           })}
           <circle

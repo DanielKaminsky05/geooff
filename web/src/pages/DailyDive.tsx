@@ -278,6 +278,9 @@ export default function DailyDive() {
           prompt={set.prompts[legIndex]}
           index={legIndex}
           total={set.prompts.length}
+          route={route}
+          destination={set.destination}
+          progress={prevProgressRef.current}
           onComplete={handlePromptComplete}
         />
       </main>
