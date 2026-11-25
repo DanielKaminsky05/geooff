@@ -108,6 +108,22 @@ export default function Home() {
       </header>
 
       <div className="flex w-full max-w-sm flex-col gap-4">
+        <button
+          type="button"
+          onClick={() => navigate("/daily")}
+          className="group rounded-lg border border-accent/50 bg-surface-raised px-6 py-4 text-left shadow-[0_1px_0_rgba(58,47,35,0.18)] transition hover:bg-surface"
+        >
+          <span className="flex items-baseline justify-between gap-3">
+            <span className="text-lg font-semibold text-accent">Daily Dive</span>
+            <span className="text-[0.7rem] font-semibold tracking-[0.2em] text-muted uppercase">
+              New
+            </span>
+          </span>
+          <span className="mt-0.5 block text-sm text-muted">
+            Today&rsquo;s journey — five prompts, one run, chase the gold.
+          </span>
+        </button>
+
         <label className="flex flex-col gap-1 text-sm font-semibold text-muted">
           Your name
           <input
