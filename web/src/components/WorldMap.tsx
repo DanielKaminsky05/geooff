@@ -46,6 +46,12 @@ let filterSeq = 0;
 const WORLD_W = 1010;
 const WORLD_H = 666;
 const EQUATOR_Y = 390; // ~0° latitude in this projection
+// The map top (y=0) is ~83.6°N, so in this equirectangular space the vertical
+// scale is EQUATOR_Y / 83.6 px per degree of latitude. latToY places any
+// parallel in the same coordinate space the equator/graticule use, so the
+// reference lines line up exactly with the existing decoration.
+const PX_PER_DEG_LAT = EQUATOR_Y / 83.6;
+const latToY = (lat: number): number => EQUATOR_Y - lat * PX_PER_DEG_LAT;
 
 /**
  * Faint lat/long graticule + dashed sepia equator, drawn in world coordinates.
@@ -80,6 +86,60 @@ function Graticule(): ReactElement {
         strokeOpacity={0.6}
         strokeDasharray="5 4"
       />
+    </g>
+  );
+}
+
+// The four classic reference parallels. Each gets a faint dashed line at
+// latToY(lat) plus a small italic-serif sepia label, consistent with the
+// dashed equator — pure geography decoration, not country answers.
+const REFERENCE_PARALLELS: { lat: number; label: string }[] = [
+  { lat: 66.5, label: "Arctic Circle" },
+  { lat: 23.5, label: "Tropic of Cancer" },
+  { lat: -23.5, label: "Tropic of Capricorn" },
+  { lat: -66.5, label: "Antarctic Circle" },
+];
+
+/**
+ * Faint DASHED, LABELED latitude reference lines (tropics + polar circles),
+ * placed with latToY so they share the equator/graticule coordinate space.
+ * Kept subtle (same ink/weight family as the graticule) so they read as printed
+ * atlas lines. World-only. Pure geography decoration — reveals no country.
+ */
+function ReferenceParallels(): ReactElement {
+  return (
+    <g aria-hidden="true">
+      {REFERENCE_PARALLELS.map(({ lat, label }) => {
+        const y = latToY(lat);
+        return (
+          <g key={label}>
+            <line
+              x1={0}
+              y1={y}
+              x2={WORLD_W}
+              y2={y}
+              stroke="var(--map-ink)"
+              strokeWidth={0.4}
+              strokeOpacity={0.3}
+              strokeDasharray="3 5"
+            />
+            {/* Label sits just above the line, out over the open Pacific on the
+                left edge so it rarely collides with land. */}
+            <text
+              x={14}
+              y={y - 3}
+              fill="var(--map-ink)"
+              fillOpacity={0.5}
+              fontFamily="var(--font-serif)"
+              fontStyle="italic"
+              fontSize={9}
+              style={{ userSelect: "none" }}
+            >
+              {label}
+            </text>
+          </g>
+        );
+      })}
     </g>
   );
 }
