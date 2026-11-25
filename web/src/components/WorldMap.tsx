@@ -76,8 +76,8 @@ function Graticule(): ReactElement {
         x2={WORLD_W}
         y2={EQUATOR_Y}
         stroke="var(--map-terracotta)"
-        strokeWidth={0.7}
-        strokeOpacity={0.5}
+        strokeWidth={0.8}
+        strokeOpacity={0.6}
         strokeDasharray="5 4"
       />
     </g>
@@ -238,13 +238,23 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
         <filter id={paintId} x="-15%" y="-15%" width="130%" height="130%">
           {/* Wobble the shape edges a touch (brushed coastline). */}
           <feTurbulence type="fractalNoise" baseFrequency="0.018 0.022" numOctaves={2} seed={7} result="warp" />
-          <feDisplacementMap in="SourceGraphic" in2="warp" scale={2.2} xChannelSelector="R" yChannelSelector="G" result="painted" />
-          {/* A faint mottle multiplied over the wash → pigment granulation. */}
+          <feDisplacementMap in="SourceGraphic" in2="warp" scale={2.2} xChannelSelector="R" yChannelSelector="G" result="warped" />
+          {/* Age the pigment: desaturate the vivid seat colour toward a faded
+              wash, then lift the low end + pull the high end down so it reads as
+              thin watercolour on paper rather than a flat neon fill. Colours
+              stay distinguishable (hue preserved), just muted. */}
+          <feColorMatrix in="warped" type="saturate" values="0.5" result="muted" />
+          <feComponentTransfer in="muted" result="painted">
+            <feFuncR type="linear" slope="0.72" intercept="0.2" />
+            <feFuncG type="linear" slope="0.72" intercept="0.2" />
+            <feFuncB type="linear" slope="0.72" intercept="0.2" />
+          </feComponentTransfer>
+          {/* A faint mottle over the wash → pigment granulation on paper. */}
           <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves={2} seed={11} result="grain" />
           <feColorMatrix
             in="grain"
             type="matrix"
-            values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.12 0"
+            values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.14 0"
             result="grainA"
           />
           <feComposite in="grainA" in2="painted" operator="in" result="grainMasked" />
