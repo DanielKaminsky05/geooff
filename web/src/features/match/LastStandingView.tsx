@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from "react";
 import WorldMap from "../../components/WorldMap";
 import LivesBar, { type LivesBarPlayer } from "../../components/LivesBar";
 import PromptBanner from "../../components/PromptBanner";
-import { FloatingHud, MatchScoreBar } from "./MatchHud";
+import { MatchScoreBar } from "./MatchHud";
 import MapPane from "./MapPane";
 import { displayName, type MatchModel } from "./matchModel";
 
@@ -59,11 +59,19 @@ export default function LastStandingView({
 
   return (
     <>
-      <FloatingHud className="pb-12">
-        {multi && <LivesBar players={livesBarPlayers} showHearts={gauntlet} />}
-        <MatchScoreBar model={model} bare compact={multi} />
-        {gauntlet && model.live && prompt && <PromptBanner bare label={prompt.label} />}
-      </FloatingHud>
+      {/* Top chrome: a solid charcoal bar with just lives + score. The active
+          prompt is NOT part of the bar — it floats on the map just below it. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col">
+        <div className="chrome-bar chrome-ink flex flex-col border-b border-[var(--color-chrome-gold)]/40 pb-2">
+          {multi && <LivesBar players={livesBarPlayers} showHearts={gauntlet} />}
+          <MatchScoreBar model={model} bare compact={multi} />
+        </div>
+        {gauntlet && model.live && prompt && (
+          <div className="mt-2 flex justify-center px-4 [text-shadow:0_1px_3px_var(--map-paper)]">
+            <PromptBanner bare label={prompt.label} />
+          </div>
+        )}
+      </div>
 
       <section className="relative min-h-0 flex-1">
         {model.solo ? (

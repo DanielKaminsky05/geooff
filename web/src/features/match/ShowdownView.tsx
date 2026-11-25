@@ -56,7 +56,7 @@ export default function ShowdownView({
 
   return (
     <>
-      <FloatingHud className="gap-1 pb-10">
+      <FloatingHud className="gap-1 pb-3">
         <LivesBar players={statusPlayers} showHearts />
         {prompt && model.live && <PromptBanner bare label={prompt.label} />}
         {roundEndsAt != null && (
