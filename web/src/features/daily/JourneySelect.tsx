@@ -16,9 +16,9 @@ import type { DailySet, DailyRoute, JourneyId } from "./contract";
 const ORDER: JourneyId[] = ["short", "medium", "long"];
 
 const FEEL: Record<JourneyId, { title: string; blurb: string }> = {
-  short: { title: "Short road", blurb: "Reach a nearer waypoint. A surer bet." },
-  medium: { title: "Long road", blurb: "Press further across the map. A real stretch." },
-  long: { title: "The far road", blurb: "Go the distance — only if you know your geography." },
+  short: { title: "The short road", blurb: "A nearer start. A surer bet." },
+  medium: { title: "The long road", blurb: "Begin farther out. A real stretch." },
+  long: { title: "The far road", blurb: "A world away — only if you know your geography." },
 };
 
 /** Project a route's waypoints to an SVG points string. */
