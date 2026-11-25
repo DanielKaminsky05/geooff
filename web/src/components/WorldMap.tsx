@@ -263,7 +263,7 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
       // Cap the border on tiny countries so the stroke doesn't swamp a microstate
       // or an archipelago island (Monaco, Cabo Verde…): full weight for normal
       // land, clamped to ~10% of the largest sub-shape's span for small ones.
-      const strokeW = Math.max(0.05, Math.min(filled ? 0.5 : 0.35, pathSpan(loc.path) * 0.1));
+      const strokeW = Math.max(0.08, Math.min(filled ? 0.6 : 0.45, pathSpan(loc.path) * 0.11));
       const path = clone ? (
         <path
           key={loc.id}
@@ -362,15 +362,15 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
           {/* Wobble the shape edges a touch (brushed coastline). */}
           <feTurbulence type="fractalNoise" baseFrequency="0.018 0.022" numOctaves={2} seed={7} result="warp" />
           <feDisplacementMap in="SourceGraphic" in2="warp" scale={2.2} xChannelSelector="R" yChannelSelector="G" result="warped" />
-          {/* Age the pigment: desaturate the vivid seat colour toward a faded
-              wash, then lift the low end + pull the high end down so it reads as
-              thin watercolour on paper rather than a flat neon fill. Colours
-              stay distinguishable (hue preserved), just muted. */}
-          <feColorMatrix in="warped" type="saturate" values="0.5" result="muted" />
+          {/* Age the pigment lightly: a touch of desaturation + a small wash so
+              the fill reads as watercolour, but stays close to the true seat
+              colour (the HUD shows the unfiltered colour, so over-washing made
+              the green read grey/blue — keep it faithful). */}
+          <feColorMatrix in="warped" type="saturate" values="0.82" result="muted" />
           <feComponentTransfer in="muted" result="painted">
-            <feFuncR type="linear" slope="0.72" intercept="0.2" />
-            <feFuncG type="linear" slope="0.72" intercept="0.2" />
-            <feFuncB type="linear" slope="0.72" intercept="0.2" />
+            <feFuncR type="linear" slope="0.88" intercept="0.07" />
+            <feFuncG type="linear" slope="0.88" intercept="0.07" />
+            <feFuncB type="linear" slope="0.88" intercept="0.07" />
           </feComponentTransfer>
           {/* A faint mottle over the wash → pigment granulation on paper. */}
           <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves={2} seed={11} result="grain" />
