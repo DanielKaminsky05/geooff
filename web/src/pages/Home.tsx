@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession, defaultName } from "../lib/session";
 import OutlineMap from "../components/OutlineMap";
+import GlitchWordmark from "../components/GlitchWordmark";
 import type { PlayerSlot } from "../lib/protocol";
 
 /** Give up on "Starting…" if the server hasn't answered create_room by then. */
@@ -118,8 +119,8 @@ export default function Home() {
             <path d="M7.5 12.5 L10 10 L12.5 12.5" />
             <path d="M18 8.5 L21 5.5 L24 9.5" />
           </svg>
-          <h1 className="font-display text-2xl leading-none tracking-wide text-foreground sm:text-3xl">
-            GEOFIGHT
+          <h1 className="leading-none">
+            <GlitchWordmark className="text-2xl tracking-wide sm:text-3xl" />
           </h1>
         </div>
         <hr aria-hidden className="stitch mt-4 w-40" />
