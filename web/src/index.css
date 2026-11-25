@@ -1,26 +1,31 @@
 @import "tailwindcss";
 
 /*
- * geofight dark "krillion" theme.
- * Deep navy ocean, muted land, vivid-but-palatable player accents.
- * See docs/plan-and-requirements.md → Visual / Theme Direction.
+ * geofight "Field Journal" theme.
+ * A travel journal lying open on a desk: a kraft-cream page tacked inside a
+ * lighter walnut cover, faint sepia-ink outline continents behind the UI, and a
+ * single red stitch/thread accent. Light and airy — wood kept only as a frame.
  */
 @theme {
-  --color-background: #0f1b2a; /* ocean / app background */
-  --color-surface: #1a2838; /* panels, inputs, buttons */
-  --color-surface-raised: #223449; /* hovered/raised surface */
-  --color-border: #415169; /* country borders, dividers */
-  --color-land: #2b3a4d; /* unguessed country fill */
+  --color-background: #e9ddc2; /* kraft-cream journal page */
+  --color-surface: #f3ebd7; /* cards / inputs — a shade lighter than the page */
+  --color-surface-raised: #fbf5e6; /* hovered / raised paper */
+  --color-border: #b9a37e; /* ink-brown hairlines, card outlines */
+  --color-land: #d8c7a3; /* unguessed country fill (parchment land) */
 
-  --color-foreground: #e6edf3; /* primary text */
-  --color-muted: #8b98a5; /* secondary text, counters */
+  --color-foreground: #3a2f23; /* sepia-black ink — primary text */
+  --color-muted: #8a775b; /* faded ink — secondary text, counters */
 
-  --color-player1: #3fb950; /* emerald — player 1 */
-  --color-player2: #e3a008; /* amber — player 2 */
-  --color-player3: #58a6ff; /* sky — player 3 */
-  --color-player4: #bc8cff; /* violet — player 4 */
-  --color-both: #1f9e8e; /* teal — both guessed */
-  --color-accent: #f0623e; /* coral — timer / alerts / errors */
+  --color-player1: #2f7d4f; /* forest green — player 1 */
+  --color-player2: #c4761a; /* ochre — player 2 */
+  --color-player3: #2f6f93; /* lake blue — player 3 */
+  --color-player4: #7a4a8c; /* plum — player 4 */
+  --color-both: #1f7d78; /* teal — both guessed */
+  --color-accent: #b5362b; /* red thread — stitch / timer / alerts */
+
+  /* Walnut cover: a lighter, warmer frame than the old near-black desk. */
+  --color-walnut: #7a5a3a;
+  --color-walnut-dark: #5e4328;
 
   /* Plus Jakarta Sans (self-hosted via @fontsource-variable) — a friendly,
      rounded humanist sans; supports tabular figures for the timer/scores. */
@@ -56,7 +61,15 @@ html {
 
 body {
   margin: 0;
-  background: var(--color-background);
+  /* The walnut cover shows as a frame behind the tacked-down page. A soft
+     paper vignette keeps the cream page from reading as flat card stock. */
+  background:
+    radial-gradient(
+      ellipse 120% 120% at 50% 0%,
+      color-mix(in srgb, var(--color-surface-raised) 60%, transparent),
+      transparent 55%
+    ),
+    var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans);
   /* Stop iOS rubber-band / overscroll from revealing chrome behind the app. */
@@ -123,8 +136,10 @@ body {
   content: attr(data-text);
   position: absolute;
   inset: 0;
-  z-index: -1; /* behind the off-white core so colors fringe the edges */
-  mix-blend-mode: screen;
+  z-index: -1; /* behind the ink core so colours fringe the edges */
+  /* On the cream page, multiply (not screen) keeps the coloured ghosts visible
+     as a darker misprint fringe rather than washing out to white. */
+  mix-blend-mode: multiply;
   pointer-events: none;
 }
 
@@ -156,9 +171,41 @@ body {
   98% { transform: translate(0.05em, 0.035em); }
 }
 
+/* ---- Field Journal: walnut cover frame ---------------------------------- */
+
 /*
- * Home background: a faint wireframe-globe graticule (meridians + parallels)
- * with a soft emerald glow, sitting behind the content.
+ * The whole viewport is the journal's open cover: a lighter-walnut wooden
+ * frame around a tacked-down cream page. The frame is drawn with layered
+ * inset box-shadows (a wide walnut border, an inner bevel, a thin ink keyline)
+ * so no image asset is needed. pointer-events:none keeps it purely decorative.
+ */
+.journal-frame {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+  /* Wide walnut cover drawn as a border; grain comes from a subtle gradient. */
+  border: clamp(14px, 2.4vmin, 30px) solid var(--color-walnut);
+  border-image: linear-gradient(
+      135deg,
+      var(--color-walnut) 0%,
+      var(--color-walnut-dark) 40%,
+      var(--color-walnut) 60%,
+      var(--color-walnut-dark) 100%
+    )
+    1;
+  box-shadow:
+    /* page shadow under the cover's inner edge */
+    inset 0 0 0 clamp(14px, 2.4vmin, 30px) transparent,
+    inset 0 0 22px 2px rgb(58 47 35 / 0.28),
+    /* thin ink keyline just inside the wood */
+    inset 0 0 0 1px rgb(58 47 35 / 0.35);
+}
+
+/*
+ * Home background: faint SOLID-OUTLINE continents filling the page. The actual
+ * continents are an inline SVG (see OutlineMap) using real country paths; this
+ * container just positions and fades it behind the content.
  */
 .home-bg {
   position: fixed;
@@ -168,71 +215,35 @@ body {
   pointer-events: none;
 }
 
-/* Soft emerald/amber glow blooms behind the globe. */
-.home-bg::before {
-  content: "";
+.home-bg svg {
   position: absolute;
   left: 50%;
-  top: 46%;
-  width: min(175vmin, 1100px);
-  aspect-ratio: 1;
+  top: 50%;
+  width: min(150vmin, 1400px);
   transform: translate(-50%, -50%);
-  background:
-    radial-gradient(circle at 42% 44%, color-mix(in srgb, var(--color-player1) 13%, transparent), transparent 48%),
-    radial-gradient(circle at 60% 58%, color-mix(in srgb, var(--color-player2) 9%, transparent), transparent 48%);
 }
 
-.home-globe {
-  position: absolute;
-  left: 50%;
-  top: 46%;
-  width: min(135vmin, 820px);
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border: 1px solid color-mix(in srgb, var(--color-player1) 26%, transparent);
-  border-radius: 50%;
-  overflow: hidden; /* clips parallels into chords, like a globe */
-  opacity: 0.5;
-  animation: globe-breathe 16s ease-in-out infinite;
-}
+/* ---- Taped paper label masthead ----------------------------------------- */
 
-/* Meridians: nested vertical ellipses of decreasing width (longitude lines). */
-.home-globe .meridian {
+.tape {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: var(--w);
-  border: 1px solid color-mix(in srgb, var(--color-player1) 17%, transparent);
-  border-radius: 50%;
+  width: 3.2rem;
+  height: 1.15rem;
+  background: color-mix(in srgb, var(--color-surface-raised) 72%, transparent);
+  border: 1px solid rgb(185 163 126 / 0.4);
+  box-shadow: 0 1px 2px rgb(58 47 35 / 0.12);
 }
+.tape-tl { top: -0.5rem; left: -0.6rem; transform: rotate(-24deg); }
+.tape-tr { top: -0.5rem; right: -0.6rem; transform: rotate(22deg); }
 
-/* Parallels: horizontal lines (latitude), clipped by the globe circle. */
-.home-globe .parallel {
-  position: absolute;
-  left: -2%;
-  right: -2%;
+/* ---- Red thread / stitch accent ----------------------------------------- */
+
+/* A dashed red seam, used as a route line between elements or under a heading. */
+.stitch {
+  border: 0;
   height: 0;
-  border-top: 1px solid color-mix(in srgb, var(--color-player1) 15%, transparent);
-}
-
-/* Equator and central meridian read a touch brighter. */
-.home-globe .parallel.equator {
-  border-top-color: color-mix(in srgb, var(--color-player1) 30%, transparent);
-}
-.home-globe .axis {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 0;
-  border-left: 1px solid color-mix(in srgb, var(--color-player1) 24%, transparent);
-}
-
-@keyframes globe-breathe {
-  0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
-  50% { transform: translate(-50%, -50%) scale(1.025); opacity: 0.62; }
+  border-top: 2px dashed var(--color-accent);
+  opacity: 0.7;
 }
 
 /* ---- Last Standing: lives ---- */
