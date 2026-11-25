@@ -1,8 +1,31 @@
 import { describe, it, expect } from "vitest";
 import { destinations } from "../src/daily/destinations.js";
-import type { JourneyId } from "../src/protocol.js";
+import type { GeoPoint, JourneyId } from "../src/protocol.js";
 
 const JOURNEY_IDS: JourneyId[] = ["short", "medium", "long"];
+
+/** Great-circle distance between two lat/lon points, in kilometres. */
+function haversineKm(a: GeoPoint, b: GeoPoint): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** Total length of a polyline (sum of great-circle legs), in kilometres. */
+function routeLengthKm(points: GeoPoint[]): number {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    total += haversineKm(points[i - 1], points[i]);
+  }
+  return total;
+}
 
 describe("daily dive destinations", () => {
   it("has at least 22 entries (no repeat within a 7-day window)", () => {
@@ -34,11 +57,11 @@ describe("daily dive destinations", () => {
     }
   });
 
-  it("every route has >= 2 points, all in valid range, ending at the destination", () => {
+  it("every route has >= 3 points, all in valid range, ending at the destination", () => {
     for (const { destination, routes } of destinations) {
       for (const route of routes) {
         const label = `${destination.name}/${route.journeyId}`;
-        expect(route.points.length, `${label} point count`).toBeGreaterThanOrEqual(2);
+        expect(route.points.length, `${label} point count`).toBeGreaterThanOrEqual(3);
         for (const p of route.points) {
           expect(p.lat, `${label} lat`).toBeGreaterThanOrEqual(-90);
           expect(p.lat, `${label} lat`).toBeLessThanOrEqual(90);
@@ -51,14 +74,41 @@ describe("daily dive destinations", () => {
     }
   });
 
-  it("route lengths grow with journey ambition (short <= medium <= long points)", () => {
+  it("the long route is an epic trek: origin is far (> 3500 km) from the destination", () => {
     for (const { destination, routes } of destinations) {
-      const byId = new Map(routes.map((r) => [r.journeyId, r.points.length]));
+      const long = routes.find((r) => r.journeyId === "long")!;
+      const origin = long.points[0];
+      const km = haversineKm(origin, destination.at);
+      expect(
+        km,
+        `${destination.name} long origin->dest distance (${Math.round(km)} km)`,
+      ).toBeGreaterThan(3500);
+    }
+  });
+
+  it("every route's origin is clearly distant (> 500 km) — never a local hop", () => {
+    for (const { destination, routes } of destinations) {
+      for (const route of routes) {
+        const origin = route.points[0];
+        const km = haversineKm(origin, destination.at);
+        expect(
+          km,
+          `${destination.name}/${route.journeyId} origin->dest (${Math.round(km)} km)`,
+        ).toBeGreaterThan(500);
+      }
+    }
+  });
+
+  it("total route length strictly increases short < medium < long", () => {
+    for (const { destination, routes } of destinations) {
+      const byId = new Map(
+        routes.map((r) => [r.journeyId, routeLengthKm(r.points)]),
+      );
       const short = byId.get("short")!;
       const medium = byId.get("medium")!;
       const long = byId.get("long")!;
-      expect(short, `${destination.name} short<=medium`).toBeLessThanOrEqual(medium);
-      expect(medium, `${destination.name} medium<=long`).toBeLessThanOrEqual(long);
+      expect(short, `${destination.name} short<medium`).toBeLessThan(medium);
+      expect(medium, `${destination.name} medium<long`).toBeLessThan(long);
     }
   });
 });
