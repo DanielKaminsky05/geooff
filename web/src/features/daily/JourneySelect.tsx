@@ -1,108 +1,138 @@
 /**
- * Daily Dive — journey wager screen (Track C).
+ * Daily Dive — route choice (Track C).
  *
- * Shows the day's destination, the 5 prompt labels (read-only preview — this is
- * the terrain the player reads BEFORE committing), and three journey cards
- * (Short / Medium / Long) each with its distance, total gold at stake, and
- * landmark count. Picking a card locks in the wager and starts the run.
- *
- * Risk/reward framing: a longer journey carries more gold across more landmarks
- * but demands more distance (points) to arrive — the choice is a read on your
- * own knowledge, made before you play.
+ * The wager, made BEFORE you play and WITHOUT seeing the prompts: three routes
+ * to the day's destination, drawn on the map. You pick which road to take —
+ * longer roads reach further (and carry more reward) but demand a stronger run.
+ * The prompts and the gold at stake are deliberately hidden; the only thing you
+ * choose is the route.
  */
 
-import type { DailySet, DailyJourney, JourneyId } from "./contract";
+import { useMemo, useState } from "react";
+import { maps } from "../../lib/maps";
+import { fitViewBox, project } from "./geo";
+import type { DailySet, DailyRoute, JourneyId } from "./contract";
 
-const JOURNEY_FEEL: Record<JourneyId, { title: string; blurb: string }> = {
-  short: { title: "Short", blurb: "A sure thing — modest gold, easy to reach." },
-  medium: { title: "Medium", blurb: "The default gamble — good gold, a real stretch." },
-  long: { title: "Long", blurb: "For when you know your stuff — big haul, long road." },
+const ORDER: JourneyId[] = ["short", "medium", "long"];
+
+const FEEL: Record<JourneyId, { title: string; blurb: string }> = {
+  short: { title: "Short road", blurb: "Reach a nearer waypoint. A surer bet." },
+  medium: { title: "Long road", blurb: "Press further across the map. A real stretch." },
+  long: { title: "The far road", blurb: "Go the distance — only if you know your geography." },
 };
 
-/** Total gold a journey carries across all its landmarks. */
-function totalGold(journey: DailyJourney): number {
-  return journey.landmarks.reduce((sum, l) => sum + l.gold, 0);
-}
-
-function JourneyCard({
-  journey,
-  onSelect,
-}: {
-  journey: DailyJourney;
-  onSelect: (id: JourneyId) => void;
-}) {
-  const feel = JOURNEY_FEEL[journey.id];
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(journey.id)}
-      data-testid={`journey-card-${journey.id}`}
-      className="flex flex-1 flex-col items-start gap-3 rounded-xl border border-[var(--color-chrome-gold)]/40 bg-surface-raised p-5 text-left transition hover:border-[var(--color-chrome-gold)] hover:brightness-105"
-    >
-      <span className="text-xl font-semibold">{feel.title}</span>
-      <p className="text-sm text-muted">{feel.blurb}</p>
-      <dl className="mt-auto grid w-full grid-cols-3 gap-2 pt-2 text-center">
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-muted">Distance</dt>
-          <dd className="text-lg font-semibold">{journey.distance}</dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-muted">Gold</dt>
-          <dd className="text-lg font-semibold text-[var(--color-chrome-gold)]">
-            {totalGold(journey)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-muted">Landmarks</dt>
-          <dd className="text-lg font-semibold">{journey.landmarks.length}</dd>
-        </div>
-      </dl>
-    </button>
-  );
+/** Project a route's waypoints to an SVG points string. */
+function routePoints(route: DailyRoute): string {
+  return route.points.map((p) => project(p)).map((p) => `${p.x},${p.y}`).join(" ");
 }
 
 export interface JourneySelectProps {
   set: DailySet;
-  /** Commit to a journey and start the run. */
+  /** Commit to a route and start the run. */
   onSelect: (journeyId: JourneyId) => void;
   className?: string;
 }
 
 export default function JourneySelect({ set, onSelect, className }: JourneySelectProps) {
+  // The route highlighted on the map (hover, defaulting to medium so the map is
+  // never bare). Picking a card starts the run.
+  const [focus, setFocus] = useState<JourneyId>("medium");
+  const dest = project(set.destination.at);
+  const routeOf = (id: JourneyId) => set.routes.find((r) => r.journeyId === id);
+  const land = maps.countries?.locations ?? [];
+
+  // Fit the atlas to all three routes + the destination, so the roads are
+  // visible rather than a speck on the whole world.
+  const viewBox = useMemo(() => {
+    const pts = [project(set.destination.at)];
+    for (const r of set.routes) for (const p of r.points) pts.push(project(p));
+    return fitViewBox(pts, { pad: 1.6 });
+  }, [set.routes, set.destination.at]);
+
   return (
     <section
-      className={`mx-auto flex w-full max-w-3xl flex-col gap-6 p-5 ${className ?? ""}`}
+      className={`mx-auto flex min-h-dvh w-full max-w-4xl flex-col gap-5 p-5 ${className ?? ""}`}
       data-testid="journey-select"
     >
       <header className="text-center">
         <p className="text-xs uppercase tracking-[0.2em] text-muted">Today&apos;s destination</p>
         <h1 className="text-3xl font-semibold">{set.destination.name}</h1>
+        <p className="mt-1 text-sm text-muted">Choose your road. You won&apos;t see the prompts first.</p>
       </header>
 
-      {/* Read-only preview of the day's five prompts — the terrain you wager on. */}
-      <div className="rounded-xl border border-border bg-surface p-4">
-        <p className="mb-3 text-xs uppercase tracking-wide text-muted">
-          The {set.prompts.length} prompts
-        </p>
-        <ol className="flex flex-col gap-2">
-          {set.prompts.map((p, i) => (
-            <li key={p.id} className="flex items-baseline gap-3">
-              <span className="w-5 shrink-0 text-right text-sm text-muted">{i + 1}.</span>
-              <span className="text-base">{p.label}</span>
-            </li>
+      {/* The three candidate routes on a regional atlas; the focused one stands out. */}
+      <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-surface">
+        <svg
+          viewBox={viewBox}
+          preserveAspectRatio="xMidYMid slice"
+          className="absolute inset-0 h-full w-full"
+          aria-hidden="true"
+          strokeLinejoin="round"
+        >
+          <rect x={-2000} y={-2000} width={4000} height={4000} fill="var(--map-ocean-bottom)" />
+          {land.map((loc) => (
+            <path
+              key={loc.id}
+              d={loc.path}
+              fill="var(--color-land)"
+              stroke="var(--map-land-border)"
+              strokeWidth={0.6}
+              vectorEffect="non-scaling-stroke"
+            />
           ))}
-        </ol>
+          {ORDER.map((id) => {
+            const route = routeOf(id);
+            if (!route) return null;
+            const on = focus === id;
+            return (
+              <polyline
+                key={id}
+                points={routePoints(route)}
+                fill="none"
+                stroke={on ? "var(--color-chrome-gold)" : "var(--map-terracotta)"}
+                strokeWidth={on ? 3 : 1.6}
+                strokeOpacity={on ? 0.95 : 0.4}
+                strokeDasharray={on ? undefined : "5 5"}
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            );
+          })}
+          <circle
+            cx={dest.x}
+            cy={dest.y}
+            r={3.5}
+            fill="var(--color-accent)"
+            stroke="var(--map-paper)"
+            strokeWidth={1.5}
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
       </div>
 
-      <div>
-        <p className="mb-3 text-center text-sm text-muted">
-          Choose your journey. The wager is made before you play.
-        </p>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          {set.journeys.map((j) => (
-            <JourneyCard key={j.id} journey={j} onSelect={onSelect} />
-          ))}
-        </div>
+      {/* Which road? No prompts, no gold — just the choice. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {ORDER.map((id) => {
+          const feel = FEEL[id];
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => onSelect(id)}
+              onMouseEnter={() => setFocus(id)}
+              onFocus={() => setFocus(id)}
+              data-testid={`journey-card-${id}`}
+              className={`flex flex-col items-start gap-1 rounded-xl border p-4 text-left transition hover:brightness-105 ${
+                focus === id
+                  ? "border-[var(--color-chrome-gold)] bg-surface-raised"
+                  : "border-[var(--color-chrome-gold)]/40 bg-surface-raised"
+              }`}
+            >
+              <span className="text-lg font-semibold">{feel.title}</span>
+              <span className="text-sm text-muted">{feel.blurb}</span>
+            </button>
+          );
+        })}
       </div>
     </section>
   );

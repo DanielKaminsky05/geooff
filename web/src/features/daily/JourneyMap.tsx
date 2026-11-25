@@ -1,21 +1,23 @@
 /**
  * Daily Dive — journey map (owned by Track D).
  *
- * Renders the atlas world as a backdrop with the active journey's route drawn
- * on it, a traveler token eased to `progress` (0..1) along the route, and
- * landmark pins that light up as they're passed. Purely presentational — driven
- * entirely by props, so Track C can place it and animate `progress` without
- * knowing its internals.
+ * Renders a REGIONAL atlas fitted to the chosen route (the whole-world view
+ * makes a real route — a few hundred km — an invisible speck), with the route
+ * drawn on it, a traveler token eased to `progress` (0..1) along the route, and
+ * landmark pins revealed as they're passed. Purely presentational — driven
+ * entirely by props, so the page can animate `progress` without knowing the
+ * internals.
  *
- * The prop signature below is the FROZEN CONTRACT; Track D fills in the body
- * (use `geo.ts` project()/WORLD_VIEWBOX to align with the atlas) but keeps props.
+ * The prop signature is the FROZEN CONTRACT. We fit by projecting the route to
+ * world-SVG coordinates (geo.project, shared with the land paths' coordinate
+ * space) and setting the svg viewBox to a padded bounding box around it.
  */
 
 import { useMemo } from "react";
 
-import OutlineMap from "../../components/OutlineMap";
+import { maps } from "../../lib/maps";
 import type { DailyDestination, DailyLandmark, DailyRoute } from "../../lib/protocol";
-import { WORLD_VIEWBOX, project } from "./geo";
+import { project, fitViewBox } from "./geo";
 import { buildRouteGeometry, pointAtFraction } from "./routeGeometry";
 
 export interface JourneyMapProps {
@@ -23,7 +25,7 @@ export interface JourneyMapProps {
   route: DailyRoute;
   /** The day's destination city (drawn as the end marker). */
   destination: DailyDestination;
-  /** Landmarks along this journey (pins; lit once progress passes atFraction). */
+  /** Landmarks along this journey (pins; revealed once progress passes them). */
   landmarks: DailyLandmark[];
   /** 0..1 — fraction of the route the traveler has covered. */
   progress: number;
@@ -42,17 +44,30 @@ export default function JourneyMap({
 }: JourneyMapProps) {
   const clampedProgress = Math.max(0, Math.min(1, progress));
 
-  // Project every waypoint once; derive cumulative-length geometry from it so
-  // landmark/traveler placement is by arc length, aligned with the atlas.
-  const geo = useMemo(
-    () => buildRouteGeometry(route.points.map(project)),
-    [route.points],
-  );
+  // Project the route + destination once; derive geometry + a fitted viewBox.
+  const { geo, dest, viewBox } = useMemo(() => {
+    const pts = route.points.map(project);
+    const dest = project(destination.at);
+    return {
+      geo: buildRouteGeometry(pts),
+      dest,
+      viewBox: fitViewBox([...pts, dest]),
+    };
+  }, [route.points, destination.at]);
 
   const polyline = geo.points.map((p) => `${p.x},${p.y}`).join(" ");
   const traveler = pointAtFraction(geo, clampedProgress);
-  const dest = project(destination.at);
 
+  // The already-travelled leg: every waypoint up to the traveler, then the
+  // traveler itself — drawn solid/gold so progress reads at a glance.
+  const travelledPolyline = (() => {
+    const targetLen = geo.length * clampedProgress;
+    const pts = geo.points.filter((_, i) => geo.cumulative[i] <= targetLen);
+    pts.push(traveler);
+    return pts.map((p) => `${p.x},${p.y}`).join(" ");
+  })();
+
+  const land = maps.countries?.locations ?? [];
   const rootClassName = ["daily-journey-map", className].filter(Boolean).join(" ");
 
   return (
@@ -61,44 +76,60 @@ export default function JourneyMap({
       style={{ position: "relative", width: "100%", height: "100%" }}
       aria-label={`Journey to ${destination.name}`}
     >
-      {/* Aged-paper atlas backdrop (fills the container). */}
-      <div
-        aria-hidden="true"
-        style={{ position: "absolute", inset: 0, pointerEvents: "none" }}
-      >
-        <OutlineMap />
-      </div>
-
-      {/* Journey overlay, same world viewBox so it lines up with the backdrop. */}
       <svg
-        viewBox={WORLD_VIEWBOX}
+        viewBox={viewBox}
         role="img"
         aria-label={`Route to ${destination.name}`}
-        preserveAspectRatio="xMidYMid meet"
-        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
+        preserveAspectRatio="xMidYMid slice"
+        style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
         strokeLinejoin="round"
         strokeLinecap="round"
       >
-        {geo.points.length >= 2 && (
-          /* The journey route, drawn as a dashed terracotta thread. */
-          <polyline
-            points={polyline}
-            fill="none"
-            stroke="var(--map-terracotta)"
-            strokeWidth={1.6}
-            strokeOpacity={0.45}
-            strokeDasharray="5 4"
+        {/* Sea wash + regional land, fitted to the route. */}
+        <rect x={-2000} y={-2000} width={4000} height={4000} fill="var(--map-ocean-bottom)" />
+        {land.map((loc) => (
+          <path
+            key={loc.id}
+            d={loc.path}
+            fill="var(--color-land)"
+            stroke="var(--map-land-border)"
+            strokeWidth={0.6}
             vectorEffect="non-scaling-stroke"
-            data-testid="journey-route"
           />
+        ))}
+
+        {geo.points.length >= 2 && (
+          <>
+            {/* Full route, faint, so the whole road reads at a glance. */}
+            <polyline
+              points={polyline}
+              fill="none"
+              stroke="var(--map-terracotta)"
+              strokeWidth={2}
+              strokeOpacity={0.45}
+              strokeDasharray="5 5"
+              vectorEffect="non-scaling-stroke"
+            />
+            {/* Travelled portion, solid + gold up to the token. */}
+            <polyline
+              points={travelledPolyline}
+              fill="none"
+              stroke="var(--color-chrome-gold)"
+              strokeWidth={3}
+              strokeOpacity={0.95}
+              strokeLinecap="round"
+              vectorEffect="non-scaling-stroke"
+              data-testid="journey-route"
+            />
+          </>
         )}
 
-        {/* Landmark pins along the route by arc length. */}
+        {/* Landmark pins — revealed only once the traveler has passed them (the
+            `<g>` stays in the DOM either way so counts/aria are stable). */}
         {landmarks.map((lm: DailyLandmark, i) => {
           const at = pointAtFraction(geo, lm.atFraction);
           const lit = clampedProgress >= lm.atFraction;
-          const justPassed =
-            lit && clampedProgress - lm.atFraction <= JUST_PASSED_WINDOW;
+          const justPassed = lit && clampedProgress - lm.atFraction <= JUST_PASSED_WINDOW;
           return (
             <g
               key={`lm-${i}-${lm.atFraction}`}
@@ -106,68 +137,36 @@ export default function JourneyMap({
               data-lit={lit ? "true" : "false"}
               data-fraction={lm.atFraction}
             >
-              {justPassed && (
-                <circle
-                  cx={at.x}
-                  cy={at.y}
-                  r={6}
-                  fill="none"
-                  stroke="var(--color-chrome-gold)"
-                  strokeWidth={1.2}
-                  strokeOpacity={0.6}
-                  vectorEffect="non-scaling-stroke"
-                >
-                  <animate
-                    attributeName="r"
-                    values="3;8"
-                    dur="1.4s"
-                    repeatCount="indefinite"
-                  />
-                  <animate
-                    attributeName="stroke-opacity"
-                    values="0.7;0"
-                    dur="1.4s"
-                    repeatCount="indefinite"
-                  />
-                </circle>
+              {lit && (
+                <>
+                  {justPassed && (
+                    <circle cx={at.x} cy={at.y} r={10} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={1.5} strokeOpacity={0.6} vectorEffect="non-scaling-stroke">
+                      <animate attributeName="r" values="4;14" dur="1.4s" repeatCount="indefinite" />
+                      <animate attributeName="stroke-opacity" values="0.8;0" dur="1.4s" repeatCount="indefinite" />
+                    </circle>
+                  )}
+                  <circle cx={at.x} cy={at.y} r={5} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+                </>
               )}
-              <circle
-                cx={at.x}
-                cy={at.y}
-                r={2.6}
-                fill={lit ? "var(--color-chrome-gold)" : "var(--map-paper)"}
-                stroke={lit ? "var(--color-chrome-gold)" : "var(--map-ink)"}
-                strokeWidth={1}
-                strokeOpacity={lit ? 1 : 0.7}
-                vectorEffect="non-scaling-stroke"
-              />
             </g>
           );
         })}
 
         {/* Destination: ringed star + serif label. */}
         <g data-testid="journey-destination">
-          <circle
-            cx={dest.x}
-            cy={dest.y}
-            r={5}
-            fill="none"
-            stroke="var(--color-accent)"
-            strokeWidth={1.2}
-            vectorEffect="non-scaling-stroke"
-          />
-          <Star cx={dest.x} cy={dest.y} r={3.4} fill="var(--color-accent)" />
+          <circle cx={dest.x} cy={dest.y} r={8} fill="none" stroke="var(--color-accent)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+          <Star cx={dest.x} cy={dest.y} r={5.5} fill="var(--color-accent)" />
           <text
             x={dest.x}
-            y={dest.y - 8}
+            y={dest.y - 12}
             textAnchor="middle"
             fontFamily="var(--font-serif)"
-            fontSize={11}
+            fontSize={13}
             fill="var(--map-ink)"
             style={{ paintOrder: "stroke" }}
             stroke="var(--map-paper)"
-            strokeWidth={2.5}
-            strokeOpacity={0.8}
+            strokeWidth={3}
+            strokeOpacity={0.85}
           >
             {destination.name}
           </text>
@@ -180,15 +179,10 @@ export default function JourneyMap({
             data-x={traveler.x}
             data-y={traveler.y}
             transform={`translate(${traveler.x} ${traveler.y})`}
-            style={{ transition: "transform 600ms ease-out" }}
+            style={{ transition: "transform 650ms ease-out" }}
           >
-            <circle
-              r={3.6}
-              fill="var(--color-accent)"
-              stroke="var(--map-paper)"
-              strokeWidth={1.2}
-              vectorEffect="non-scaling-stroke"
-            />
+            <circle r={6.5} fill="var(--color-accent)" stroke="var(--map-paper)" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+            <circle r={2.5} fill="var(--map-paper)" />
           </g>
         )}
       </svg>

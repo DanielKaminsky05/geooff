@@ -1,18 +1,18 @@
 /**
  * Daily Dive — page orchestrator (Track C).
  *
- * Owns the phase machine and composes the Track D (JourneyMap) and Track E
- * (DailyRecap) components via props so those tracks never edit this file:
+ * Phase machine:
+ *   loading → fetchDailySet()
+ *   select  → JourneySelect (pick which road; no prompts/gold shown)
+ *   play    → alternates two sub-phases per prompt:
+ *               "prompt" → DailyPlay (name countries on the world map)
+ *               "leg"    → JourneyMap, the character advances along the route to
+ *                          the new position, revealing any landmarks passed
+ *   finish  → postFinish → bank gold + saveResult + markPlayed
+ *   recap   → DailyRecap (result + percentile + wallet)
  *
- *   loading        → fetchDailySet()
- *   played-already → recap of the saved run (one-and-done per day)
- *   select         → JourneySelect (make the wager)
- *   play           → DailyPlay + live JourneyMap (traveler eases to progress)
- *   finish         → postFinish → bank gold + saveResult + markPlayed
- *   recap          → DailyRecap (result + percentile + wallet)
- *
- * One-and-done: if `localDailyStore.isPlayedToday`, we never let the player
- * replay — we show the saved result's recap instead.
+ * One-and-done: if `localDailyStore.isPlayedToday`, we show the saved recap
+ * instead of letting the player replay.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -27,28 +27,43 @@ import type {
   DailySet,
   DailyJourney,
   DailyRoute,
+  DailyPromptResult,
   DailyRunResult,
   JourneyId,
 } from "../features/daily/contract";
 
 type Phase = "loading" | "select" | "play" | "finish" | "recap";
+type SubPhase = "prompt" | "leg";
 
-/** The route + journey for a chosen id. */
 function pick(set: DailySet, id: JourneyId): { journey: DailyJourney; route: DailyRoute } {
   const journey = set.journeys.find((j) => j.id === id)!;
   const route = set.routes.find((r) => r.journeyId === id)!;
   return { journey, route };
 }
 
-/**
- * A plausible client-side percentile fallback used only if /daily/finish is
- * unreachable (dev / offline). Maps capture ratio (points ÷ a rough theoretical
- * max) to a percentile on a gentle curve. The server's hardcoded curve is
- * authoritative when reachable.
- */
+/** Client-side percentile fallback used only if /daily/finish is unreachable. */
 function fallbackPercentile(result: DailyRunResult, journey: DailyJourney): number {
   const ratio = journey.distance > 0 ? Math.min(1, result.points / (journey.distance * 1.5)) : 0;
   return Math.round(Math.min(99, Math.max(1, ratio * 100)));
+}
+
+function assembleResult(
+  dailyDate: string,
+  journey: JourneyId,
+  perPrompt: DailyPromptResult[],
+): DailyRunResult {
+  const points = perPrompt.reduce((sum, r) => sum + r.points, 0);
+  return {
+    runId: crypto.randomUUID(),
+    dailyDate,
+    journey,
+    points,
+    perPrompt,
+    // Placeholders — the server reconciles gold/outcome at /daily/finish.
+    gold: 0,
+    outcome: "died",
+    playerId: localDailyStore.getPlayerId(),
+  };
 }
 
 export default function DailyDive() {
@@ -58,14 +73,23 @@ export default function DailyDive() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [set, setSet] = useState<DailySet | null>(null);
   const [journeyId, setJourneyId] = useState<JourneyId | null>(null);
-  const [progress, setProgress] = useState(0);
+
+  // Play sub-state: which prompt, and whether we're naming or travelling.
+  const [subPhase, setSubPhase] = useState<SubPhase>("prompt");
+  const [legIndex, setLegIndex] = useState(0);
+  const [progress, setProgress] = useState(0); // animated traveler position 0..1
+
+  const perPromptRef = useRef<DailyPromptResult[]>([]);
+  const cumPointsRef = useRef(0);
+  const prevProgressRef = useRef(0); // committed progress at the start of this leg
+  const legTargetRef = useRef(0); // progress this leg animates to
+  const finishingRef = useRef(false);
+
   const [percentile, setPercentile] = useState(0);
   const [walletBalance, setWalletBalance] = useState(() => localDailyStore.getWallet());
   const [recapResult, setRecapResult] = useState<DailyRunResult | null>(null);
-  // Guards the finish round-trip from running twice (StrictMode / re-render).
-  const finishingRef = useRef(false);
 
-  // Load today's set; if already played, jump straight to the saved recap.
+  // Load today's set; if already played, jump to the saved recap.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -87,19 +111,27 @@ export default function DailyDive() {
     };
   }, []);
 
+  // When a leg begins, animate the traveler from the committed start to the new
+  // target (a frame later, so the CSS transition in JourneyMap plays).
+  useEffect(() => {
+    if (phase !== "play" || subPhase !== "leg") return;
+    const id = requestAnimationFrame(() => setProgress(legTargetRef.current));
+    return () => cancelAnimationFrame(id);
+  }, [phase, subPhase, legIndex]);
+
   const handleSelect = useCallback((id: JourneyId) => {
+    perPromptRef.current = [];
+    cumPointsRef.current = 0;
+    prevProgressRef.current = 0;
+    legTargetRef.current = 0;
     setJourneyId(id);
+    setLegIndex(0);
     setProgress(0);
+    setSubPhase("prompt");
     setPhase("play");
   }, []);
 
-  const handleProgress = useCallback((p: number) => {
-    setProgress(p);
-  }, []);
-
-  // DailyPlay hands us the assembled run; reconcile it with the server, bank the
-  // gold, persist, lock the day, then show the recap.
-  const handleFinish = useCallback(
+  const runFinish = useCallback(
     (result: DailyRunResult) => {
       if (finishingRef.current || !set || !journeyId) return;
       finishingRef.current = true;
@@ -127,6 +159,33 @@ export default function DailyDive() {
     [set, journeyId],
   );
 
+  // A prompt ended: bank its result, compute the new progress, travel the leg.
+  const handlePromptComplete = useCallback(
+    (result: DailyPromptResult) => {
+      if (!set || !journeyId) return;
+      perPromptRef.current = [...perPromptRef.current, result];
+      cumPointsRef.current += result.points;
+      const { journey } = pick(set, journeyId);
+      legTargetRef.current =
+        journey.distance > 0 ? Math.min(1, cumPointsRef.current / journey.distance) : 1;
+      setProgress(prevProgressRef.current); // start the leg where we left off
+      setSubPhase("leg");
+    },
+    [set, journeyId],
+  );
+
+  // Continue past the leg: either the next prompt, or finish after the last.
+  const handleContinue = useCallback(() => {
+    if (!set || !journeyId) return;
+    prevProgressRef.current = legTargetRef.current;
+    if (legIndex + 1 >= set.prompts.length) {
+      runFinish(assembleResult(set.dailyDate, journeyId, perPromptRef.current));
+    } else {
+      setLegIndex((i) => i + 1);
+      setSubPhase("prompt");
+    }
+  }, [set, journeyId, legIndex, runFinish]);
+
   if (phase === "loading" || !set) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-surface">
@@ -145,27 +204,67 @@ export default function DailyDive() {
 
   if ((phase === "play" || phase === "finish") && journeyId) {
     const { journey, route } = pick(set, journeyId);
-    return (
-      <main className="grid h-dvh grid-rows-[1fr_auto] bg-surface sm:grid-rows-1 sm:grid-cols-[1fr_minmax(0,22rem)]">
-        {/* Live traveler map (Track D), driven by play progress. */}
-        <div className="relative order-2 min-h-0 sm:order-1">
+
+    // Travelling leg: the character advances; a panel shows the leg result.
+    if (subPhase === "leg" || phase === "finish") {
+      const justResult = perPromptRef.current[legIndex];
+      const start = prevProgressRef.current;
+      const target = legTargetRef.current;
+      const landmarksPassed = journey.landmarks.filter(
+        (l) => l.atFraction > start && l.atFraction <= target,
+      ).length;
+      const isLast = legIndex + 1 >= set.prompts.length;
+      return (
+        <main className="relative h-dvh bg-surface">
           <JourneyMap
             route={route}
             destination={set.destination}
             landmarks={journey.landmarks}
             progress={progress}
+            className="absolute inset-0"
           />
-        </div>
-        {/* The 5-prompt loop. In the brief finish phase it stays mounted behind
-            the reconciliation round-trip, then the recap replaces the page. */}
-        <div className="order-1 min-h-0 sm:order-2">
-          <DailyPlay
-            set={set}
-            journey={journey}
-            onProgress={handleProgress}
-            onFinish={handleFinish}
-          />
-        </div>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
+            <div className="pointer-events-auto flex w-full max-w-md flex-col items-center gap-2 rounded-xl border border-[var(--color-chrome-gold)]/40 bg-[var(--color-chrome)]/90 px-5 py-4 text-center chrome-ink backdrop-blur">
+              <p className="text-xs uppercase tracking-wide opacity-70">
+                Leg {legIndex + 1} of {set.prompts.length}
+              </p>
+              {justResult && (
+                <p className="text-sm">
+                  You named {justResult.named}
+                  {justResult.total ? ` of ${justResult.total}` : ""} this leg.
+                </p>
+              )}
+              {landmarksPassed > 0 && (
+                <p className="text-sm font-semibold text-[var(--color-chrome-gold)]">
+                  Landmark reached!
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={handleContinue}
+                disabled={phase === "finish"}
+                data-testid="leg-continue"
+                className="mt-1 rounded-lg bg-[#f4efe3] px-6 py-2 font-semibold text-[var(--color-chrome)] transition hover:brightness-105 disabled:opacity-60"
+              >
+                {phase === "finish" ? "Arriving…" : isLast ? "Reach the destination" : "Press on"}
+              </button>
+            </div>
+          </div>
+        </main>
+      );
+    }
+
+    // Naming a prompt. Re-mounted per prompt (key) so the clock re-seeds.
+    return (
+      <main className="h-dvh bg-surface">
+        <DailyPlay
+          key={legIndex}
+          dailyDate={set.dailyDate}
+          prompt={set.prompts[legIndex]}
+          index={legIndex}
+          total={set.prompts.length}
+          onComplete={handlePromptComplete}
+        />
       </main>
     );
   }
@@ -183,7 +282,6 @@ export default function DailyDive() {
     );
   }
 
-  // Defensive fallback (e.g. finish without a result): send the player home.
   return (
     <main className="flex min-h-dvh items-center justify-center bg-surface">
       <button type="button" onClick={goHome} className="rounded-xl bg-surface-raised px-5 py-3">
