@@ -68,6 +68,9 @@ export default function JourneyMap({
   })();
 
   const land = maps.countries?.locations ?? [];
+  // Size markers/labels relative to the fitted view so they read the same
+  // whether the trek spans a region or a continent.
+  const u = Math.max(1, Number(viewBox.split(" ")[2]) || 230) / 100;
   const rootClassName = ["daily-journey-map", className].filter(Boolean).join(" ");
 
   return (
@@ -140,12 +143,12 @@ export default function JourneyMap({
               {lit && (
                 <>
                   {justPassed && (
-                    <circle cx={at.x} cy={at.y} r={10} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={1.5} strokeOpacity={0.6} vectorEffect="non-scaling-stroke">
-                      <animate attributeName="r" values="4;14" dur="1.4s" repeatCount="indefinite" />
+                    <circle cx={at.x} cy={at.y} r={3 * u} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={1.5} strokeOpacity={0.6} vectorEffect="non-scaling-stroke">
+                      <animate attributeName="r" values={`${1.5 * u};${4.5 * u}`} dur="1.4s" repeatCount="indefinite" />
                       <animate attributeName="stroke-opacity" values="0.8;0" dur="1.4s" repeatCount="indefinite" />
                     </circle>
                   )}
-                  <circle cx={at.x} cy={at.y} r={5} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
+                  <circle cx={at.x} cy={at.y} r={1.6 * u} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={1} vectorEffect="non-scaling-stroke" />
                 </>
               )}
             </g>
@@ -154,18 +157,18 @@ export default function JourneyMap({
 
         {/* Destination: ringed star + serif label. */}
         <g data-testid="journey-destination">
-          <circle cx={dest.x} cy={dest.y} r={8} fill="none" stroke="var(--color-accent)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
-          <Star cx={dest.x} cy={dest.y} r={5.5} fill="var(--color-accent)" />
+          <circle cx={dest.x} cy={dest.y} r={2.6 * u} fill="none" stroke="var(--color-accent)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+          <Star cx={dest.x} cy={dest.y} r={1.8 * u} fill="var(--color-accent)" />
           <text
             x={dest.x}
-            y={dest.y - 12}
+            y={dest.y - 4 * u}
             textAnchor="middle"
             fontFamily="var(--font-serif)"
-            fontSize={13}
+            fontSize={4 * u}
             fill="var(--map-ink)"
             style={{ paintOrder: "stroke" }}
             stroke="var(--map-paper)"
-            strokeWidth={3}
+            strokeWidth={u}
             strokeOpacity={0.85}
           >
             {destination.name}
@@ -181,8 +184,8 @@ export default function JourneyMap({
             transform={`translate(${traveler.x} ${traveler.y})`}
             style={{ transition: "transform 650ms ease-out" }}
           >
-            <circle r={6.5} fill="var(--color-accent)" stroke="var(--map-paper)" strokeWidth={2} vectorEffect="non-scaling-stroke" />
-            <circle r={2.5} fill="var(--map-paper)" />
+            <circle r={2.4 * u} fill="var(--color-accent)" stroke="var(--map-paper)" strokeWidth={2} vectorEffect="non-scaling-stroke" />
+            <circle r={0.9 * u} fill="var(--map-paper)" />
           </g>
         )}
       </svg>

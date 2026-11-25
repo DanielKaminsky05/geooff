@@ -48,6 +48,8 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
     for (const r of set.routes) for (const p of r.points) pts.push(project(p));
     return fitViewBox(pts, { pad: 1.6 });
   }, [set.routes, set.destination.at]);
+  // Marker size relative to the fitted view (regional vs continental).
+  const u = Math.max(1, Number(viewBox.split(" ")[2]) || 230) / 100;
 
   return (
     <section
@@ -101,7 +103,7 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
           <circle
             cx={dest.x}
             cy={dest.y}
-            r={3.5}
+            r={2.4 * u}
             fill="var(--color-accent)"
             stroke="var(--map-paper)"
             strokeWidth={1.5}
