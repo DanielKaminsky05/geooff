@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useSocket } from "../lib/socket";
 import { useSession, defaultName } from "../lib/session";
 import OutlineMap from "../components/OutlineMap";
-import JournalVignette from "../components/JournalVignette";
 import type { PlayerSlot } from "../lib/protocol";
 
 /** Give up on "Starting…" if the server hasn't answered create_room by then. */
@@ -95,24 +94,36 @@ export default function Home() {
         <OutlineMap />
       </div>
 
-      {/* Masthead: an illustrated landscape plate taped to the page, with the
-          wordmark below the scene and a red wax seal in the corner. */}
+      {/* Masthead: a hand-lettered paper label taped to the page, with a small
+          ink mountain doodle alongside it. Kept clean so the atlas backdrop is
+          the star. */}
       <header className="relative flex flex-col items-center">
-        <div className="journal-plate relative">
+        <div className="relative flex items-center gap-3 rounded-sm border border-border bg-surface-raised px-7 py-4 shadow-[0_1px_0_rgba(58,47,35,0.18)]">
           <span aria-hidden className="tape tape-tl" />
           <span aria-hidden className="tape tape-tr" />
-          <div className="plate-scene">
-            <JournalVignette />
-          </div>
-          <div className="plate-caption">
-            <h1 className="font-display text-2xl leading-none tracking-wide text-foreground sm:text-[1.7rem]">
-              GEOFIGHT
-            </h1>
-            <p className="plate-sub">— a world to name —</p>
-          </div>
-          <span aria-hidden className="wax-seal" />
+          {/* Small mountain-range doodle in sepia ink. */}
+          <svg
+            aria-hidden
+            width="34"
+            height="26"
+            viewBox="0 0 34 26"
+            fill="none"
+            stroke="var(--color-muted)"
+            strokeWidth="1.4"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            className="shrink-0"
+          >
+            <path d="M1 24 L10 7 L15 15 L21 3 L33 24 Z" />
+            <path d="M7.5 12.5 L10 10 L12.5 12.5" />
+            <path d="M18 8.5 L21 5.5 L24 9.5" />
+          </svg>
+          <h1 className="font-display text-2xl leading-none tracking-wide text-foreground sm:text-3xl">
+            GEOFIGHT
+          </h1>
         </div>
-        <p className="mt-5 text-[0.7rem] tracking-[0.25em] text-muted uppercase sm:text-xs">
+        <hr aria-hidden className="stitch mt-4 w-40" />
+        <p className="mt-3 text-[0.7rem] tracking-[0.25em] text-muted uppercase sm:text-xs">
           geography against friends
         </p>
       </header>
