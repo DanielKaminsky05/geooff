@@ -65,7 +65,7 @@ export function MatchScoreBar({
 export function FloatingHud({ className, children }: { className: string; children: ReactNode }) {
   return (
     <div
-      className={`pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col bg-gradient-to-b from-background via-background/90 to-transparent ${className}`}
+      className={`chrome-ink pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col bg-gradient-to-b from-[var(--color-chrome)] via-[var(--color-chrome)] to-transparent ${className}`}
     >
       {children}
     </div>

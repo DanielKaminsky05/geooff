@@ -154,7 +154,7 @@ export function ScoreBar({
   return (
     <div
       className={`flex items-center gap-3 px-4 py-3 ${compact ? "justify-center" : "justify-between"} ${
-        bare ? "" : "border-b border-border bg-surface"
+        bare ? "" : "chrome-bar chrome-ink border-b border-[var(--color-chrome-gold)]/40"
       }`}
     >
       {!compact && (

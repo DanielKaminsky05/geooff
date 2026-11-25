@@ -27,7 +27,7 @@ export default function AnswerBar({
   onLeave?: () => void;
 }) {
   return (
-    <section className="relative border-t border-border bg-surface px-4 pt-3 pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]">
+    <section className="chrome-bar chrome-ink relative border-t border-[var(--color-chrome-gold)]/40 px-4 pt-3 pb-[calc(0.75rem_+_env(safe-area-inset-bottom))]">
       {/* Floated above the bar (out of flow) so it never pushes the layout
           up/down when it appears on a rejected guess. */}
       {rejectMsg && (

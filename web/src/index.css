@@ -11,7 +11,7 @@
   --color-surface: #f3ebd7; /* cards / inputs — a shade lighter than the page */
   --color-surface-raised: #fbf5e6; /* hovered / raised paper */
   --color-border: #b9a37e; /* ink-brown hairlines, card outlines */
-  --color-land: #d8c7a3; /* unguessed country fill (parchment land) */
+  --color-land: #ccba92; /* unguessed country fill (parchment land, deepened) */
 
   --color-foreground: #3a2f23; /* sepia-black ink — primary text */
   --color-muted: #8a775b; /* faded ink — secondary text, counters */
@@ -27,17 +27,29 @@
   --color-walnut: #7a5a3a;
   --color-walnut-dark: #5e4328;
 
+  /* Walnut "chrome": the dark wooden desk the map sits on, used for the top HUD
+     and the bottom answer bar so the light cream map is framed top and bottom.
+     Light cream/gold ink reads on it; fields/buttons on the bar are sunken
+     darker wood. Applied via the .chrome-bar / .chrome-ink helpers. */
+  --color-chrome: #553c22; /* walnut bar surface */
+  --color-chrome-raised: #6a4e30; /* raised wood (buttons) */
+  --color-chrome-field: #4a3420; /* sunken field (guess input) */
+  --color-chrome-ink: #f1e3c4; /* cream text on walnut */
+  --color-chrome-muted: #c3a878; /* faded gold secondary text */
+  --color-chrome-line: #3a2817; /* dark hairline */
+  --color-chrome-gold: #caa24e; /* gold accent hairline */
+
   /* In-game world map (Victoria-3-style printed atlas on aged paper). The sea
      is a faint desaturated blue-grey WASH over warm cream paper, painted
      full-bleed on the map container (see .map-ocean); land is warm parchment
      tan with thin sepia coastlines. Kept as their own --map-* tokens so the
      playing map reads as a painted page without restyling the journal chrome.
      (--color-land above doubles as the land fill, in the journal's tone.) */
-  --map-paper: #efe4c9; /* warm cream/ivory aged paper base */
-  --map-paper-warm: #e7d6b0; /* mottled warm patch in the paper */
-  --map-ocean-top: #c9d6cf; /* faint blue-grey sea wash, top */
-  --map-ocean-bottom: #b9cbc8; /* sea wash, bottom — a touch cooler/deeper */
-  --map-land-border: #8a6a44; /* thin sepia-brown coastline */
+  --map-paper: #e6d7b4; /* warm aged paper base (deepened a touch) */
+  --map-paper-warm: #dcc99f; /* mottled warm patch in the paper */
+  --map-ocean-top: #b2c3bb; /* blue-grey sea wash, top (deeper) */
+  --map-ocean-bottom: #a3b8b2; /* sea wash, bottom — cooler/deeper */
+  --map-land-border: #5a3d1c; /* dark sepia-brown coastline / country borders */
   --map-ink: #6b5536; /* sepia ink for graticule / labels / ocean names */
   --map-terracotta: #a9623f; /* dashed equator line */
 
@@ -185,6 +197,33 @@ body {
   94% { transform: translate(0.1em, 0.015em); }
   96% { transform: translate(0.04em, 0.05em); }
   98% { transform: translate(0.05em, 0.035em); }
+}
+
+/* ---- Walnut chrome: top HUD + bottom answer bar ------------------------- */
+
+/*
+ * Light-ink-on-walnut subtree: redefine the semantic text/border tokens to the
+ * cream/gold "chrome" set so existing text-foreground / text-muted / border
+ * utilities (and inline var(--color-foreground) uses, e.g. the timer) flip to
+ * legible light tones over the dark wood — no per-element edits needed.
+ */
+.chrome-ink {
+  --color-foreground: var(--color-chrome-ink);
+  --color-muted: var(--color-chrome-muted);
+  --color-border: var(--color-chrome-line);
+  color: var(--color-chrome-ink);
+}
+
+/*
+ * Solid walnut bar: chrome-ink plus a walnut background and sunken-wood fields,
+ * so inputs/buttons on the bar (bg-surface / bg-surface-raised) become dark wood
+ * with light text instead of cream. Used for the top ScoreBar strip and the
+ * bottom AnswerBar.
+ */
+.chrome-bar {
+  --color-surface: var(--color-chrome-field);
+  --color-surface-raised: var(--color-chrome-raised);
+  background: var(--color-chrome);
 }
 
 /* ---- In-game world map: Victoria-3-style printed atlas ------------------- */
