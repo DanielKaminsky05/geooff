@@ -9,8 +9,16 @@
   --color-background: #0f1b2a; /* ocean / app background */
   --color-surface: #1a2838; /* panels, inputs, buttons */
   --color-surface-raised: #223449; /* hovered/raised surface */
-  --color-border: #415169; /* country borders, dividers */
-  --color-land: #2b3a4d; /* unguessed country fill */
+  --color-border: #415169; /* dividers, panel borders */
+  --color-land: #30425a; /* unguessed country fill — calm neutral land */
+
+  /* Flat-modern map (Datawrapper / Mapbox-light feel). The water is a calm,
+     low-contrast blue-grey gradient painted full-bleed on the map container
+     (see .map-ocean); the land gets a crisp hairline border. Kept as their own
+     tokens so the map reads as a quiet surface without restyling app chrome. */
+  --map-ocean-top: #16273a; /* water, top — quiet blue-grey */
+  --map-ocean-bottom: #101e2e; /* water, bottom — a touch deeper */
+  --map-land-border: #46597a; /* crisp hairline country border */
 
   --color-foreground: #e6edf3; /* primary text */
   --color-muted: #8b98a5; /* secondary text, counters */
@@ -444,4 +452,19 @@ body {
   0% { opacity: 0; }
   30% { opacity: 0.45; }
   100% { opacity: 0; }
+}
+
+/*
+ * Flat-modern world map.
+ *
+ * The water is painted as a FULL-BLEED layer on the map container (100% of the
+ * absolute inset-0 wrapper), NOT as a viewBox-sized <rect>. The land <svg> uses
+ * `preserveAspectRatio="xMidYMid meet"` and is letterboxed when the pane is a
+ * different aspect than the map; painting the ocean on the container means the
+ * water fills the whole pane edge-to-edge with no bare side bands, and (in
+ * interactive mode) stays fixed behind the panning/zooming land.
+ */
+.map-ocean {
+  background:
+    linear-gradient(180deg, var(--map-ocean-top), var(--map-ocean-bottom));
 }
