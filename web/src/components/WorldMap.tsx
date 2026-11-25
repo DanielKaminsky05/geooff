@@ -40,6 +40,12 @@ export interface WorldMapProps {
    * 0..1010 × 0..666 world space (e.g. via geo.project).
    */
   overlay?: ReactNode;
+  /**
+   * World map only: wrap horizontally like a cylinder (clone tiles at ±WORLD_W +
+   * pan-snap). Defaults true. Set false when an `overlay` must always stay put —
+   * the clones carry no overlay, so wrapping onto one makes the overlay vanish.
+   */
+  wrap?: boolean;
 }
 
 // Each TransformComponent / reveal needs a unique filter id so multiple maps on
@@ -124,7 +130,7 @@ function OceanLabels(): ReactElement {
  * feDisplacementMap (mottled/wobbly) plus inked edges and a soft lift shadow —
  * group-scoped, never per-path, so ~250 paths stay cheap.
  */
-function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries", revealNames = true, interactive = true, testId = "world-map", className, overlay }: WorldMapProps) {
+function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries", revealNames = true, interactive = true, testId = "world-map", className, overlay, wrap = true }: WorldMapProps) {
   const { viewBox, locations } = mapFor(categoryId);
   const seq = (filterSeq++).toString(36);
   const paintId = `map-paint-${seq}`;
@@ -255,7 +261,7 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
   // past an edge shows continuous map). Region/us-states maps never wrap, and
   // the static reveal snapshot must show a single centered world — no cylinder
   // copies — so we skip the clones there too.
-  const cloneLand = isWorld && interactive ? buildLand(true) : null;
+  const cloneLand = isWorld && interactive && wrap ? buildLand(true) : null;
 
   // One tile of the map: decoration (world only) + base land + lifted land.
   // `clone` tiles are purely decorative (aria-hidden, no interactivity, no test
@@ -306,7 +312,7 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
       // (and get clipped by the pane's own overflow:hidden) as you pan across
       // the seam. Only the interactive world needs this — the static reveal and
       // region/us-states maps keep the default clip so nothing spills the viewBox.
-      style={{ display: "block", background: "transparent", overflow: isWorld && interactive ? "visible" : undefined }}
+      style={{ display: "block", background: "transparent", overflow: isWorld && interactive && wrap ? "visible" : undefined }}
     >
       <defs>
         {/* ONE group-level WATERCOLOR filter for the filled land: a soft
@@ -387,9 +393,9 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
         // World map wraps horizontally: let X roam free (we clamp Y and wrap X
         // ourselves in onTransform). Region/us-states maps keep the default
         // clamped bounds unchanged.
-        limitToBounds={!isWorld}
-        onInit={isWorld ? handleInit : undefined}
-        onTransform={isWorld ? handleTransform : undefined}
+        limitToBounds={!isWorld || !wrap}
+        onInit={isWorld && wrap ? handleInit : undefined}
+        onTransform={isWorld && wrap ? handleTransform : undefined}
       >
         <TransformComponent
           wrapperStyle={{ width: "100%", height: "100%" }}
@@ -431,6 +437,7 @@ function propsEqual(prev: WorldMapProps, next: WorldMapProps): boolean {
     prev.testId === next.testId &&
     prev.className === next.className &&
     prev.overlay === next.overlay &&
+    prev.wrap === next.wrap &&
     sameSet(prev.filledIso, next.filledIso) &&
     sameColors(prev.colorByIso, next.colorByIso)
   );

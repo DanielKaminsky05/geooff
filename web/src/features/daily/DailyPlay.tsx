@@ -163,6 +163,7 @@ export default function DailyPlay({
           color="var(--color-player1)"
           categoryId="countries"
           overlay={overlayEl}
+          wrap={false}
         />
 
         {/* Prompt counter (corner) + Next/Finish — floating, no chrome strip. */}

@@ -98,7 +98,7 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
 
   return (
     <div className={`relative h-dvh w-full ${className ?? ""}`} data-testid="journey-select">
-      <WorldMap filledIso={EMPTY} color="var(--color-player1)" categoryId="countries" overlay={roads} />
+      <WorldMap filledIso={EMPTY} color="var(--color-player1)" categoryId="countries" overlay={roads} wrap={false} />
 
       {/* Start prompt, floating — "select your road", styled like a prompt. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col items-center gap-2 px-4 pt-4 text-center">
