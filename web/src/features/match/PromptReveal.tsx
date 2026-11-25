@@ -49,7 +49,7 @@ export function RevealControls({ endsAt, votes, iSkipped, onSkip }: RevealContro
         onClick={onSkip}
         disabled={iSkipped}
         data-testid="reveal-skip"
-        className="rounded-lg bg-foreground px-5 py-2 text-sm font-semibold text-background transition hover:brightness-110 disabled:opacity-60"
+        className="rounded-lg bg-[var(--color-chrome-gold)] px-5 py-2 text-sm font-semibold text-[var(--color-chrome)] transition hover:brightness-110 disabled:opacity-60"
       >
         {label}
       </button>
@@ -126,9 +126,9 @@ export default function RevealScreen({
     <div
       data-testid="reveal-screen"
       aria-live="polite"
-      className="fade-in absolute inset-0 z-20 flex flex-col bg-background/95 backdrop-blur"
+      className="fade-in chrome-ink absolute inset-0 z-20 flex flex-col bg-[var(--color-chrome)]/95 backdrop-blur"
     >
-      <header className="shrink-0 border-b border-border px-4 py-3 text-center">
+      <header className="chrome-bar chrome-ink shrink-0 border-b border-[var(--color-chrome-gold)]/40 px-4 py-3 text-center">
         <h3 className="text-lg font-bold">{title}</h3>
         {lineLabel && <p className="text-xs text-muted">{lineLabel}</p>}
         {players && players.length > 0 && (
@@ -180,7 +180,7 @@ export default function RevealScreen({
         </div>
 
         {/* The list for the selected layer, down the side. */}
-        <aside className="flex max-h-44 shrink-0 flex-col gap-2 overflow-y-auto border-t border-border p-3 text-left md:max-h-none md:w-56 md:border-l md:border-t-0">
+        <aside className="chrome-bar chrome-ink flex max-h-44 shrink-0 flex-col gap-2 overflow-y-auto border-t border-[var(--color-chrome-gold)]/40 p-3 text-left md:max-h-none md:w-56 md:border-l md:border-t-0">
           {!empty && (
             <ol data-testid="reveal-list" className="flex flex-col gap-0.5 text-sm">
               {items.map((m) => (
@@ -194,7 +194,7 @@ export default function RevealScreen({
         </aside>
       </div>
 
-      <footer className="shrink-0 border-t border-border px-4 py-3">
+      <footer className="chrome-bar chrome-ink shrink-0 border-t border-[var(--color-chrome-gold)]/40 px-4 py-3">
         <RevealControls {...controls} />
       </footer>
     </div>
