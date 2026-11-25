@@ -1,0 +1,94 @@
+/**
+ * Daily Dive — REST client (Track C).
+ *
+ * Thin typed `fetch` wrappers over the three stateless daily routes. The server
+ * base URL is derived the SAME way as the socket client (`socket.tsx`): the
+ * `VITE_WS_URL` env, falling back to the local dev server. Daily Dive is REST,
+ * not Socket.IO, but it talks to the same backend origin.
+ *
+ * Dev-friendliness: a failed `GET /daily` falls back to `FIXTURE_DAILY_SET` so
+ * the UI is fully developable without the server running (a warning is logged).
+ * A 429 from `POST /daily/answer` is surfaced as a soft "slow down" signal
+ * rather than throwing — the answer route is rate-limited per IP.
+ */
+
+import type {
+  DailySet,
+  DailyAnswerReq,
+  DailyAnswerRes,
+  DailyFinishReq,
+  DailyFinishRes,
+} from "./contract";
+import { FIXTURE_DAILY_SET } from "./contract";
+
+/** Same origin as the socket client (socket.tsx). Daily Dive is REST on it. */
+const BASE_URL = import.meta.env.VITE_WS_URL ?? "http://localhost:3001";
+
+/** Build an absolute URL to a daily route on the server origin. */
+function url(path: string): string {
+  return `${BASE_URL.replace(/\/$/, "")}${path}`;
+}
+
+/** A rejected answer response the UI can treat as a soft "slow down". */
+export class RateLimitedError extends Error {
+  constructor() {
+    super("Too many answers — slow down a moment.");
+    this.name = "RateLimitedError";
+  }
+}
+
+async function postJSON(path: string, body: unknown): Promise<Response> {
+  return fetch(url(path), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * GET /daily — today's set (labels only; validIds stay server-side).
+ *
+ * On any network/HTTP failure, fall back to the static fixture so the client is
+ * developable without the server. The fallback is dev-ergonomics only; a real
+ * failure in production simply yields the fixture day, which is harmless (no
+ * secret is involved) and keeps the UI from hard-crashing.
+ */
+export async function fetchDailySet(): Promise<DailySet> {
+  try {
+    const res = await fetch(url("/daily"), { headers: { accept: "application/json" } });
+    if (!res.ok) throw new Error(`GET /daily -> ${res.status}`);
+    return (await res.json()) as DailySet;
+  } catch (err) {
+    console.warn(
+      "[dailyApi] GET /daily failed — falling back to FIXTURE_DAILY_SET.",
+      err,
+    );
+    return FIXTURE_DAILY_SET;
+  }
+}
+
+/**
+ * POST /daily/answer — validate ONE guess against ONE prompt. This is the only
+ * call that reads the secret valid set (hence rate-limited server-side).
+ *
+ * A 429 is surfaced as `RateLimitedError` so the caller can show a soft "slow
+ * down" hint instead of crashing. Any other HTTP failure throws.
+ */
+export async function postAnswer(req: DailyAnswerReq): Promise<DailyAnswerRes> {
+  const res = await postJSON("/daily/answer", req);
+  if (res.status === 429) {
+    throw new RateLimitedError();
+  }
+  if (!res.ok) throw new Error(`POST /daily/answer -> ${res.status}`);
+  return (await res.json()) as DailyAnswerRes;
+}
+
+/**
+ * POST /daily/finish — hand the completed run to the server, which reconciles
+ * completion bonuses + outcome and returns the synthetic percentile.
+ */
+export async function postFinish(req: DailyFinishReq): Promise<DailyFinishRes> {
+  const res = await postJSON("/daily/finish", req);
+  if (!res.ok) throw new Error(`POST /daily/finish -> ${res.status}`);
+  return (await res.json()) as DailyFinishRes;
+}
