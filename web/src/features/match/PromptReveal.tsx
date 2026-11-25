@@ -49,7 +49,7 @@ export function RevealControls({ endsAt, votes, iSkipped, onSkip }: RevealContro
         onClick={onSkip}
         disabled={iSkipped}
         data-testid="reveal-skip"
-        className="rounded-lg bg-[var(--color-chrome-gold)] px-5 py-2 text-sm font-semibold text-[var(--color-chrome)] transition hover:brightness-110 disabled:opacity-60"
+        className="rounded-lg bg-[#f4efe3] px-5 py-2 text-sm font-semibold text-[var(--color-chrome)] transition hover:brightness-105 disabled:opacity-60"
       >
         {label}
       </button>
