@@ -123,7 +123,7 @@ export default function Home() {
           </h1>
         </div>
         <hr aria-hidden className="stitch mt-4 w-40" />
-        <p className="mt-3 text-[0.7rem] tracking-[0.25em] text-muted uppercase sm:text-xs">
+        <p className="mt-3 inline-block rounded-full border border-border/60 bg-surface/85 px-3.5 py-1 text-[0.7rem] font-semibold tracking-[0.25em] text-foreground uppercase shadow-[0_1px_0_rgba(58,47,35,0.12)] sm:text-xs">
           geography against friends
         </p>
       </header>
