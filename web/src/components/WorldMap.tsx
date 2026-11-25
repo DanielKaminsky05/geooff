@@ -161,11 +161,21 @@ function OceanLabel({ x, y, rotate, size, text }: { x: number; y: number; rotate
 function OceanLabels(): ReactElement {
   return (
     <g aria-hidden="true">
-      <OceanLabel x={320} y={300} size={16} text="A T L A N T I C   O C E A N" />
-      <OceanLabel x={150} y={470} size={14} text="P A C I F I C   O C E A N" />
-      <OceanLabel x={930} y={320} size={14} text="P A C I F I C" />
-      <OceanLabel x={720} y={470} size={14} text="I N D I A N   O C E A N" />
-      <OceanLabel x={505} y={648} size={12} text="S O U T H E R N   O C E A N" />
+      {/* North Atlantic open water (~35°N, 38°W), mid-ocean between the Americas
+          and Europe/Africa — clear of Caribbean land. */}
+      <OceanLabel x={400} y={238} size={15} text="A T L A N T I C   O C E A N" />
+      {/* South Atlantic (~22°S, 15°W), open water between Brazil and Africa. */}
+      <OceanLabel x={462} y={492} size={12} text="S O U T H   A T L A N T I C" />
+      {/* North-east Pacific open water (~12°N, 132°W), well west of Mexico and
+          clear of the compass rose at (200,500). */}
+      <OceanLabel x={135} y={330} size={14} text="P A C I F I C   O C E A N" />
+      {/* North-west Pacific open water (~12°N, 160°E), right-hand ocean. */}
+      <OceanLabel x={930} y={330} size={13} text="P A C I F I C" />
+      {/* Indian Ocean (~18°S, 80°E), open water south of India, west of Australia. */}
+      <OceanLabel x={726} y={478} size={13} text="I N D I A N   O C E A N" />
+      {/* Southern Ocean band below the continents (~52°S), pulled up from the
+          cut-off bottom edge so it stays fully visible. */}
+      <OceanLabel x={505} y={636} size={11} text="S O U T H E R N   O C E A N" />
     </g>
   );
 }
