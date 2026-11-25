@@ -1,6 +1,6 @@
 import { memo, type ReactElement } from "react";
 import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import { mapFor, TERRITORY_PARENT } from "../lib/maps";
+import { mapFor, pathSpan, TERRITORY_PARENT } from "../lib/maps";
 import type { CategoryId } from "../lib/protocol";
 
 export interface WorldMapProps {
@@ -161,21 +161,20 @@ function OceanLabel({ x, y, rotate, size, text }: { x: number; y: number; rotate
 function OceanLabels(): ReactElement {
   return (
     <g aria-hidden="true">
-      {/* North Atlantic open water (~35°N, 38°W), mid-ocean between the Americas
-          and Europe/Africa — clear of Caribbean land. */}
-      <OceanLabel x={400} y={238} size={15} text="A T L A N T I C   O C E A N" />
-      {/* South Atlantic (~22°S, 15°W), open water between Brazil and Africa. */}
-      <OceanLabel x={462} y={492} size={12} text="S O U T H   A T L A N T I C" />
-      {/* North-east Pacific open water (~12°N, 132°W), well west of Mexico and
-          clear of the compass rose at (200,500). */}
-      <OceanLabel x={135} y={330} size={14} text="P A C I F I C   O C E A N" />
-      {/* North-west Pacific open water (~12°N, 160°E), right-hand ocean. */}
-      <OceanLabel x={930} y={330} size={13} text="P A C I F I C" />
-      {/* Indian Ocean (~18°S, 80°E), open water south of India, west of Australia. */}
-      <OceanLabel x={726} y={478} size={13} text="I N D I A N   O C E A N" />
-      {/* Southern Ocean band below the continents (~52°S), pulled up from the
-          cut-off bottom edge so it stays fully visible. */}
-      <OceanLabel x={505} y={636} size={11} text="S O U T H E R N   O C E A N" />
+      {/* North Atlantic open water, mid-ocean between the Americas and
+          Europe/Africa — nudged west of the African bulge. */}
+      <OceanLabel x={372} y={240} size={11} text="ATLANTIC OCEAN" />
+      {/* South Atlantic, open water between Brazil and Africa. */}
+      <OceanLabel x={470} y={498} size={9} text="SOUTH ATLANTIC" />
+      {/* North-east Pacific open water, well west of Mexico and clear of the
+          compass rose at (200,500). */}
+      <OceanLabel x={120} y={330} size={11} text="PACIFIC OCEAN" />
+      {/* North-west Pacific open water, right-hand ocean. */}
+      <OceanLabel x={915} y={330} size={10} text="PACIFIC" />
+      {/* Indian Ocean, open water south of India, west of Australia. */}
+      <OceanLabel x={726} y={486} size={10} text="INDIAN OCEAN" />
+      {/* Southern Ocean band below the continents, lifted off the bottom edge. */}
+      <OceanLabel x={505} y={638} size={9} text="SOUTHERN OCEAN" />
     </g>
   );
 }
@@ -318,7 +317,6 @@ function PaneFrame({ categoryId }: { categoryId: CategoryId }): ReactElement {
 function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries", revealNames = true, interactive = true, testId = "world-map", className }: WorldMapProps) {
   const { viewBox, locations } = mapFor(categoryId);
   const seq = (filterSeq++).toString(36);
-  const liftId = `map-lift-${seq}`;
   const paintId = `map-paint-${seq}`;
   const isWorld = categoryId === "countries";
 
@@ -334,6 +332,11 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
     const perItem = colorByIso?.get(key);
     const filled = colorByIso ? perItem !== undefined : filledIso.has(key);
     const fill = perItem ?? (filled ? color : "var(--color-land)");
+    // Cap the border on tiny countries so the stroke doesn't swamp a microstate
+    // (Monaco, Vatican, Liechtenstein…): keep the full weight for normal-sized
+    // land, but clamp it to ~10% of the country's span for very small shapes.
+    const baseStroke = filled ? 0.5 : 0.35;
+    const strokeW = Math.max(0.05, Math.min(baseStroke, pathSpan(loc.path) * 0.1));
     const path = (
       <path
         key={loc.id}
@@ -343,7 +346,7 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
         d={loc.path}
         fill={fill}
         stroke="var(--map-land-border)"
-        strokeWidth={filled ? 0.5 : 0.35}
+        strokeWidth={strokeW}
         strokeLinejoin="round"
       >
         {/* Only reveal names of countries already guessed — a tooltip on
@@ -375,11 +378,6 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
       style={{ display: "block", background: "transparent" }}
     >
       <defs>
-        {/* ONE group-level soft lift shadow for filled land (depth). */}
-        <filter id={liftId} x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="0.5" stdDeviation="0.5" floodColor="#4a371c" floodOpacity="0.4" />
-        </filter>
-
         {/* ONE group-level WATERCOLOR filter for the filled land: a soft
             turbulence displaces the painted fill for a wobbly, mottled
             hand-brushed edge, and a second turbulence overlays a faint mottle
@@ -430,10 +428,9 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
 
       {/* Base (unguessed) parchment land with thin sepia coastlines. */}
       <g>{base}</g>
-      {/* Filled land: watercolor wash + inked/lifted edges, painted above. */}
-      <g filter={`url(#${liftId})`}>
-        <g filter={`url(#${paintId})`}>{lifted}</g>
-      </g>
+      {/* Filled land: watercolor wash + inked edges, painted above (flat, no
+          lift shadow). */}
+      <g filter={`url(#${paintId})`}>{lifted}</g>
     </svg>
   );
 
