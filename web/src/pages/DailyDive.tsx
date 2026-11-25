@@ -35,6 +35,16 @@ import type {
 type Phase = "loading" | "select" | "play" | "finish" | "recap";
 type SubPhase = "prompt" | "leg";
 
+/**
+ * TESTING: bypass the one-and-done localStorage lock so a run can be replayed.
+ * On in dev, or with `?replay` in the URL. When on, we also skip ALL persistence
+ * (no played-lock, no saved result, no gold banked) so repeated test runs don't
+ * accumulate or lock anything. Production (built, no `?replay`) is one-and-done.
+ */
+const ALLOW_REPLAY =
+  import.meta.env.DEV ||
+  (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("replay"));
+
 function pick(set: DailySet, id: JourneyId): { journey: DailyJourney; route: DailyRoute } {
   const journey = set.journeys.find((j) => j.id === id)!;
   const route = set.routes.find((r) => r.journeyId === id)!;
@@ -97,7 +107,7 @@ export default function DailyDive() {
       if (cancelled) return;
       setSet(loaded);
       const saved = localDailyStore.getResult(loaded.dailyDate);
-      if (localDailyStore.isPlayedToday(loaded.dailyDate) && saved) {
+      if (!ALLOW_REPLAY && localDailyStore.isPlayedToday(loaded.dailyDate) && saved) {
         setRecapResult(saved);
         setPercentile(fallbackPercentile(saved, pick(loaded, saved.journey).journey));
         setWalletBalance(localDailyStore.getWallet());
@@ -147,9 +157,14 @@ export default function DailyDive() {
         } catch (err) {
           console.warn("[DailyDive] finish failed — using client fallback.", err);
         }
-        const newBalance = localDailyStore.addGold(finalResult.gold);
-        localDailyStore.saveResult(finalResult);
-        localDailyStore.markPlayed(finalResult.dailyDate);
+        // Replay/testing: don't persist anything (no gold banked, no lock).
+        const newBalance = ALLOW_REPLAY
+          ? localDailyStore.getWallet() + finalResult.gold
+          : localDailyStore.addGold(finalResult.gold);
+        if (!ALLOW_REPLAY) {
+          localDailyStore.saveResult(finalResult);
+          localDailyStore.markPlayed(finalResult.dailyDate);
+        }
         setRecapResult(finalResult);
         setPercentile(pct);
         setWalletBalance(newBalance);
