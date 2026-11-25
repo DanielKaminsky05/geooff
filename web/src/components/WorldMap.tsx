@@ -185,8 +185,8 @@ function OceanLabels(): ReactElement {
 
 // Compass rose centre (open south-Pacific water). The rhumb lines radiate from
 // this exact point so they read as emanating from the rose, portolan-style.
-const COMPASS_CX = 170;
-const COMPASS_CY = 300;
+const COMPASS_CX = 200;
+const COMPASS_CY = 500;
 
 /**
  * Faint nautical RHUMB (loxodrome) lines radiating from the compass rose across
@@ -214,8 +214,8 @@ function RhumbLines(): ReactElement {
         x2={x2}
         y2={y2}
         stroke="var(--map-terracotta)"
-        strokeWidth={0.3}
-        strokeOpacity={principal ? 0.12 : 0.07}
+        strokeWidth={principal ? 0.4 : 0.3}
+        strokeOpacity={principal ? 0.34 : 0.2}
       />,
     );
   }
@@ -229,10 +229,10 @@ function RhumbLines(): ReactElement {
 function Compass(): ReactElement {
   const cx = COMPASS_CX;
   const cy = COMPASS_CY;
-  const r = 26;
+  const r = 40;
   const ink = "var(--map-ink)";
   return (
-    <g aria-hidden="true" stroke={ink} fill={ink} opacity={0.3}>
+    <g aria-hidden="true" stroke={ink} fill={ink} opacity={0.5}>
       <circle cx={cx} cy={cy} r={r} fill="none" strokeWidth={0.6} />
       <circle cx={cx} cy={cy} r={r * 0.62} fill="none" strokeWidth={0.4} />
       {/* Eight-point star: long N/S/E/W spokes, short diagonals. */}
