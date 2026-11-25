@@ -16,6 +16,8 @@ export default function Home() {
   const [code, setCode] = useState("");
   const [creating, setCreating] = useState<"versus" | "solo" | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  // Daily Dive entry: zoom the atlas in + fade the UI, then navigate.
+  const [diving, setDiving] = useState(false);
   const creatingRef = useRef(creating);
   useEffect(() => {
     creatingRef.current = creating;
@@ -85,19 +87,50 @@ export default function Home() {
     navigate(`/room/${trimmed}`);
   }
 
+  /** Enter the Daily Dive with a short zoom-into-the-map transition (skipped for
+   *  reduced-motion users, who navigate straight there). */
+  function startDaily() {
+    if (diving) return;
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      navigate("/daily");
+      return;
+    }
+    setDiving(true);
+    window.setTimeout(() => navigate("/daily"), 620);
+  }
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-9 px-6 py-16">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-9 overflow-hidden px-6 py-16">
       {/* Walnut cover framing the whole page. */}
       <div aria-hidden className="journal-frame" />
 
-      {/* Faint solid-outline world map filling the journal page. */}
-      <div aria-hidden className="home-bg">
+      {/* Faint solid-outline world map filling the journal page. On a Daily Dive
+          it zooms in to carry the eye onto the map before the route loads. */}
+      <div
+        aria-hidden
+        className="home-bg"
+        style={{
+          transform: diving ? "scale(2.6)" : "scale(1)",
+          transition: "transform 620ms cubic-bezier(0.4, 0, 0.2, 1)",
+          willChange: "transform",
+        }}
+      >
         <OutlineMap />
       </div>
 
       {/* Masthead: the red GEOFIGHT wordmark standing directly on the atlas,
           with a stitched rule and the tagline below. */}
-      <header className="relative flex flex-col items-center">
+      <header
+        className="relative flex flex-col items-center"
+        style={{
+          opacity: diving ? 0 : 1,
+          transform: diving ? "scale(0.96)" : "scale(1)",
+          transition: "opacity 380ms ease, transform 620ms ease",
+        }}
+      >
         <h1 className="leading-none">
           <GlitchWordmark className="text-3xl tracking-wide sm:text-4xl" />
         </h1>
@@ -107,10 +140,18 @@ export default function Home() {
         </p>
       </header>
 
-      <div className="flex w-full max-w-sm flex-col gap-4">
+      <div
+        className="flex w-full max-w-sm flex-col gap-4"
+        style={{
+          opacity: diving ? 0 : 1,
+          transform: diving ? "scale(0.96)" : "scale(1)",
+          transition: "opacity 380ms ease, transform 620ms ease",
+          pointerEvents: diving ? "none" : undefined,
+        }}
+      >
         <button
           type="button"
-          onClick={() => navigate("/daily")}
+          onClick={startDaily}
           className="group rounded-lg border border-accent/50 bg-surface-raised px-6 py-4 text-left shadow-[0_1px_0_rgba(58,47,35,0.18)] transition hover:bg-surface"
         >
           <span className="flex items-baseline justify-between gap-3">
