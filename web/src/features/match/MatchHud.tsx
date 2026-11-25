@@ -61,11 +61,12 @@ export function MatchScoreBar({
   );
 }
 
-/** A HUD floating over a full-height map, fading out at the bottom. */
+/** A solid charcoal top-chrome bar (in flow, so the map sits below it without
+ *  being clipped), with a gold hairline at its foot. */
 export function FloatingHud({ className, children }: { className: string; children: ReactNode }) {
   return (
     <div
-      className={`chrome-bar chrome-ink pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col border-b border-[var(--color-chrome-gold)]/40 ${className}`}
+      className={`chrome-bar chrome-ink flex shrink-0 flex-col border-b border-[var(--color-chrome-gold)]/40 ${className}`}
     >
       {children}
     </div>

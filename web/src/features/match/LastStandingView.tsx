@@ -59,18 +59,12 @@ export default function LastStandingView({
 
   return (
     <>
-      {/* Top chrome: a solid charcoal bar with just lives + score. The active
-          prompt is NOT part of the bar — it floats on the map just below it. */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col">
-        <div className="chrome-bar chrome-ink flex flex-col border-b border-[var(--color-chrome-gold)]/40 pb-2">
-          {multi && <LivesBar players={livesBarPlayers} showHearts={gauntlet} />}
-          <MatchScoreBar model={model} bare compact={multi} />
-        </div>
-        {gauntlet && model.live && prompt && (
-          <div className="mt-2 flex justify-center px-4 [text-shadow:0_1px_3px_var(--map-paper)]">
-            <PromptBanner bare label={prompt.label} />
-          </div>
-        )}
+      {/* Top chrome: a solid charcoal bar IN FLOW (shrink-0) so it never
+          overlaps/clips the map — the map sits directly below it. Lives + score
+          only; the active prompt floats on the map (below). */}
+      <div className="chrome-bar chrome-ink flex shrink-0 flex-col border-b border-[var(--color-chrome-gold)]/40">
+        {multi && <LivesBar players={livesBarPlayers} showHearts={gauntlet} />}
+        <MatchScoreBar model={model} bare compact={multi} />
       </div>
 
       <section className="relative min-h-0 flex-1">
@@ -91,6 +85,12 @@ export default function LastStandingView({
               categoryId={model.categoryId}
               className="h-full w-full"
             />
+          </div>
+        )}
+        {/* Active prompt floats directly on the map, just under the bar. */}
+        {gauntlet && model.live && prompt && (
+          <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-4 [text-shadow:0_1px_3px_var(--map-paper)]">
+            <PromptBanner bare label={prompt.label} />
           </div>
         )}
         {children}
