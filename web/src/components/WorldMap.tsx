@@ -298,9 +298,11 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
   }
 
   const primary = buildLand(false);
-  // Clone land only matters for the wrapping WORLD map. For region/us-states
-  // maps (no wrap) we never build it.
-  const cloneLand = isWorld ? buildLand(true) : null;
+  // Clone land only matters for the INTERACTIVE wrapping WORLD map (so panning
+  // past an edge shows continuous map). Region/us-states maps never wrap, and
+  // the static reveal snapshot must show a single centered world — no cylinder
+  // copies — so we skip the clones there too.
+  const cloneLand = isWorld && interactive ? buildLand(true) : null;
 
   // One tile of the map: decoration (world only) + base land + lifted land.
   // `clone` tiles are purely decorative (aria-hidden, no interactivity, no test
@@ -349,8 +351,9 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
       preserveAspectRatio="xMidYMid meet"
       // The wrap tiles sit at x = ±WORLD_W, outside the viewBox; let them show
       // (and get clipped by the pane's own overflow:hidden) as you pan across
-      // the seam. Region/us-states maps keep the default clip.
-      style={{ display: "block", background: "transparent", overflow: isWorld ? "visible" : undefined }}
+      // the seam. Only the interactive world needs this — the static reveal and
+      // region/us-states maps keep the default clip so nothing spills the viewBox.
+      style={{ display: "block", background: "transparent", overflow: isWorld && interactive ? "visible" : undefined }}
     >
       <defs>
         {/* ONE group-level WATERCOLOR filter for the filled land: a soft
