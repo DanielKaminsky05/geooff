@@ -212,6 +212,7 @@ export default function DailyPlay({
         rejectSignal={rejectSignal}
         rejectMsg={rejectMsg}
         disabled={submitting}
+        autoFocus
       />
     </section>
   );

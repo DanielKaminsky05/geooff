@@ -26,6 +26,9 @@ export interface CountryInputProps {
    */
   rejectSignal: number;
   disabled?: boolean;
+  /** Focus the field on mount (desktop only). Daily Dive opts in so each prompt
+   *  drops you straight into typing. */
+  autoFocus?: boolean;
 }
 
 const SHAKE_MS = 400;
@@ -46,6 +49,7 @@ export function CountryInput({
   acceptSignal,
   rejectSignal,
   disabled,
+  autoFocus,
 }: CountryInputProps) {
   const [text, setText] = useState("");
   /** Bumped per reject: non-zero while shaking (restarts the timer on repeats). */
@@ -63,6 +67,13 @@ export function CountryInput({
   const refocus = () => {
     if (!isCoarsePointer()) inputRef.current?.focus();
   };
+
+  // Focus on mount when asked (keeps you in the input as each prompt appears).
+  useEffect(() => {
+    if (autoFocus) refocus();
+    // Mount only; refocus is stable enough and we only want the initial focus.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Reset (new game / round) → clear field + forget in-flight guesses.
   useEffect(() => {
