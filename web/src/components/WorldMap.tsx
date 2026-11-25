@@ -1,5 +1,5 @@
-import { memo, type ReactElement } from "react";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
+import { memo, useCallback, useRef, type ReactElement } from "react";
+import { TransformWrapper, TransformComponent, type ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 import { mapFor, pathSpan, TERRITORY_PARENT } from "../lib/maps";
 import type { CategoryId } from "../lib/protocol";
 
@@ -320,44 +320,161 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
   const paintId = `map-paint-${seq}`;
   const isWorld = categoryId === "countries";
 
+  // --- Cylindrical horizontal wrap plumbing (world map only) ---
+  // We let react-zoom-pan-pinch pan freely (limitToBounds=false) and, on every
+  // transform, (a) clamp Y to the same bounds it would have used (no vertical
+  // wrap) and (b) wrap X: whenever the pan has drifted more than half a
+  // world-width from the centre tile, add/subtract one world-width so we stay
+  // near the primary tile. Because the ±WORLD_W clones are pixel-identical to
+  // the primary, that snap is invisible and the map reads as a seamless cylinder.
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  // Re-entrancy guard: our own setTransform re-fires onTransform.
+  const wrappingRef = useRef(false);
+
+  // World-width in on-screen pixels at the current scale. The svg letterboxes
+  // its 0..WORLD_W viewBox inside its box (xMidYMid meet), so one world unit is
+  // min(boxW/WORLD_W, boxH/WORLD_H) px before rzpp's scale multiplies it.
+  const worldWidthPx = (scale: number): number => {
+    const el = svgRef.current;
+    if (!el) return 0;
+    const r = el.getBoundingClientRect();
+    // getBoundingClientRect already includes rzpp's scale; divide it back out to
+    // get the unscaled fit, then multiply by the scale we're told to use.
+    const curScale = scale || 1;
+    const pxPerUnit = Math.min(r.width / curScale / WORLD_W, r.height / curScale / WORLD_H);
+    return pxPerUnit * WORLD_W * scale;
+  };
+
+  const handleTransform = useCallback((ref: ReactZoomPanPinchRef) => {
+    if (!isWorld || wrappingRef.current) return;
+    const wrapperEl = ref.instance.wrapperComponent;
+    if (!wrapperEl) return;
+    const scale = ref.state.scale;
+    const ww = worldWidthPx(scale);
+    if (ww <= 0) return;
+
+    let { positionX, positionY } = ref.state;
+
+    // Clamp Y to rzpp's own vertical bounds (content is 100% of the wrapper, so
+    // minY = wrapperHeight*(1-scale), maxY = 0). This keeps the familiar
+    // vertical-pan feel while X roams free for the wrap.
+    const wrapperHeight = wrapperEl.clientHeight;
+    const minY = Math.min(0, wrapperHeight * (1 - scale));
+    const clampedY = Math.max(minY, Math.min(0, positionY));
+
+    // Wrap X toward the centre tile. The map is centred initially, so treat the
+    // current centred position as the home; shifting by whole world-widths lands
+    // on an identical view one tile over.
+    let wrappedX = positionX;
+    while (wrappedX - positionXHomeRef.current > ww / 2) wrappedX -= ww;
+    while (positionXHomeRef.current - wrappedX > ww / 2) wrappedX += ww;
+
+    if (wrappedX !== positionX || clampedY !== positionY) {
+      wrappingRef.current = true;
+      // No animation: an instantaneous jump by a whole (invisible) world-width.
+      ref.setTransform(wrappedX, clampedY, scale, 0);
+      // Release the guard after the sync setTransform + its onTransform echo.
+      wrappingRef.current = false;
+    }
+  }, [isWorld]);
+
+  // The centred "home" X (captured on init) that the wrap snaps around.
+  const positionXHomeRef = useRef(0);
+  const handleInit = useCallback((ref: ReactZoomPanPinchRef) => {
+    positionXHomeRef.current = ref.state.positionX;
+  }, []);
+
   // Split land into two layers so the filled countries can share ONE group
   // watercolor+shadow filter (depth + painted texture) while the base land
   // stays flat — and so filled land paints above its neighbours, reading as
   // lifted off the sea.
-  const base: ReactElement[] = [];
-  const lifted: ReactElement[] = [];
-  for (const loc of locations) {
-    // A dependent territory fills with its sovereign (Greenland→dk, …).
-    const key = TERRITORY_PARENT[loc.id] ?? loc.id;
-    const perItem = colorByIso?.get(key);
-    const filled = colorByIso ? perItem !== undefined : filledIso.has(key);
-    const fill = perItem ?? (filled ? color : "var(--color-land)");
-    // Cap the border on tiny countries so the stroke doesn't swamp a microstate
-    // (Monaco, Vatican, Liechtenstein…): keep the full weight for normal-sized
-    // land, but clamp it to ~10% of the country's span for very small shapes.
-    const baseStroke = filled ? 0.5 : 0.35;
-    const strokeW = Math.max(0.05, Math.min(baseStroke, pathSpan(loc.path) * 0.1));
-    const path = (
-      <path
-        key={loc.id}
-        id={loc.id}
-        data-iso={loc.id}
-        data-filled={filled ? "true" : "false"}
-        d={loc.path}
-        fill={fill}
-        stroke="var(--map-land-border)"
-        strokeWidth={strokeW}
-        strokeLinejoin="round"
-      >
-        {/* Only reveal names of countries already guessed — a tooltip on
-            unguessed ones would leak the answer. And only on your own map:
-            an opponent's hover tooltip would otherwise leak spellings you
-            haven't named yet. */}
-        {filled && revealNames && <title>{loc.name}</title>}
-      </path>
-    );
-    (filled ? lifted : base).push(path);
+  //
+  // `clone` builds the DECORATIVE wrapped copies for the cylindrical-wrap tiles
+  // (see below). Clones MUST be invisible to every board/test query and the
+  // anti-cheat <title> gate, so they carry NO id / data-iso / data-filled /
+  // <title> — only the geometry and the mirrored fill colour. The PRIMARY tile
+  // (clone=false) keeps exactly one real <path> per country, unchanged.
+  function buildLand(clone: boolean): { base: ReactElement[]; lifted: ReactElement[] } {
+    const base: ReactElement[] = [];
+    const lifted: ReactElement[] = [];
+    for (const loc of locations) {
+      // A dependent territory fills with its sovereign (Greenland→dk, …).
+      const key = TERRITORY_PARENT[loc.id] ?? loc.id;
+      const perItem = colorByIso?.get(key);
+      const filled = colorByIso ? perItem !== undefined : filledIso.has(key);
+      const fill = perItem ?? (filled ? color : "var(--color-land)");
+      // Cap the border on tiny countries so the stroke doesn't swamp a microstate
+      // or an archipelago island (Monaco, Cabo Verde…): full weight for normal
+      // land, clamped to ~10% of the largest sub-shape's span for small ones.
+      const strokeW = Math.max(0.05, Math.min(filled ? 0.5 : 0.35, pathSpan(loc.path) * 0.1));
+      const path = clone ? (
+        <path
+          key={loc.id}
+          d={loc.path}
+          fill={fill}
+          stroke="var(--map-land-border)"
+          strokeWidth={strokeW}
+          strokeLinejoin="round"
+        />
+      ) : (
+        <path
+          key={loc.id}
+          id={loc.id}
+          data-iso={loc.id}
+          data-filled={filled ? "true" : "false"}
+          d={loc.path}
+          fill={fill}
+          stroke="var(--map-land-border)"
+          strokeWidth={strokeW}
+          strokeLinejoin="round"
+        >
+          {/* Only reveal names of countries already guessed — a tooltip on
+              unguessed ones would leak the answer. And only on your own map:
+              an opponent's hover tooltip would otherwise leak spellings you
+              haven't named yet. */}
+          {filled && revealNames && <title>{loc.name}</title>}
+        </path>
+      );
+      (filled ? lifted : base).push(path);
+    }
+    return { base, lifted };
   }
+
+  const primary = buildLand(false);
+  // Clone land only matters for the wrapping WORLD map. For region/us-states
+  // maps (no wrap) we never build it.
+  const cloneLand = isWorld ? buildLand(true) : null;
+
+  // One tile of the map: decoration (world only) + base land + lifted land.
+  // `clone` tiles are purely decorative (aria-hidden, no interactivity, no test
+  // hooks) and translated by ±WORLD_W so a continuous copy sits either side of
+  // the primary tile for seamless horizontal wrapping.
+  const tile = (land: { base: ReactElement[]; lifted: ReactElement[] }, clone: boolean, dx: number) => (
+    <g
+      key={dx}
+      transform={dx ? `translate(${dx} 0)` : undefined}
+      aria-hidden={clone ? "true" : undefined}
+      style={clone ? { pointerEvents: "none" } : undefined}
+    >
+      {/* World-only printed-atlas decoration, behind the land so land covers
+          it. Guarded off the cropped region / us-states maps whose viewBox
+          wouldn't suit these world-space positions. */}
+      {isWorld && (
+        <g>
+          <RhumbLines />
+          <Graticule />
+          <ReferenceParallels />
+          <OceanLabels />
+          <Compass />
+        </g>
+      )}
+      {/* Base (unguessed) parchment land with thin sepia coastlines. */}
+      <g>{land.base}</g>
+      {/* Filled land: watercolor wash + inked edges, painted above (flat, no
+          lift shadow). */}
+      <g filter={`url(#${paintId})`}>{land.lifted}</g>
+    </g>
+  );
 
   // Pin absolutely to fill the pane without contributing an intrinsic size.
   // A portrait region viewBox (the Americas run Arctic→Patagonia) gave the
@@ -369,13 +486,17 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
   // NO paper/sea fill — that is the container backdrop below.
   const svg = (
     <svg
+      ref={svgRef}
       viewBox={viewBox}
       width="100%"
       height="100%"
       role="img"
       aria-label="World map"
       preserveAspectRatio="xMidYMid meet"
-      style={{ display: "block", background: "transparent" }}
+      // The wrap tiles sit at x = ±WORLD_W, outside the viewBox; let them show
+      // (and get clipped by the pane's own overflow:hidden) as you pan across
+      // the seam. Region/us-states maps keep the default clip.
+      style={{ display: "block", background: "transparent", overflow: isWorld ? "visible" : undefined }}
     >
       <defs>
         {/* ONE group-level WATERCOLOR filter for the filled land: a soft
@@ -413,24 +534,14 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
         </filter>
       </defs>
 
-      {/* World-only printed-atlas decoration, behind the land so land covers
-          it. Guarded off the cropped region / us-states maps whose viewBox
-          wouldn't suit these world-space positions. */}
-      {isWorld && (
-        <g>
-          <RhumbLines />
-          <Graticule />
-          <ReferenceParallels />
-          <OceanLabels />
-          <Compass />
-        </g>
-      )}
-
-      {/* Base (unguessed) parchment land with thin sepia coastlines. */}
-      <g>{base}</g>
-      {/* Filled land: watercolor wash + inked edges, painted above (flat, no
-          lift shadow). */}
-      <g filter={`url(#${paintId})`}>{lifted}</g>
+      {/* Cylindrical horizontal wrap: for the world, flank the real (primary)
+          tile with purely-decorative clones translated by ±WORLD_W so panning
+          past either edge always shows continuous map. The pan offset is
+          snapped back by one world-width at each seam (see onTransform) so the
+          clones are only ever briefly on-screen and the snap is invisible. */}
+      {cloneLand && tile(cloneLand, true, -WORLD_W)}
+      {tile(primary, false, 0)}
+      {cloneLand && tile(cloneLand, true, WORLD_W)}
     </svg>
   );
 
@@ -456,7 +567,19 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
       {/* Backdrop OUTSIDE the transform so the paper/sea stays fixed while the
           land pans/zooms over it. */}
       {backdrop}
-      <TransformWrapper minScale={1} maxScale={8} centerOnInit disablePadding doubleClick={{ mode: "zoomIn" }}>
+      <TransformWrapper
+        minScale={1}
+        maxScale={8}
+        centerOnInit
+        disablePadding
+        doubleClick={{ mode: "zoomIn" }}
+        // World map wraps horizontally: let X roam free (we clamp Y and wrap X
+        // ourselves in onTransform). Region/us-states maps keep the default
+        // clamped bounds unchanged.
+        limitToBounds={!isWorld}
+        onInit={isWorld ? handleInit : undefined}
+        onTransform={isWorld ? handleTransform : undefined}
+      >
         <TransformComponent
           wrapperStyle={{ width: "100%", height: "100%" }}
           contentStyle={{ width: "100%", height: "100%" }}
