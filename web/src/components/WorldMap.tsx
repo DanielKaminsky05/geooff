@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, type ReactElement } from "react";
+import { memo, useCallback, useRef, type ReactElement, type ReactNode } from "react";
 import { TransformWrapper, TransformComponent, type ReactZoomPanPinchRef } from "react-zoom-pan-pinch";
 import { mapFor, pathSpan, TERRITORY_PARENT } from "../lib/maps";
 import type { CategoryId } from "../lib/protocol";
@@ -33,6 +33,13 @@ export interface WorldMapProps {
    */
   testId?: string;
   className?: string;
+  /**
+   * Extra SVG content rendered INSIDE the map's svg (world viewBox coords), on
+   * top of the land — so it pans/zooms WITH the countries. Used by Daily Dive to
+   * draw the journey road/markers on the board. Express positions in the
+   * 0..1010 × 0..666 world space (e.g. via geo.project).
+   */
+  overlay?: ReactNode;
 }
 
 // Each TransformComponent / reveal needs a unique filter id so multiple maps on
@@ -117,7 +124,7 @@ function OceanLabels(): ReactElement {
  * feDisplacementMap (mottled/wobbly) plus inked edges and a soft lift shadow —
  * group-scoped, never per-path, so ~250 paths stay cheap.
  */
-function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries", revealNames = true, interactive = true, testId = "world-map", className }: WorldMapProps) {
+function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries", revealNames = true, interactive = true, testId = "world-map", className, overlay }: WorldMapProps) {
   const { viewBox, locations } = mapFor(categoryId);
   const seq = (filterSeq++).toString(36);
   const paintId = `map-paint-${seq}`;
@@ -345,6 +352,8 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
       {cloneLand && tile(cloneLand, true, -WORLD_W)}
       {tile(primary, false, 0)}
       {cloneLand && tile(cloneLand, true, WORLD_W)}
+      {/* Caller overlay (world coords), on top of the land, pans/zooms with it. */}
+      {overlay}
     </svg>
   );
 
@@ -421,6 +430,7 @@ function propsEqual(prev: WorldMapProps, next: WorldMapProps): boolean {
     prev.interactive === next.interactive &&
     prev.testId === next.testId &&
     prev.className === next.className &&
+    prev.overlay === next.overlay &&
     sameSet(prev.filledIso, next.filledIso) &&
     sameColors(prev.colorByIso, next.colorByIso)
   );

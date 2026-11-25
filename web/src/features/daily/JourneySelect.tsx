@@ -1,13 +1,14 @@
 /**
  * Daily Dive — route choice, overlaid on the game board (Track C).
  *
- * No separate carded screen: the three roads are drawn as clickable dotted lines
- * (with their stops) directly on the world map you'll play on. Click a road to
- * commit — the run begins and the first prompt pops up. The prompts and the gold
- * at stake stay hidden; the only choice is the road.
+ * No separate carded screen: the three roads are clickable dotted lines (with
+ * their stops) drawn directly on the world board you'll play on, which you can
+ * pan/zoom. A floating "Select your road" prompt sits on top. Click a road to
+ * commit — the run begins and the first prompt pops up. Prompts and gold stay
+ * hidden; the only choice is the road.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import WorldMap from "../../components/WorldMap";
 import { project } from "./geo";
 import type { DailySet, JourneyId } from "./contract";
@@ -30,21 +31,14 @@ export interface JourneySelectProps {
 
 export default function JourneySelect({ set, onSelect, className }: JourneySelectProps) {
   const [hover, setHover] = useState<JourneyId | null>(null);
-  const dest = project(set.destination.at);
-  const routeOf = (id: JourneyId) => set.routes.find((r) => r.journeyId === id);
 
-  return (
-    <div className={`relative h-dvh w-full ${className ?? ""}`} data-testid="journey-select">
-      {/* The same board you'll play on. */}
-      <WorldMap filledIso={EMPTY} color="var(--color-player1)" categoryId="countries" interactive={false} />
-
-      {/* Clickable roads overlaid on the board. */}
-      <svg
-        viewBox="0 0 1010 666"
-        preserveAspectRatio="xMidYMid meet"
-        className="absolute inset-0 h-full w-full"
-        style={{ pointerEvents: "none" }}
-      >
+  // The roads + destination, drawn inside the map's svg (world coords) so they
+  // pan/zoom with the board. Memoized on hover so the map repaints only then.
+  const roads = useMemo(() => {
+    const dest = project(set.destination.at);
+    const routeOf = (id: JourneyId) => set.routes.find((r) => r.journeyId === id);
+    return (
+      <g>
         {ORDER.map((id) => {
           const route = routeOf(id);
           if (!route) return null;
@@ -67,12 +61,10 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
             >
               {/* Wide invisible hit area so the thin road is easy to click. */}
               <polyline points={line} fill="none" stroke="transparent" strokeWidth={22} vectorEffect="non-scaling-stroke" style={{ pointerEvents: "stroke" }} />
-              {/* Dotted road + stops. */}
               <polyline points={line} fill="none" stroke={stroke} strokeWidth={on ? 3 : 1.8} strokeDasharray="1 7" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
               {pts.map((p, i) => (
                 <circle key={i} cx={p.x} cy={p.y} r={on ? 3 : 2.2} fill={stroke} stroke="var(--map-paper)" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
               ))}
-              {/* Road label at its origin. */}
               <text
                 x={origin.x}
                 y={origin.y - 7}
@@ -100,7 +92,13 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
             {set.destination.name}
           </text>
         </g>
-      </svg>
+      </g>
+    );
+  }, [set.routes, set.destination.at, set.destination.name, hover, onSelect]);
+
+  return (
+    <div className={`relative h-dvh w-full ${className ?? ""}`} data-testid="journey-select">
+      <WorldMap filledIso={EMPTY} color="var(--color-player1)" categoryId="countries" overlay={roads} />
 
       {/* Start prompt, floating — "select your road", styled like a prompt. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col items-center gap-2 px-4 pt-4 text-center">

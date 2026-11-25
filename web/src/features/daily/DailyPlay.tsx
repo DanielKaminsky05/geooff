@@ -123,17 +123,29 @@ export default function DailyPlay({
     return m;
   }, [named]);
 
-  // Journey overlay geometry (projected into the world viewBox, so it aligns
-  // with the WorldMap's country paths).
-  const overlay = useMemo(() => {
+  // Journey overlay, drawn INSIDE the WorldMap's svg (world coords) so it
+  // pans/zooms with the board. Memoized so the ~250-path map doesn't repaint
+  // while naming (it only changes if the route/position changes).
+  const overlayEl = useMemo(() => {
     const pts = route.points.map(project);
     const geo = buildRouteGeometry(pts);
-    return {
-      line: pts.map((p) => `${p.x},${p.y}`).join(" "),
-      stops: pts,
-      you: pointAtFraction(geo, Math.max(0, Math.min(1, progress))),
-      dest: project(destination.at),
-    };
+    const line = pts.map((p) => `${p.x},${p.y}`).join(" ");
+    const you = pointAtFraction(geo, Math.max(0, Math.min(1, progress)));
+    const dest = project(destination.at);
+    return (
+      <g aria-hidden="true" style={{ pointerEvents: "none" }}>
+        <polyline points={line} fill="none" stroke="var(--map-terracotta)" strokeWidth={1.6} strokeOpacity={0.55} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+        {pts.map((s, i) => (
+          <circle key={i} cx={s.x} cy={s.y} r={2.2} fill="var(--map-terracotta)" stroke="var(--map-paper)" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+        ))}
+        <circle cx={dest.x} cy={dest.y} r={5.5} fill="none" stroke="var(--color-accent)" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
+        <Star cx={dest.x} cy={dest.y} r={3.6} fill="var(--color-accent)" />
+        <text x={dest.x} y={dest.y - 8} textAnchor="middle" fontFamily="var(--font-serif)" fontSize={12} fill="var(--map-ink)" style={{ paintOrder: "stroke" }} stroke="var(--map-paper)" strokeWidth={2.4} strokeOpacity={0.85}>
+          {destination.name}
+        </text>
+        <circle data-testid="you-are-here" cx={you.x} cy={you.y} r={4.5} fill="var(--color-chrome-gold)" stroke="var(--map-paper)" strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
+      </g>
+    );
   }, [route.points, destination.at, progress]);
 
   const meterPct = Math.min(100, (clock.secondsLeft / DAILY_BASE_SECONDS) * 100);
@@ -143,47 +155,15 @@ export default function DailyPlay({
   return (
     <section className={`flex h-full flex-col ${className ?? ""}`} data-testid="daily-play">
       <div className="relative min-h-0 flex-1">
-        {/* The board: named countries light up here. */}
+        {/* The board: named countries light up here; the journey rides inside
+            the map's svg so it pans/zooms with it. */}
         <WorldMap
           filledIso={named}
           colorByIso={colorByIso}
           color="var(--color-player1)"
           categoryId="countries"
-          interactive={false}
+          overlay={overlayEl}
         />
-
-        {/* Journey overlay: the road, its stops, your position and the goal. */}
-        <svg
-          viewBox="0 0 1010 666"
-          preserveAspectRatio="xMidYMid meet"
-          className="pointer-events-none absolute inset-0 h-full w-full"
-          aria-hidden="true"
-        >
-          <polyline
-            points={overlay.line}
-            fill="none"
-            stroke="var(--map-terracotta)"
-            strokeWidth={1.6}
-            strokeOpacity={0.55}
-            strokeDasharray="4 4"
-            vectorEffect="non-scaling-stroke"
-          />
-          {overlay.stops.map((s, i) => (
-            <circle key={i} cx={s.x} cy={s.y} r={2.2} fill="var(--map-terracotta)" stroke="var(--map-paper)" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
-          ))}
-          {/* Destination */}
-          <g>
-            <circle cx={overlay.dest.x} cy={overlay.dest.y} r={5.5} fill="none" stroke="var(--color-accent)" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
-            <Star cx={overlay.dest.x} cy={overlay.dest.y} r={3.6} fill="var(--color-accent)" />
-            <text x={overlay.dest.x} y={overlay.dest.y - 8} textAnchor="middle" fontFamily="var(--font-serif)" fontSize={12} fill="var(--map-ink)" style={{ paintOrder: "stroke" }} stroke="var(--map-paper)" strokeWidth={2.4} strokeOpacity={0.85}>
-              {destination.name}
-            </text>
-          </g>
-          {/* You are here */}
-          <g data-testid="you-are-here">
-            <circle cx={overlay.you.x} cy={overlay.you.y} r={4.5} fill="var(--color-chrome-gold)" stroke="var(--map-paper)" strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
-          </g>
-        </svg>
 
         {/* Prompt counter (corner) + Next/Finish — floating, no chrome strip. */}
         <span className="pointer-events-none absolute left-3 top-3 z-10 text-xs font-semibold uppercase tracking-wide text-muted [text-shadow:0_1px_2px_var(--map-paper)]">
