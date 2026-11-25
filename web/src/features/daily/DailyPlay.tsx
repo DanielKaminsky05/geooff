@@ -59,7 +59,6 @@ export default function DailyPlay({
   const [rejectMsg, setRejectMsg] = useState<string | null>(null);
   const [rejectSignal, setRejectSignal] = useState(0);
   const [acceptSignal, setAcceptSignal] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
 
   const doneRef = useRef(false);
   const finish = useCallback(() => {
@@ -77,9 +76,10 @@ export default function DailyPlay({
 
   const handleSubmit = useCallback(
     (text: string): boolean => {
-      if (submitting || doneRef.current) return false;
-      setSubmitting(true);
+      if (doneRef.current) return false;
       setRejectMsg(null);
+      // Fire-and-track: the field clears optimistically and keeps focus; multiple
+      // guesses can be in flight (the server is stateless, dedup is client-side).
       void (async () => {
         try {
           const res = await postAnswer({ dailyDate, promptId: prompt.id, answer: text });
@@ -108,13 +108,11 @@ export default function DailyPlay({
           );
           if (!(err instanceof RateLimitedError)) console.warn("[DailyPlay] answer failed", err);
           setRejectSignal((s) => s + 1);
-        } finally {
-          setSubmitting(false);
         }
       })();
       return true;
     },
-    [submitting, dailyDate, prompt.id, clock],
+    [dailyDate, prompt.id, clock],
   );
 
   const colorByIso = useMemo(() => {
@@ -211,7 +209,7 @@ export default function DailyPlay({
         acceptSignal={acceptSignal}
         rejectSignal={rejectSignal}
         rejectMsg={rejectMsg}
-        disabled={submitting}
+        disabled={false}
         autoFocus
       />
     </section>
