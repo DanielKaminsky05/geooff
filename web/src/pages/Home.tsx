@@ -95,34 +95,12 @@ export default function Home() {
         <OutlineMap />
       </div>
 
-      {/* Masthead: a hand-lettered paper label taped to the page, with a small
-          ink mountain doodle alongside it. Kept clean so the atlas backdrop is
-          the star. */}
+      {/* Masthead: the red GEOFIGHT wordmark standing directly on the atlas,
+          with a stitched rule and the tagline below. */}
       <header className="relative flex flex-col items-center">
-        <div className="relative flex items-center gap-3 rounded-sm border border-border bg-surface-raised px-7 py-4 shadow-[0_1px_0_rgba(58,47,35,0.18)]">
-          <span aria-hidden className="tape tape-tl" />
-          <span aria-hidden className="tape tape-tr" />
-          {/* Small mountain-range doodle in sepia ink. */}
-          <svg
-            aria-hidden
-            width="34"
-            height="26"
-            viewBox="0 0 34 26"
-            fill="none"
-            stroke="var(--color-muted)"
-            strokeWidth="1.4"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            className="shrink-0"
-          >
-            <path d="M1 24 L10 7 L15 15 L21 3 L33 24 Z" />
-            <path d="M7.5 12.5 L10 10 L12.5 12.5" />
-            <path d="M18 8.5 L21 5.5 L24 9.5" />
-          </svg>
-          <h1 className="leading-none">
-            <GlitchWordmark className="text-2xl tracking-wide sm:text-3xl" />
-          </h1>
-        </div>
+        <h1 className="leading-none">
+          <GlitchWordmark className="text-3xl tracking-wide sm:text-4xl" />
+        </h1>
         <hr aria-hidden className="stitch mt-4 w-40" />
         <p className="mt-3 inline-block rounded-full border border-border/60 bg-surface/85 px-3.5 py-1 text-[0.7rem] font-semibold tracking-[0.25em] text-foreground uppercase shadow-[0_1px_0_rgba(58,47,35,0.12)] sm:text-xs">
           geography against friends
