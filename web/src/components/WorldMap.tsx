@@ -45,94 +45,12 @@ let filterSeq = 0;
 // equator line and ocean labels in that world coordinate space.
 const WORLD_W = 1010;
 const WORLD_H = 666;
-const EQUATOR_Y = 390; // ~0° latitude in this projection
-// The map top (y=0) is ~83.6°N, so in this equirectangular space the vertical
-// scale is EQUATOR_Y / 83.6 px per degree of latitude. latToY places any
-// parallel in the same coordinate space the equator/graticule use, so the
-// reference lines line up exactly with the existing decoration.
-const PX_PER_DEG_LAT = EQUATOR_Y / 83.6;
-const latToY = (lat: number): number => EQUATOR_Y - lat * PX_PER_DEG_LAT;
-
-/**
- * Dashed terracotta equator line, drawn in world coordinates. The former
- * lat/long grid of meridians/parallels was dropped (its square cells read as
- * "faint squares in the ocean"); the single equator line stands on its own,
- * alongside the labeled reference parallels. World-only.
- */
-function Graticule(): ReactElement {
-  return (
-    <g aria-hidden="true">
-      {/* Dashed terracotta equator */}
-      <line
-        x1={0}
-        y1={EQUATOR_Y}
-        x2={WORLD_W}
-        y2={EQUATOR_Y}
-        stroke="var(--map-terracotta)"
-        strokeWidth={0.8}
-        strokeOpacity={0.6}
-        strokeDasharray="5 4"
-      />
-    </g>
-  );
-}
-
-// The four classic reference parallels. Each gets a faint dashed line at
-// latToY(lat) plus a small italic-serif sepia label, consistent with the
-// dashed equator — pure geography decoration, not country answers.
-const REFERENCE_PARALLELS: { lat: number; label: string }[] = [
-  { lat: 66.5, label: "Arctic Circle" },
-  { lat: 23.5, label: "Tropic of Cancer" },
-  { lat: -23.5, label: "Tropic of Capricorn" },
-  { lat: -66.5, label: "Antarctic Circle" },
-];
-
-/**
- * Faint DASHED, LABELED latitude reference lines (tropics + polar circles),
- * placed with latToY so they share the equator/graticule coordinate space.
- * Kept subtle (same ink/weight family as the graticule) so they read as printed
- * atlas lines. World-only. Pure geography decoration — reveals no country.
- */
-function ReferenceParallels(): ReactElement {
-  return (
-    <g aria-hidden="true">
-      {REFERENCE_PARALLELS.map(({ lat, label }) => {
-        const y = latToY(lat);
-        return (
-          <g key={label}>
-            <line
-              x1={0}
-              y1={y}
-              x2={WORLD_W}
-              y2={y}
-              stroke="var(--map-ink)"
-              strokeWidth={0.4}
-              strokeOpacity={0.3}
-              strokeDasharray="3 5"
-            />
-            {/* Label sits just above the line, out over the open Pacific on the
-                left edge so it rarely collides with land. */}
-            <text
-              x={14}
-              y={y - 3}
-              fill="var(--map-ink)"
-              fillOpacity={0.5}
-              fontFamily="var(--font-serif)"
-              fontStyle="italic"
-              fontSize={9}
-              style={{ userSelect: "none" }}
-            >
-              {label}
-            </text>
-          </g>
-        );
-      })}
-    </g>
-  );
-}
-
-/** A single decorative italic-serif ocean label. */
+/** A decorative italic-serif ocean label, stacked one WORD per line (e.g.
+ * "PACIFIC" over "OCEAN") so it stays compact and reads like a printed atlas.
+ * The block is vertically centred on (x, y). */
 function OceanLabel({ x, y, rotate, size, text }: { x: number; y: number; rotate?: number; size: number; text: string }): ReactElement {
+  const words = text.split(" ");
+  const lineH = size * 1.1;
   return (
     <text
       x={x}
@@ -148,7 +66,11 @@ function OceanLabel({ x, y, rotate, size, text }: { x: number; y: number; rotate
       aria-hidden="true"
       style={{ userSelect: "none" }}
     >
-      {text}
+      {words.map((w, i) => (
+        <tspan key={i} x={x} dy={i === 0 ? (-(words.length - 1) * lineH) / 2 : lineH}>
+          {w}
+        </tspan>
+      ))}
     </text>
   );
 }
@@ -161,85 +83,20 @@ function OceanLabel({ x, y, rotate, size, text }: { x: number; y: number; rotate
 function OceanLabels(): ReactElement {
   return (
     <g aria-hidden="true">
-      {/* North Atlantic open water, mid-ocean between the Americas and
-          Europe/Africa — nudged west of the African bulge. */}
-      <OceanLabel x={372} y={240} size={11} text="ATLANTIC OCEAN" />
+      {/* North Atlantic at ~40°N, mid-ocean between the USA east coast and
+          Spain/Portugal. */}
+      <OceanLabel x={365} y={340} size={11} text="ATLANTIC OCEAN" />
       {/* South Atlantic, open water between Brazil and Africa. */}
-      <OceanLabel x={470} y={498} size={9} text="SOUTH ATLANTIC" />
-      {/* North-east Pacific open water, well west of Mexico and clear of the
-          compass rose at (200,500). */}
-      <OceanLabel x={120} y={330} size={11} text="PACIFIC OCEAN" />
-      {/* North-west Pacific open water, right-hand ocean. */}
-      <OceanLabel x={915} y={330} size={10} text="PACIFIC" />
-      {/* Indian Ocean, open water south of India, west of Australia. */}
-      <OceanLabel x={726} y={486} size={10} text="INDIAN OCEAN" />
+      <OceanLabel x={430} y={500} size={9} text="SOUTH ATLANTIC" />
+      {/* Pacific — labeled on BOTH sides, since this equirectangular projection
+          splits it at the map edges. Two smaller labels (east + west); the
+          primary-tile-only decoration means no seam duplication. */}
+      <OceanLabel x={80} y={340} size={12} text="PACIFIC OCEAN" />
+      <OceanLabel x={920} y={340} size={11} text="PACIFIC OCEAN" />
+      {/* Indian Ocean, open water just south of Sri Lanka. */}
+      <OceanLabel x={708} y={488} size={10} text="INDIAN OCEAN" />
       {/* Southern Ocean band below the continents, lifted off the bottom edge. */}
       <OceanLabel x={505} y={638} size={9} text="SOUTHERN OCEAN" />
-    </g>
-  );
-}
-
-// Compass rose centre (open south-Pacific water). The rhumb lines radiate from
-// this exact point so they read as emanating from the rose, portolan-style.
-const COMPASS_CX = 200;
-const COMPASS_CY = 500;
-
-/**
- * Faint nautical RHUMB (loxodrome) lines radiating from the compass rose across
- * the map at the 16 compass bearings, portolan-chart style. Very low contrast
- * so they read as decoration, not clutter. Drawn behind land/labels. The lines
- * are long enough to cross the whole viewBox; land paints over the stretches
- * that fall on land, leaving them mostly over ocean. World-only decoration.
- */
-function RhumbLines(): ReactElement {
-  // A radius longer than the diagonal so every ray reaches the map edge.
-  const reach = Math.hypot(WORLD_W, WORLD_H);
-  const lines: ReactElement[] = [];
-  for (let i = 0; i < 16; i++) {
-    const angle = (i * Math.PI) / 8; // 16 bearings, 22.5° apart
-    const x2 = COMPASS_CX + reach * Math.sin(angle);
-    const y2 = COMPASS_CY - reach * Math.cos(angle);
-    // Half-bearings (the 8 intercardinals of the 16-wind rose) are even fainter
-    // so the 8 principal lines read first, as on a real portolan.
-    const principal = i % 2 === 0;
-    lines.push(
-      <line
-        key={i}
-        x1={COMPASS_CX}
-        y1={COMPASS_CY}
-        x2={x2}
-        y2={y2}
-        stroke="var(--map-terracotta)"
-        strokeWidth={principal ? 0.4 : 0.3}
-        strokeOpacity={principal ? 0.34 : 0.2}
-      />,
-    );
-  }
-  return <g aria-hidden="true">{lines}</g>;
-}
-
-/**
- * Understated SVG compass rose in an open-ocean area (south Pacific), drawn in
- * sepia ink at low opacity. World-only decoration.
- */
-function Compass(): ReactElement {
-  const cx = COMPASS_CX;
-  const cy = COMPASS_CY;
-  const r = 40;
-  const ink = "var(--map-ink)";
-  return (
-    <g aria-hidden="true" stroke={ink} fill={ink} opacity={0.5}>
-      <circle cx={cx} cy={cy} r={r} fill="none" strokeWidth={0.6} />
-      <circle cx={cx} cy={cy} r={r * 0.62} fill="none" strokeWidth={0.4} />
-      {/* Eight-point star: long N/S/E/W spokes, short diagonals. */}
-      <polygon
-        points={`${cx},${cy - r} ${cx + r * 0.16},${cy - r * 0.16} ${cx + r},${cy} ${cx + r * 0.16},${cy + r * 0.16} ${cx},${cy + r} ${cx - r * 0.16},${cy + r * 0.16} ${cx - r},${cy} ${cx - r * 0.16},${cy - r * 0.16}`}
-        fillOpacity={0.5}
-        strokeWidth={0.3}
-      />
-      <text x={cx} y={cy - r - 3} textAnchor="middle" fontFamily="var(--font-serif)" fontSize={9} strokeWidth={0} fillOpacity={0.9}>
-        N
-      </text>
     </g>
   );
 }
@@ -458,14 +315,11 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
     >
       {/* World-only printed-atlas decoration, behind the land so land covers
           it. Guarded off the cropped region / us-states maps whose viewBox
-          wouldn't suit these world-space positions. */}
-      {isWorld && (
+          wouldn't suit these world-space positions. Rendered on the PRIMARY tile
+          only (not the wrap clones) so the ocean names don't repeat at the seam. */}
+      {isWorld && !clone && (
         <g>
-          <RhumbLines />
-          <Graticule />
-          <ReferenceParallels />
           <OceanLabels />
-          <Compass />
         </g>
       )}
       {/* Base (unguessed) parchment land with thin sepia coastlines. */}
