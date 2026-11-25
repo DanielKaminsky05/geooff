@@ -207,7 +207,7 @@ export default function DailyPlay({
           >
             {clock.secondsLeft}s
           </span>
-          <h2 className="max-w-xl rounded-lg bg-[var(--map-paper)]/70 px-4 py-1.5 text-center text-xl font-semibold text-foreground backdrop-blur-[2px]">
+          <h2 className="daily-prompt-pop max-w-xl rounded-lg bg-[var(--map-paper)]/70 px-4 py-1.5 text-center text-xl font-semibold text-foreground backdrop-blur-[2px]">
             {prompt.label}
           </h2>
           <div className="h-1.5 w-40 overflow-hidden rounded-full bg-black/20" role="progressbar" aria-valuenow={clock.secondsLeft} aria-label="Time remaining">

@@ -145,6 +145,21 @@ body {
   }
 }
 
+/* Daily Dive: each prompt pops in when it appears. */
+.daily-prompt-pop {
+  animation: daily-prompt-pop 320ms ease-out both;
+}
+@keyframes daily-prompt-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /*
  * Glitch wordmark: "GEOFIGHT" in the pixel font with a chunky embossed RED
  * treatment — a bold red core printed over a warm gold highlight nudged up-left
