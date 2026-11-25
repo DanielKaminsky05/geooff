@@ -183,13 +183,52 @@ function OceanLabels(): ReactElement {
   );
 }
 
+// Compass rose centre (open south-Pacific water). The rhumb lines radiate from
+// this exact point so they read as emanating from the rose, portolan-style.
+const COMPASS_CX = 170;
+const COMPASS_CY = 300;
+
+/**
+ * Faint nautical RHUMB (loxodrome) lines radiating from the compass rose across
+ * the map at the 16 compass bearings, portolan-chart style. Very low contrast
+ * so they read as decoration, not clutter. Drawn behind land/labels. The lines
+ * are long enough to cross the whole viewBox; land paints over the stretches
+ * that fall on land, leaving them mostly over ocean. World-only decoration.
+ */
+function RhumbLines(): ReactElement {
+  // A radius longer than the diagonal so every ray reaches the map edge.
+  const reach = Math.hypot(WORLD_W, WORLD_H);
+  const lines: ReactElement[] = [];
+  for (let i = 0; i < 16; i++) {
+    const angle = (i * Math.PI) / 8; // 16 bearings, 22.5° apart
+    const x2 = COMPASS_CX + reach * Math.sin(angle);
+    const y2 = COMPASS_CY - reach * Math.cos(angle);
+    // Half-bearings (the 8 intercardinals of the 16-wind rose) are even fainter
+    // so the 8 principal lines read first, as on a real portolan.
+    const principal = i % 2 === 0;
+    lines.push(
+      <line
+        key={i}
+        x1={COMPASS_CX}
+        y1={COMPASS_CY}
+        x2={x2}
+        y2={y2}
+        stroke="var(--map-terracotta)"
+        strokeWidth={0.3}
+        strokeOpacity={principal ? 0.12 : 0.07}
+      />,
+    );
+  }
+  return <g aria-hidden="true">{lines}</g>;
+}
+
 /**
  * Understated SVG compass rose in an open-ocean area (south Pacific), drawn in
  * sepia ink at low opacity. World-only decoration.
  */
 function Compass(): ReactElement {
-  const cx = 170;
-  const cy = 300;
+  const cx = COMPASS_CX;
+  const cy = COMPASS_CY;
   const r = 26;
   const ink = "var(--map-ink)";
   return (
@@ -330,7 +369,9 @@ function WorldMapInner({ filledIso, color, colorByIso, categoryId = "countries",
           wouldn't suit these world-space positions. */}
       {isWorld && (
         <g>
+          <RhumbLines />
           <Graticule />
+          <ReferenceParallels />
           <OceanLabels />
           <Compass />
         </g>
