@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import type { DailyRunResult } from "../../lib/protocol";
 import { buildShareGrid } from "./shareGrid";
+import { dailyShareUrl } from "./shareLink";
 import { runCategory, promptTier } from "./tiers";
 import { trekNumber } from "./trekNumber";
 
@@ -112,7 +113,22 @@ export default function DailyRecap({ result, percentile, progress = 0, answers, 
   }, [copyNonce]);
 
   async function onShare() {
-    const ok = await copyText(buildShareGrid(result));
+    const text = buildShareGrid(result);
+    // The link unfurls into a score card (served by /s/<payload>); humans who
+    // click it land on the homepage.
+    const url =
+      typeof window !== "undefined" ? dailyShareUrl(result, window.location.origin, category) : "";
+
+    // Prefer the native share sheet (mobile) so the link travels with the grid.
+    if (url && typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: "GEOFIGHT Daily", text, url });
+        return;
+      } catch {
+        // cancelled or unsupported mid-flight — fall back to clipboard below
+      }
+    }
+    const ok = await copyText(url ? `${text}\n${url}` : text);
     if (ok) setCopyNonce((n) => n + 1);
   }
 
