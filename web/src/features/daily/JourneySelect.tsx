@@ -17,7 +17,7 @@ import type { DailySet, JourneyId } from "./contract";
 const ORDER: JourneyId[] = ["short", "medium", "long"];
 const LABEL: Record<JourneyId, string> = {
   short: "The short road",
-  medium: "The long road",
+  medium: "The winding road",
   long: "The far road",
 };
 
