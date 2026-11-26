@@ -27,13 +27,14 @@ import type {
 import {
   DAILY_TIME_BONUS_SECONDS,
   DAILY_PROMPT_MAX,
+  DAILY_PROMPT_COUNT,
   DAILY_NAME_BONUS,
   normalizeAnswer,
 } from "../protocol.js";
 import { validIdsFor, promptById, labelAnswers } from "../prompts.js";
 import { matchAnswer } from "../matching.js";
 import { lookupFor, canonicalFor } from "../sets.js";
-import { TokenBucket, DEFAULT_ANSWER_LIMIT, type BucketConfig } from "../rateLimit.js";
+import { BucketStore, DEFAULT_ANSWER_LIMIT, DEFAULT_FINISH_LIMIT, type BucketConfig } from "../rateLimit.js";
 import { getDailySet, todayUtc } from "./window.js";
 import { answerPoints, promptBasePoints, dailyScoreMax } from "./scoring.js";
 import { capturePercentile } from "./percentile.js";
@@ -45,6 +46,8 @@ export interface DailyRoutesOptions {
   now?: () => number;
   /** Per-IP answer rate limit. Defaults to DEFAULT_ANSWER_LIMIT. */
   answerLimit?: BucketConfig;
+  /** Per-IP finish rate limit. Defaults to DEFAULT_FINISH_LIMIT. */
+  finishLimit?: BucketConfig;
   /** Override "today"'s date string (tests pin a specific day's set). */
   today?: () => string;
 }
@@ -52,20 +55,14 @@ export interface DailyRoutesOptions {
 export function registerDailyRoutes(app: Express, options: DailyRoutesOptions = {}): void {
   const now = options.now ?? Date.now;
   const answerLimit = options.answerLimit ?? DEFAULT_ANSWER_LIMIT;
+  const finishLimit = options.finishLimit ?? DEFAULT_FINISH_LIMIT;
   const today = options.today ?? (() => todayUtc(now));
 
-  // Per-IP token buckets for the answer oracle. In-memory; fine for phase 1
-  // (no persistence) and unbounded growth is bounded in practice by the IP
-  // space seen — acceptable for a single stateless mode.
-  const answerBuckets = new Map<string, TokenBucket>();
-  function bucketFor(ip: string): TokenBucket {
-    let b = answerBuckets.get(ip);
-    if (!b) {
-      b = new TokenBucket(answerLimit, now);
-      answerBuckets.set(ip, b);
-    }
-    return b;
-  }
+  // Per-IP token buckets. BucketStore caps memory (stale-TTL prune + LRU hard
+  // cap) so the map can't grow one entry per distinct IP forever. The answer
+  // oracle and the (unbounded-body) finish route each get their own store.
+  const answerBuckets = new BucketStore(answerLimit, now);
+  const finishBuckets = new BucketStore(finishLimit, now);
 
   // Shared "countries" matching tables (built once, cached in sets.ts).
   const lookup = lookupFor("countries");
@@ -91,7 +88,7 @@ export function registerDailyRoutes(app: Express, options: DailyRoutesOptions = 
   app.post("/daily/answer", (req: Request, res: Response<DailyAnswerRes>) => {
     // Rate-limit PER IP: this is the only route that reads the secret valid set.
     const ip = req.ip ?? "unknown";
-    if (!bucketFor(ip).take()) {
+    if (!answerBuckets.get(ip).take()) {
       res.status(429).json({ valid: false, reason: "wrong" });
       return;
     }
@@ -140,6 +137,13 @@ export function registerDailyRoutes(app: Express, options: DailyRoutesOptions = 
   });
 
   app.post("/daily/finish", (req: Request, res: Response<DailyFinishRes>) => {
+    // Rate-limit PER IP: finishing is rare, and the body is iterated unbounded
+    // (perPrompt entries × each namedIsos array), so throttle the work too.
+    const ip = req.ip ?? "unknown";
+    if (!finishBuckets.get(ip).take()) {
+      res.status(429).json({ error: "rate limited" } as never);
+      return;
+    }
     const body = (req.body ?? {}) as Partial<DailyFinishReq>;
     const result = reconcileFinish(body.result);
     res.json(result);
@@ -180,9 +184,17 @@ function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
   // Per prompt: the client's capture base (trusted but clamped) plus a flat bonus
   // per named country. `named` is clamped to the real pool size (secret set) so
   // the bonus can't be inflated past what the prompt actually allows.
+  // Bound the work: a day only has DAILY_PROMPT_COUNT prompts, so process at
+  // most that many entries (clip excess rather than crash on a huge body), and
+  // cap each namedIsos array to a sane multiple of the max plausible pool.
+  const MAX_PER_PROMPT = DAILY_PROMPT_COUNT;
+  const MAX_NAMED_ISOS = 512;
   let points = 0;
   const perPrompt: DailyPromptResult[] = [];
-  for (const pp of Array.isArray(raw?.perPrompt) ? raw!.perPrompt : []) {
+  const rawPerPrompt = Array.isArray(raw?.perPrompt)
+    ? raw!.perPrompt.slice(0, MAX_PER_PROMPT)
+    : [];
+  for (const pp of rawPerPrompt) {
     const prompt = set?.prompts.find((p) => p.id === pp.promptId);
     const total = prompt
       ? validIdsFor(prompt, "countries").size
@@ -207,7 +219,10 @@ function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
     const score = base + DAILY_NAME_BONUS * named;
     const rounded = Math.round(score);
     const namedIsos = Array.isArray(pp.namedIsos)
-      ? pp.namedIsos.filter((x): x is string => typeof x === "string").map((x) => x.toLowerCase())
+      ? pp.namedIsos
+          .slice(0, MAX_NAMED_ISOS)
+          .filter((x): x is string => typeof x === "string")
+          .map((x) => x.toLowerCase())
       : [];
     perPrompt.push({ promptId: pp.promptId, named, total, points: rounded, namedIsos });
     // Accumulate the already-rounded per-prompt points so the recap's parts

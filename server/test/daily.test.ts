@@ -312,3 +312,82 @@ describe("POST /daily/finish — reconciliation", () => {
     expect(reached).toBeGreaterThan(0);
   });
 });
+
+describe("POST /daily/finish — abuse hardening", () => {
+  const set = getDailySet(DATE)!;
+
+  function baseResult(over: Partial<DailyRunResult>): DailyRunResult {
+    return {
+      runId: "run-1",
+      dailyDate: DATE,
+      journey: "short",
+      points: 0,
+      perPrompt: set.prompts.map((p) => ({ promptId: p.id, named: 0, total: 0, points: 0 })),
+      gold: 0,
+      outcome: "died",
+      playerId: null,
+      ...over,
+    };
+  }
+
+  it("rate-limits per IP: the (burst+1)th rapid finish returns 429", async () => {
+    // Fixed clock (no refill) + tiny burst → the (burst+1)th call is throttled.
+    const app = makeApp({ today: () => DATE, now: () => 1000, finishLimit: { burst: 3, refillPerSec: 0 } });
+    const send = () => request(app).post("/daily/finish").send({ result: baseResult({}) });
+    expect((await send()).status).toBe(200);
+    expect((await send()).status).toBe(200);
+    expect((await send()).status).toBe(200);
+    expect((await send()).status).toBe(429);
+  });
+
+  it("handles an oversized perPrompt / namedIsos body safely (clipped, bounded)", async () => {
+    const app = makeApp({ today: () => DATE });
+    // The day's real prompts fully maxed, each over-reporting a huge namedIsos
+    // array, PLUS many extra bogus entries beyond DAILY_PROMPT_COUNT — all must
+    // be clipped (count cap + per-array cap), not crash, with a bounded score.
+    const isos = Array.from({ length: 600 }, () => "xx");
+    const real = set.prompts.map((p) => ({
+      promptId: p.id,
+      named: 9_999,
+      total: 9_999,
+      points: DAILY_PROMPT_MAX,
+      namedIsos: isos,
+    }));
+    const bogus = Array.from({ length: 15 }, () => ({
+      promptId: "not-a-real-prompt",
+      named: 9_999,
+      total: 9_999,
+      points: DAILY_PROMPT_MAX,
+      namedIsos: isos,
+    }));
+    const huge = [...real, ...bogus];
+    const res = await request(app)
+      .post("/daily/finish")
+      .send({ result: baseResult({ perPrompt: huge }) });
+    expect(res.status).toBe(200);
+    const body = res.body as DailyFinishRes;
+    // At most DAILY_PROMPT_COUNT entries are processed, so points stay bounded
+    // by the day's achievable max (named is clamped to the real pool size).
+    expect(body.result.perPrompt.length).toBeLessThanOrEqual(5);
+    expect(body.result.points).toBeLessThanOrEqual(dailyScoreMax(set.prompts));
+    // namedIsos is clipped well below the 10k sent.
+    for (const pp of body.result.perPrompt) {
+      expect(pp.namedIsos!.length).toBeLessThanOrEqual(512);
+    }
+  });
+});
+
+describe("POST /daily/answer — R1 limiter keeps legit play smooth", () => {
+  it("allows a normal fast-typing burst of answers without throttling", async () => {
+    // Default answer limit keeps a generous burst; a handful of quick guesses
+    // from one IP must all succeed (no 429) before the sustained cap bites.
+    const app = makeApp({ today: () => DATE, now: () => 1000 });
+    const send = () =>
+      request(app)
+        .post("/daily/answer")
+        .send({ dailyDate: DATE, promptId: "starts-with-u", answer: "Uganda" });
+    for (let i = 0; i < 5; i++) {
+      expect((await send()).status).toBe(200);
+    }
+  });
+});
