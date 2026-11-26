@@ -94,7 +94,12 @@ describe("last standing against the real server", () => {
 
 describe("gauntlet against the real server", () => {
   it("applies prompt changes in server order (prompt before turn, board reset on cycle)", async () => {
-    const TURN_MS = 2500;
+    // Bob's turn must comfortably outlast the synchronous mid-turn assertions
+    // below: a short turn lets a slow CI runner time Bob out first, and the
+    // server then reveals the whole prompt — repainting the board — before we
+    // read it. A generous turn keeps the mid-turn frame alive past any jitter;
+    // phase B still waits exactly one of these out (well within the 20s budget).
+    const TURN_MS = 8000;
     server = await startServer({ ...FAST, turnMsOverride: TURN_MS, revealMsOverride: 150 });
     const { code, myId, bob, bobId } = await hostLobbyWithBot(server.url, "Gauntlet");
 
@@ -107,10 +112,13 @@ describe("gauntlet against the real server", () => {
     await readyAndStart(bob);
     await waitForPlaying();
 
-    // The opening prompt is announced before turn 1 starts.
+    // The opening prompt is announced before turn 1 starts. The banner render
+    // and Bob's receipt of turn_started race slightly, so settle both together.
     const p1 = currentPrompt(code);
-    await waitFor(() => expect(screen.getByTestId("prompt-banner")).toHaveTextContent(p1.label));
-    expect(seq).toEqual(["prompt_changed", "turn_started:me"]);
+    await waitFor(() => {
+      expect(screen.getByTestId("prompt-banner")).toHaveTextContent(p1.label);
+      expect(seq).toEqual(["prompt_changed", "turn_started:me"]);
+    });
     expect(screen.getByTestId("gauntlet-count")).toHaveTextContent(`0 / ${p1.total}`);
     await waitFor(() => expect(turnLabel()).toBe("Your turn"));
 
@@ -119,9 +127,14 @@ describe("gauntlet against the real server", () => {
     const toBob = nextEvent(bob, "turn_started", (p) => p.playerId === bobId);
     await guess(countryNamed(answer));
     await toBob;
-    await waitFor(() => expect(screen.getByTestId("gauntlet-count")).toHaveTextContent(`1 / ${p1.total}`));
-    expect(filledIsos()).toEqual([answer]);
-    expect(turnLabel()).toBe("Bob's turn");
+    // The mid-turn state as one consistent frame: our single claim on the board,
+    // the count at 1, Bob to act — all true together. A half-updated DOM (count
+    // ticked but paint pending) just retries instead of failing.
+    await waitFor(() => {
+      expect(screen.getByTestId("gauntlet-count")).toHaveTextContent(`1 / ${p1.total}`);
+      expect(filledIsos()).toEqual([answer]);
+      expect(turnLabel()).toBe("Bob's turn");
+    });
 
     // Bob times out: life_lost → prompt_changed → turn_started (to us).
     await nextEvent(bob, "turn_started", (p) => p.playerId === myId, TURN_MS + 3000);
@@ -136,20 +149,26 @@ describe("gauntlet against the real server", () => {
 
     const p2 = currentPrompt(code);
     expect(p2.id).not.toBe(p1.id);
-    await waitFor(() => expect(screen.getByTestId("prompt-banner")).toHaveTextContent(p2.label));
-    // A fresh prompt is a clean slate: board + count reset, our turn, Bob -1 heart.
-    expect(screen.getByTestId("gauntlet-count")).toHaveTextContent(`0 / ${p2.total}`);
-    expect(filledIsos()).toEqual([]);
-    await waitFor(() => expect(turnLabel()).toBe("Your turn"));
-    expect(screen.getByRole("img", { name: "Bob: 4 of 5 lives" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Alice: 5 of 5 lives" })).toBeInTheDocument();
+    // A fresh prompt is a clean slate: new banner, board + count reset, our turn,
+    // Bob down a heart. Assert it as one settled frame, so the tail of the reveal
+    // giving way to the next prompt can't catch us mid-transition.
+    await waitFor(() => {
+      expect(screen.getByTestId("prompt-banner")).toHaveTextContent(p2.label);
+      expect(screen.getByTestId("gauntlet-count")).toHaveTextContent(`0 / ${p2.total}`);
+      expect(filledIsos()).toEqual([]);
+      expect(turnLabel()).toBe("Your turn");
+      expect(screen.getByRole("img", { name: "Bob: 4 of 5 lives" })).toBeInTheDocument();
+      expect(screen.getByRole("img", { name: "Alice: 5 of 5 lives" })).toBeInTheDocument();
+    });
 
     // Claims now count against the new prompt.
     const [next] = openPromptAnswers(code);
     const toBob2 = nextEvent(bob, "turn_started", (p) => p.playerId === bobId);
     await guess(countryNamed(next));
     await toBob2;
-    await waitFor(() => expect(screen.getByTestId("gauntlet-count")).toHaveTextContent(`1 / ${p2.total}`));
-    expect(filledIsos()).toEqual([next]);
+    await waitFor(() => {
+      expect(screen.getByTestId("gauntlet-count")).toHaveTextContent(`1 / ${p2.total}`);
+      expect(filledIsos()).toEqual([next]);
+    });
   });
 });
