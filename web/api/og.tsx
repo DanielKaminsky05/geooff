@@ -91,11 +91,27 @@ const trekNumber = (d: string): number =>
 
 const group = (n: number): string => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
-export function GET(req: Request): Response {
+// @vercel/og's bundled default font isn't shipped in this project's function,
+// so load an explicit one over HTTP (Satori supports woff). Without a font,
+// rendering crashes with FUNCTION_INVOCATION_FAILED.
+const FONT_BASE = "https://cdn.jsdelivr.net/npm/@fontsource/inter@5.1.1/files";
+async function loadFonts() {
+  const [r4, r8] = await Promise.all([
+    fetch(`${FONT_BASE}/inter-latin-400-normal.woff`),
+    fetch(`${FONT_BASE}/inter-latin-800-normal.woff`),
+  ]);
+  const fonts: { name: string; data: ArrayBuffer; weight: 400 | 800; style: "normal" }[] = [];
+  if (r4.ok) fonts.push({ name: "Inter", data: await r4.arrayBuffer(), weight: 400, style: "normal" });
+  if (r8.ok) fonts.push({ name: "Inter", data: await r8.arrayBuffer(), weight: 800, style: "normal" });
+  return fonts;
+}
+
+export async function GET(req: Request): Promise<Response> {
   try {
     // req.url can be host-less on Vercel's Node Web-handler — give it a base.
     const url = new URL(req.url, "http://localhost");
     const data = decode(url.searchParams.get("d") ?? "");
+    const fonts = await loadFonts();
 
     const arrived = data?.outcome === "arrived";
     const points = data?.points ?? 0;
@@ -107,7 +123,7 @@ export function GET(req: Request): Response {
     const trek = data ? trekNumber(data.date) : null;
     const accent = arrived ? GOLD : RED;
 
-    return new ImageResponse(
+    const image = new ImageResponse(
       (
         <div
           style={{
@@ -117,6 +133,7 @@ export function GET(req: Request): Response {
             padding: 40,
             backgroundColor: PAPER,
             color: INK,
+            fontFamily: "Inter",
           }}
         >
           <div
@@ -206,8 +223,18 @@ export function GET(req: Request): Response {
           </div>
         </div>
       ),
-      { width: 1200, height: 630 },
+      { width: 1200, height: 630, fonts },
     );
+    // Force the render to complete here so any Satori/resvg error is caught
+    // below (rather than escaping as an opaque FUNCTION_INVOCATION_FAILED when
+    // the platform streams the body after this handler returns).
+    const png = await image.arrayBuffer();
+    return new Response(png, {
+      headers: {
+        "content-type": "image/png",
+        "cache-control": "public, max-age=0, s-maxage=86400, immutable",
+      },
+    });
   } catch (err) {
     const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
     return new Response(`OG_RENDER_ERROR\n${msg}`, {
