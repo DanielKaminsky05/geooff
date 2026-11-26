@@ -28,6 +28,8 @@ export interface CatalogPrompt {
 
 export interface BuilderCatalog {
   prompts: CatalogPrompt[];
+  /** Default temple layout per journey — the gold editor seeds from this. */
+  journeyDefaults: Record<JourneyId, DailyLandmark[]>;
 }
 
 /** The authored payload the server validates, compiles, and stores. Destination

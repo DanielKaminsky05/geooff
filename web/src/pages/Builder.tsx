@@ -12,7 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { mapFor } from "../lib/maps";
 import { WORLD_VIEWBOX, project, xToLon, yToLat } from "../features/daily/geo";
-import type { GeoPoint, JourneyId } from "../features/daily/contract";
+import type { GeoPoint, JourneyId, DailyLandmark } from "../features/daily/contract";
 import {
   fetchCatalog,
   saveSet,
@@ -53,6 +53,7 @@ export default function Builder() {
   const [destName, setDestName] = useState("");
   const [destAt, setDestAt] = useState<GeoPoint | null>(null);
   const [routes, setRoutes] = useState<Record<JourneyId, GeoPoint[]>>({ short: [], medium: [], long: [] });
+  const [landmarks, setLandmarks] = useState<Record<JourneyId, DailyLandmark[]>>({ short: [], medium: [], long: [] });
   const [promptIds, setPromptIds] = useState<string[]>(Array(DAILY_PROMPT_COUNT).fill(""));
   const [mode, setMode] = useState<Mode>("dest");
   const [saving, setSaving] = useState(false);
@@ -66,6 +67,16 @@ export default function Builder() {
       const [cat, sets] = await Promise.all([fetchCatalog(token), listSets(token)]);
       setCatalog(cat);
       setPublished(sets);
+      // Seed the gold editor from the defaults once (don't clobber edits on refresh).
+      setLandmarks((prev) =>
+        prev.short.length
+          ? prev
+          : {
+              short: cat.journeyDefaults.short.map((l) => ({ ...l })),
+              medium: cat.journeyDefaults.medium.map((l) => ({ ...l })),
+              long: cat.journeyDefaults.long.map((l) => ({ ...l })),
+            },
+      );
       setStatus(`Loaded ${cat.prompts.length} prompts.`);
     } catch (err) {
       setCatalog(null);
@@ -129,6 +140,9 @@ export default function Builder() {
   const setPromptAt = (i: number, id: string) =>
     setPromptIds((prev) => prev.map((p, idx) => (idx === i ? id : p)));
 
+  const setGold = (j: JourneyId, i: number, gold: number) =>
+    setLandmarks((prev) => ({ ...prev, [j]: prev[j].map((l, idx) => (idx === i ? { ...l, gold } : l)) }));
+
   const promptById = useMemo(() => {
     const m = new Map<string, CatalogPrompt>();
     catalog?.prompts.forEach((p) => m.set(p.id, p));
@@ -164,6 +178,7 @@ export default function Builder() {
         destination: { name: destName.trim(), at: destAt },
         routes: JOURNEYS.map((j) => toRoute(j.id)),
         promptIds,
+        landmarks,
       });
       setStatus(
         `Saved ${date} → ${res.set.destination.name}. ${res.persisted ? "Persisted to Supabase." : "Saved to the running server only (not written to the database)."}`,
@@ -280,6 +295,40 @@ export default function Builder() {
                 <button onClick={() => setMode("none")} className={`rounded px-2.5 py-1 text-xs ${mode === "none" ? "bg-sky-600" : "bg-slate-700 hover:bg-slate-600"}`}>Pan</button>
               </div>
               <p className="mt-1 text-xs text-slate-500">Each route starts at the city; draw outward to the origin.</p>
+            </div>
+
+            {/* Temple gold — tune each landmark's reward (positions are fixed). */}
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Temple gold</label>
+              <div className="space-y-2">
+                {JOURNEYS.map((j) => {
+                  const ls = landmarks[j.id];
+                  const total = ls.reduce((s, l) => s + (Number.isFinite(l.gold) ? l.gold : 0), 0);
+                  return (
+                    <details key={j.id} className="rounded border border-slate-700">
+                      <summary className="flex cursor-pointer items-center gap-2 px-2 py-1.5 text-sm">
+                        <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: j.color }} />
+                        {j.label}
+                        <span className="ml-auto text-xs text-amber-300">{total} gold · {ls.length} temples</span>
+                      </summary>
+                      <div className="space-y-1 px-2 pb-2">
+                        {ls.map((l, i) => (
+                          <div key={i} className="flex items-center gap-2 text-xs">
+                            <span className="w-16 shrink-0 text-slate-400">{Math.round(l.atFraction * 100)}% {l.atFraction >= 1 ? "(end)" : ""}</span>
+                            <input
+                              type="number"
+                              min={0}
+                              className={`${ctrl} py-1`}
+                              value={l.gold}
+                              onChange={(e) => setGold(j.id, i, Math.max(0, Math.round(Number(e.target.value) || 0)))}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Prompts */}
