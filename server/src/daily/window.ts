@@ -11,9 +11,10 @@
  * set is pure w.r.t. its string, so we compute it when asked and cache it.
  */
 
-import type { DailyJourney } from "../protocol.js";
+import type { DailyJourney, JourneyId, DailyLandmark } from "../protocol.js";
 import { DAILY_PROMPT_COUNT } from "../protocol.js";
 import { buildPromptPool, validIdsFor, type Prompt } from "../prompts.js";
+import { dailyScoreMax } from "./scoring.js";
 import { destinations } from "./destinations.js";
 import type { CompiledDailySet } from "./types.js";
 
@@ -63,44 +64,55 @@ function randInt(rng: () => number, n: number): number {
  * spaced evenly with the final (arrival) landmark as the biggest payoff. Totals
  * escalate with risk: short 50, medium 100, long 200.
  */
-// Distances are NORMALIZED run points out of a fixed max of 750 (5 prompts ×
-// 100, ×1.5 if every prompt is swept). So they read as "capture this share of
-// the day": short ≈ 40% (300), medium ≈ 65% (490), long ≈ 85% (640). Identical
-// difficulty every day regardless of which prompts were drawn. (Tuning knob.)
-export const JOURNEYS: DailyJourney[] = [
-  {
-    id: "short",
-    distance: 300,
-    landmarks: [
-      { atFraction: 0.5, gold: 20 },
-      { atFraction: 1, gold: 30 },
-    ],
-  },
-  {
-    id: "medium",
-    distance: 490,
-    landmarks: [
-      { atFraction: 0.2, gold: 12 },
-      { atFraction: 0.4, gold: 15 },
-      { atFraction: 0.6, gold: 18 },
-      { atFraction: 0.8, gold: 20 },
-      { atFraction: 1, gold: 35 },
-    ],
-  },
-  {
-    id: "long",
-    distance: 640,
-    landmarks: [
-      { atFraction: 0.14, gold: 18 },
-      { atFraction: 0.29, gold: 22 },
-      { atFraction: 0.43, gold: 25 },
-      { atFraction: 0.57, gold: 28 },
-      { atFraction: 0.71, gold: 32 },
-      { atFraction: 0.86, gold: 35 },
-      { atFraction: 1, gold: 40 },
-    ],
-  },
-];
+// Each tier's distance is resolved PER DAY as a fraction of that day's score max
+// (scoring.dailyScoreMax), so a tier is always the same share of the day's
+// challenge — the long road is ~70% of everything achievable, whatever prompts
+// were drawn. Landmark counts grow with the road (short 2, medium 5, long 7).
+// The fractions are the difficulty tuning knob.
+export const DAILY_JOURNEY_FRACTIONS: Record<JourneyId, number> = {
+  short: 0.3,
+  medium: 0.5,
+  long: 0.7,
+};
+
+const JOURNEY_ORDER: JourneyId[] = ["short", "medium", "long"];
+
+const JOURNEY_LANDMARKS: Record<JourneyId, DailyLandmark[]> = {
+  short: [
+    { atFraction: 0.5, gold: 20 },
+    { atFraction: 1, gold: 30 },
+  ],
+  medium: [
+    { atFraction: 0.2, gold: 12 },
+    { atFraction: 0.4, gold: 15 },
+    { atFraction: 0.6, gold: 18 },
+    { atFraction: 0.8, gold: 20 },
+    { atFraction: 1, gold: 35 },
+  ],
+  long: [
+    { atFraction: 0.14, gold: 18 },
+    { atFraction: 0.29, gold: 22 },
+    { atFraction: 0.43, gold: 25 },
+    { atFraction: 0.57, gold: 28 },
+    { atFraction: 0.71, gold: 32 },
+    { atFraction: 0.86, gold: 35 },
+    { atFraction: 1, gold: 40 },
+  ],
+};
+
+/**
+ * Resolve the three journeys for a day's prompts, each distance set to its
+ * fraction of the day's score max — so difficulty is consistent across days
+ * even though the per-name bonus makes the raw max depend on pool sizes.
+ */
+export function buildJourneys(prompts: Prompt[]): DailyJourney[] {
+  const max = dailyScoreMax(prompts);
+  return JOURNEY_ORDER.map((id) => ({
+    id,
+    distance: Math.round(DAILY_JOURNEY_FRACTIONS[id] * max),
+    landmarks: JOURNEY_LANDMARKS[id],
+  }));
+}
 
 /* ---------------------------------------------------------------- */
 /* Set generation                                                   */
@@ -160,7 +172,7 @@ export function getDailySet(dailyDate: string): CompiledDailySet | null {
   const set: CompiledDailySet = {
     dailyDate,
     prompts,
-    journeys: JOURNEYS,
+    journeys: buildJourneys(prompts),
     destination: entry.destination,
     routes: entry.routes,
   };

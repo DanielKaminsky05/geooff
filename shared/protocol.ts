@@ -304,15 +304,17 @@ export const DAILY_PROMPT_COUNT = 5;
 export const DAILY_BASE_SECONDS = 20;
 /** Feed-the-clock: seconds added per newly-named correct answer. */
 export const DAILY_TIME_BONUS_SECONDS = 2;
-/** Sweep bonus: naming EVERY valid answer in a prompt multiplies that prompt's
- *  normalized score by (1 + this) — e.g. a cleared prompt scores 150 not 100. */
+/** Fraction used by the pool-bonus helpers (promptFullPoints/completionBonus).
+ *  Run scoring no longer applies a sweep multiplier — see DAILY_NAME_BONUS. */
 export const DAILY_COMPLETION_BONUS = 0.5;
-/** The normalized ceiling for a single prompt BEFORE the sweep bonus. Every
- *  prompt is scored 0..100 = your share of its rarity-weighted pool, so prompts
- *  with huge pools (e.g. "name a European country") and tiny pools (e.g. "ends
- *  in -stan") are worth the same. A run's max is thus fixed regardless of which
- *  prompts the day drew: DAILY_PROMPT_COUNT × DAILY_PROMPT_MAX × (1 + bonus). */
-export const DAILY_PROMPT_MAX = 100;
+/** Per-prompt CAPTURE ceiling: fully capturing a prompt's rarity-weighted pool is
+ *  worth this, scaled by your captured share — so a huge-pool prompt ("a European
+ *  country") and a tiny-pool one ("ends in -stan") have the SAME skill ceiling. */
+export const DAILY_PROMPT_MAX = 150;
+/** Flat points for EACH correct country named, added ON TOP of the capture score.
+ *  Makes naming always pay off; it also makes a run's max depend on the day's
+ *  pool sizes, so journey distances are resolved as a fraction of that max. */
+export const DAILY_NAME_BONUS = 10;
 
 export type JourneyId = "short" | "medium" | "long";
 export type DailyOutcome = "arrived" | "died";
@@ -330,9 +332,9 @@ export interface DailyLandmark {
 }
 
 /** One of the three routes to the day's destination — a risk/reward dial, not a
- *  content difficulty. `distance` is the normalized run-points needed to arrive:
- *  a fraction of the fixed run max (DAILY_PROMPT_COUNT × DAILY_PROMPT_MAX ×
- *  (1 + DAILY_COMPLETION_BONUS) = 750), so it means the same thing every day. */
+ *  content difficulty. `distance` is the run-points needed to arrive, resolved
+ *  per day as a fraction of that day's score max (capture ceilings + per-name
+ *  bonuses) — so each tier is the same share of the day's challenge every day. */
 export interface DailyJourney {
   id: JourneyId;
   distance: number;

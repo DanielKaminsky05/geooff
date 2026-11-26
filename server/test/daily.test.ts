@@ -2,11 +2,12 @@ import { describe, it, expect } from "vitest";
 import express from "express";
 import request from "supertest";
 
-import { getDailySet, todayUtc, JOURNEYS } from "../src/daily/window.js";
-import { answerPoints, promptFullPoints, completionBonus, promptBasePoints } from "../src/daily/scoring.js";
+import { getDailySet, todayUtc } from "../src/daily/window.js";
+import { answerPoints, promptFullPoints, completionBonus, promptBasePoints, dailyScoreMax } from "../src/daily/scoring.js";
 import { capturePercentile } from "../src/daily/percentile.js";
 import { registerDailyRoutes } from "../src/daily/routes.js";
 import { validIdsFor } from "../src/prompts.js";
+import { DAILY_NAME_BONUS, DAILY_PROMPT_MAX } from "../src/protocol.js";
 import type {
   DailySet,
   DailyAnswerRes,
@@ -59,10 +60,14 @@ describe("daily/window — deterministic selection", () => {
     expect(todayUtc(() => fixed)).toBe("2026-01-15");
   });
 
-  it("uses the frozen JOURNEYS config", () => {
+  it("resolves three journeys with per-day distances as a fraction of the score max", () => {
     const set = getDailySet(DATE)!;
-    expect(set.journeys).toBe(JOURNEYS);
     expect(set.journeys.map((j) => j.id)).toEqual(["short", "medium", "long"]);
+    const [s, m, l] = set.journeys.map((j) => j.distance);
+    // Strictly increasing, and the long road is a big share of the day's max.
+    expect(s).toBeLessThan(m);
+    expect(m).toBeLessThan(l);
+    expect(l).toBeLessThan(dailyScoreMax(set.prompts));
   });
 });
 
@@ -197,8 +202,8 @@ describe("POST /daily/answer — validation + scoring", () => {
 
 describe("POST /daily/finish — reconciliation", () => {
   const set = getDailySet(DATE)!;
-  const journeyShort = JOURNEYS.find((j) => j.id === "short")!;
-  const journeyLong = JOURNEYS.find((j) => j.id === "long")!;
+  const journeyShort = set.journeys.find((j) => j.id === "short")!;
+  const journeyLong = set.journeys.find((j) => j.id === "long")!;
 
   function baseResult(over: Partial<DailyRunResult>): DailyRunResult {
     return {
@@ -214,20 +219,18 @@ describe("POST /daily/finish — reconciliation", () => {
     };
   }
 
-  it("arrives when normalized points clear the journey distance and banks the gold", async () => {
+  it("arrives when run points clear the journey distance and banks the gold", async () => {
     const app = makeApp({ today: () => DATE });
-    // Normalized base of 80 on every prompt (no sweep: named 0) → 400 ≥ short (300).
-    const perPrompt = set.prompts.map((p) => ({
-      promptId: p.id,
-      named: 0,
-      total: 0,
-      points: 80,
-    }));
+    // Fully clear every prompt: capture base 150 + a bonus for every name → the max.
+    const perPrompt = set.prompts.map((p) => {
+      const total = validIdsFor(p, "countries").size;
+      return { promptId: p.id, named: total, total, points: DAILY_PROMPT_MAX };
+    });
     const res = await request(app)
       .post("/daily/finish")
       .send({ result: baseResult({ journey: "short", perPrompt }) });
     const body = res.body as DailyFinishRes;
-    expect(body.result.points).toBe(400); // 5 × 80
+    expect(body.result.points).toBe(dailyScoreMax(set.prompts));
     expect(body.result.outcome).toBe("arrived");
     const expectedGold = journeyShort.landmarks.reduce((s, l) => s + l.gold, 0);
     expect(body.result.gold).toBe(expectedGold);
@@ -235,50 +238,53 @@ describe("POST /daily/finish — reconciliation", () => {
     expect(body.percentile).toBeLessThanOrEqual(100);
   });
 
-  it("clamps a per-prompt base above the ceiling to DAILY_PROMPT_MAX", async () => {
-    const app = makeApp({ today: () => DATE });
-    // A client over-reporting 500 on one prompt (named 0, no sweep) is capped at 100.
-    const perPrompt = set.prompts.map((p, i) => ({
-      promptId: p.id,
-      named: 0,
-      total: 0,
-      points: i === 0 ? 500 : 0,
-    }));
-    const res = await request(app)
-      .post("/daily/finish")
-      .send({ result: baseResult({ journey: "short", perPrompt }) });
-    const body = res.body as DailyFinishRes;
-    expect(body.result.points).toBe(100); // clamped from 500, below short (300) → died
-    expect(body.result.outcome).toBe("died");
-  });
-
-  it("dies when points fall short — gold is zeroed", async () => {
-    const app = makeApp({ today: () => DATE });
-    const perPrompt = set.prompts.map((p) => ({ promptId: p.id, named: 0, total: 0, points: 10 }));
-    const res = await request(app)
-      .post("/daily/finish")
-      .send({ result: baseResult({ journey: "long", perPrompt, gold: 175 }) });
-    const body = res.body as DailyFinishRes;
-    expect(body.result.points).toBe(50); // 5 × 10, below long distance 640
-    expect(body.result.outcome).toBe("died");
-    expect(body.result.gold).toBe(0); // zeroed on death regardless of client claim
-    void journeyLong;
-  });
-
-  it("applies the sweep bonus server-side when a prompt is fully named", async () => {
+  it("clamps the capture base to DAILY_PROMPT_MAX and `named` to the pool size", async () => {
     const app = makeApp({ today: () => DATE });
     const prompt = set.prompts[0];
     const total = validIdsFor(prompt, "countries").size;
-    // A fully-named prompt reports normalized base 100; the server ×1.5 it.
+    // Over-report both base (999) and named (total + 50) on one prompt.
     const perPrompt = set.prompts.map((p, i) =>
       i === 0
-        ? { promptId: p.id, named: total, total, points: 100 }
+        ? { promptId: p.id, named: total + 50, total, points: 999 }
         : { promptId: p.id, named: 0, total: 0, points: 0 },
     );
     const res = await request(app)
       .post("/daily/finish")
       .send({ result: baseResult({ journey: "short", perPrompt }) });
     const body = res.body as DailyFinishRes;
-    expect(body.result.points).toBe(150); // 100 × (1 + 0.5)
+    // Capped: base 150 + the pool size × the per-name bonus (named clamped to pool).
+    expect(body.result.points).toBe(DAILY_PROMPT_MAX + total * DAILY_NAME_BONUS);
+  });
+
+  it("adds the flat per-name bonus on top of the capture base", async () => {
+    const app = makeApp({ today: () => DATE });
+    const prompt = set.prompts[0];
+    const total = validIdsFor(prompt, "countries").size;
+    const named = Math.min(4, total);
+    // Base 60 + `named` bonuses on one prompt, nothing elsewhere.
+    const perPrompt = set.prompts.map((p, i) =>
+      i === 0
+        ? { promptId: p.id, named, total, points: 60 }
+        : { promptId: p.id, named: 0, total: 0, points: 0 },
+    );
+    const res = await request(app)
+      .post("/daily/finish")
+      .send({ result: baseResult({ journey: "short", perPrompt }) });
+    const body = res.body as DailyFinishRes;
+    expect(body.result.points).toBe(60 + named * DAILY_NAME_BONUS);
+  });
+
+  it("dies when points fall short — gold is zeroed", async () => {
+    const app = makeApp({ today: () => DATE });
+    // 10 base, 0 names on each prompt → 50 total, far below the long distance.
+    const perPrompt = set.prompts.map((p) => ({ promptId: p.id, named: 0, total: 0, points: 10 }));
+    const res = await request(app)
+      .post("/daily/finish")
+      .send({ result: baseResult({ journey: "long", perPrompt, gold: 175 }) });
+    const body = res.body as DailyFinishRes;
+    expect(body.result.points).toBe(50); // 5 × (10 + 0)
+    expect(body.result.outcome).toBe("died");
+    expect(body.result.gold).toBe(0); // zeroed on death regardless of client claim
+    expect(journeyLong.distance).toBeGreaterThan(50);
   });
 });

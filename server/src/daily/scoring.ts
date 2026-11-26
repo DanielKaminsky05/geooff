@@ -11,7 +11,7 @@
  * §Scoring). Routes.ts reconciles this at /daily/finish, not per-answer.
  */
 
-import { DAILY_COMPLETION_BONUS } from "../protocol.js";
+import { DAILY_COMPLETION_BONUS, DAILY_PROMPT_MAX, DAILY_NAME_BONUS } from "../protocol.js";
 import { countryAttributes } from "../data/countryAttributes.js";
 import { validIdsFor, type Prompt } from "../prompts.js";
 
@@ -91,9 +91,20 @@ export function completionBonus(prompt: Prompt): number {
 
 /**
  * The most a prompt can yield: the full answer pool PLUS the completion bonus.
- * Summed over the day's prompts this gives the theoretical max used to compute
- * the capture ratio for the synthetic percentile.
+ * (Legacy pool helper; run scoring uses the normalized model below.)
  */
 export function promptFullPoints(prompt: Prompt): number {
   return promptBasePoints(prompt) + completionBonus(prompt);
+}
+
+/**
+ * The maximum RUN score achievable on a day: for each prompt, the capture ceiling
+ * (DAILY_PROMPT_MAX) plus the full per-name bonus (DAILY_NAME_BONUS × its answer
+ * count). Journey distances are a fraction of this and it is the percentile
+ * denominator, so difficulty stays fair as pool sizes vary day to day.
+ */
+export function dailyScoreMax(prompts: Prompt[]): number {
+  let sum = 0;
+  for (const p of prompts) sum += DAILY_PROMPT_MAX + DAILY_NAME_BONUS * promptTotal(p);
+  return sum;
 }
