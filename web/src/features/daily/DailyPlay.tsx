@@ -83,6 +83,10 @@ export default function DailyPlay({
   // buffer so the player sees they cleared it. Holds the pending timer id.
   const fullClearTimerRef = useRef<number | null>(null);
 
+  // False once this prompt unmounts (the parent re-keys per leg): lets the async
+  // answer handler bail instead of touching state on a gone component.
+  const mountedRef = useRef(true);
+
   const doneRef = useRef(false);
   // Max time finish() will wait for in-flight answers to settle before
   // snapshotting anyway — a hung request can't block the UI forever.
@@ -120,10 +124,15 @@ export default function DailyPlay({
   }, [onComplete, prompt.id]);
 
   const clock = useFeedClock(finish);
+  // Stable across renders (useFeedClock memoizes it), unlike the clock object,
+  // whose identity changes every tick as secondsLeft counts down. Depending on
+  // this in handleSubmit keeps that callback from rebuilding 10×/second.
+  const addClockTime = clock.addTime;
 
-  // Clear any pending full-clear timer if the prompt unmounts first.
+  // On unmount: mark gone and clear any pending full-clear timer.
   useEffect(
     () => () => {
+      mountedRef.current = false;
       if (fullClearTimerRef.current != null) window.clearTimeout(fullClearTimerRef.current);
     },
     [],
@@ -140,6 +149,10 @@ export default function DailyPlay({
       void (async () => {
         try {
           const res = await postAnswer({ dailyDate, promptId: prompt.id, answer: text });
+          // The prompt may have ended + unmounted while this was in flight (the
+          // settle cap in finish() is shorter than the request timeout). Drop the
+          // late response rather than update a gone component's state.
+          if (!mountedRef.current) return;
           if (res.promptTotal !== undefined) totalRef.current = res.promptTotal;
           if (res.promptMax !== undefined) promptMaxRef.current = res.promptMax;
 
@@ -153,7 +166,7 @@ export default function DailyPlay({
               pointsRef.current += res.points ?? 0;
               setNamed(new Set(namedRef.current));
               setAcceptSignal((s) => s + 1);
-              clock.addTime();
+              addClockTime();
               forceTally((n) => n + 1);
               // Named them all → auto-advance after a short buffer (once).
               if (
@@ -180,7 +193,7 @@ export default function DailyPlay({
       })();
       return true;
     },
-    [dailyDate, prompt.id, clock, finish],
+    [dailyDate, prompt.id, addClockTime, finish],
   );
 
   const colorByIso = useMemo(() => {
