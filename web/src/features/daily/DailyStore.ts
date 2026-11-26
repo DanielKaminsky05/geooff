@@ -18,12 +18,23 @@ export interface DailyStore {
   addGold(amount: number): number;
   /** Has today's run already been completed? (one-and-done) */
   isPlayedToday(dailyDate: string): boolean;
-  /** Mark a date's run as finished (locks replay for that day). */
+  /**
+   * Mark a date's run as finished (locks replay for that day).
+   * No-op when no result is stored for that date, so the one-and-done gate
+   * ("played AND result present") can never be half-satisfied.
+   * Prefer `recordFinished` for new call sites.
+   */
   markPlayed(dailyDate: string): void;
   /** Persist a completed run (phase 2: to the DB; phase 1: localStorage). */
   saveResult(result: DailyRunResult): void;
   /** The finished run for a date, if any. */
   getResult(dailyDate: string): DailyRunResult | null;
+  /**
+   * Atomically-as-possible record a finished run: persists the result first,
+   * then marks the date played only when the result is verifiably stored.
+   * Prefer this over calling `saveResult` + `markPlayed` separately.
+   */
+  recordFinished(result: DailyRunResult): void;
   /** A stable anonymous device id (becomes the account id in phase 2). */
   getPlayerId(): string;
 }
@@ -78,6 +89,10 @@ export const localDailyStore: DailyStore = {
     return played[dailyDate] === true;
   },
   markPlayed(dailyDate) {
+    // Guard: only set the played flag when a result is already stored.
+    // This ensures the one-and-done gate ("played AND result present") is never
+    // half-satisfied — a date cannot read as locked while having no result.
+    if (this.getResult(dailyDate) == null) return;
     const played = readJSON<Record<string, true>>(K.played, {});
     played[dailyDate] = true;
     writeJSON(K.played, played);
@@ -87,6 +102,12 @@ export const localDailyStore: DailyStore = {
   },
   getResult(dailyDate) {
     return readJSON<DailyRunResult | null>(K.result(dailyDate), null);
+  },
+  recordFinished(result) {
+    // Write the result first. If this silently fails (quota error etc.),
+    // markPlayed will find no stored result and bail out — the invariant holds.
+    this.saveResult(result);
+    this.markPlayed(result.dailyDate);
   },
   getPlayerId() {
     let id = "";
