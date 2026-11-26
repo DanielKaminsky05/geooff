@@ -39,6 +39,12 @@ const TWEEN_MS = 2800;
 /** How long the traveler pauses on a landmark to show its gold reward. */
 const PAUSE_MS = 700;
 
+/** True when the user asked for reduced motion (guarded for SSR / no matchMedia). */
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export default function JourneyMap({
   route,
   destination,
@@ -62,6 +68,7 @@ export default function JourneyMap({
   // gold reward — so reaching a temple is a felt beat, not a blur.
   const [shown, setShown] = useState(start);
   const [reward, setReward] = useState<{ gold: number; x: number; y: number } | null>(null);
+  const reduceMotion = useMemo(() => prefersReducedMotion(), []);
   const onArrivedRef = useRef(onArrived);
   onArrivedRef.current = onArrived;
   const onLandmarkRef = useRef(onLandmark);
@@ -69,6 +76,16 @@ export default function JourneyMap({
   useEffect(() => {
     if (target <= start + 1e-4) {
       setShown(target);
+      onArrivedRef.current?.();
+      return;
+    }
+    // Reduced motion: skip the walk/chase-cam tween. Snap to the target, award any
+    // landmarks crossed, and still fire onArrived once so the phase machine advances.
+    if (reduceMotion) {
+      setShown(target);
+      landmarks
+        .filter((l) => l.atFraction > start + 1e-4 && l.atFraction <= target + 1e-6)
+        .forEach((l) => onLandmarkRef.current?.(l.gold));
       onArrivedRef.current?.();
       return;
     }
@@ -129,7 +146,7 @@ export default function JourneyMap({
       cancelAnimationFrame(raf);
       timers.forEach((id) => window.clearTimeout(id));
     };
-  }, [start, target, landmarks, geo]);
+  }, [start, target, landmarks, geo, reduceMotion]);
 
   const traveler = pointAtFraction(geo, shown);
   // Facing = sign of the tangent so the trekker walks forwards, not backwards.
@@ -195,7 +212,7 @@ export default function JourneyMap({
           return (
             <g key={`lm-${i}-${lm.atFraction}`} data-testid="journey-landmark" data-lit={lit ? "true" : "false"} data-fraction={lm.atFraction}>
               <g transform={`translate(${at.x} ${at.y}) scale(${u * 0.55})`} opacity={lit ? 1 : 0.5}>
-                {justPassed && (
+                {justPassed && !reduceMotion && (
                   <circle r={1} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={0.4}>
                     <animate attributeName="r" values="1;6" dur="1.3s" repeatCount="indefinite" />
                     <animate attributeName="stroke-opacity" values="0.9;0" dur="1.3s" repeatCount="indefinite" />
