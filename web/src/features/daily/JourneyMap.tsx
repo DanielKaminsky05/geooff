@@ -131,21 +131,36 @@ export default function JourneyMap({
       waypoints.push(target);
     }
 
+    // Resolvers of promises still in flight. Cleanup settles them all so a
+    // cancelled rAF / cleared timer can't leave an `await` below hanging forever
+    // (which would retain the async frame — a leak — and never reach the
+    // `cancelled` guards). Resolving an already-settled promise is a no-op.
+    const pending = new Set<() => void>();
     const animateTo = (fromF: number, to: number, dur: number) =>
       new Promise<void>((resolve) => {
+        pending.add(resolve);
+        const done = () => {
+          pending.delete(resolve);
+          resolve();
+        };
         const t0 = performance.now();
         const step = (now: number) => {
-          if (cancelled) return;
+          if (cancelled) return done();
           const t = dur <= 0 ? 1 : Math.min(1, (now - t0) / dur);
           setShown(fromF + (to - fromF) * ease(t));
           if (t < 1) raf = requestAnimationFrame(step);
-          else resolve();
+          else done();
         };
         raf = requestAnimationFrame(step);
       });
     const wait = (ms: number) =>
       new Promise<void>((resolve) => {
-        timers.push(window.setTimeout(resolve, ms));
+        pending.add(resolve);
+        const done = () => {
+          pending.delete(resolve);
+          resolve();
+        };
+        timers.push(window.setTimeout(done, ms));
       });
 
     void (async () => {
@@ -180,6 +195,10 @@ export default function JourneyMap({
       setMoving(false);
       cancelAnimationFrame(raf);
       timers.forEach((id) => window.clearTimeout(id));
+      // Unblock any awaited animate/wait so the async loop reaches its
+      // `cancelled` guard and returns instead of leaking a hung frame.
+      pending.forEach((resolve) => resolve());
+      pending.clear();
     };
   }, [start, target, landmarks, geo, reduceMotion]);
 
