@@ -6,7 +6,7 @@
 -- into a real "you beat ~N%" once enough players have finished.
 
 create table if not exists public.daily_runs (
-  id          bigint generated always as identity primary key,
+  id          uuid        primary key default gen_random_uuid(),
   local_id    text        not null,          -- anonymous device UUID
   daily_date  date        not null,
   journey     text        not null,          -- short | medium | long
