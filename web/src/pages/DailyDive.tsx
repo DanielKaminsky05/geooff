@@ -73,9 +73,16 @@ const PREFERS_REDUCED_MOTION =
   typeof window.matchMedia === "function" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-function pick(set: DailySet, id: JourneyId): { journey: DailyJourney; route: DailyRoute } {
-  const journey = set.journeys.find((j) => j.id === id)!;
-  const route = set.routes.find((r) => r.journeyId === id)!;
+/**
+ * The journey + route for an id. Falls back to the set's first journey/route if
+ * the id isn't present. Normal play always passes a valid JourneyId from state;
+ * the one untrusted caller is the recap, whose id can come from corrupt
+ * localStorage (`getResult`) — degrade to a real journey rather than dereference
+ * `undefined` and white-screen. A valid DailySet always has all three journeys.
+ */
+export function pick(set: DailySet, id: JourneyId): { journey: DailyJourney; route: DailyRoute } {
+  const journey = set.journeys.find((j) => j.id === id) ?? set.journeys[0];
+  const route = set.routes.find((r) => r.journeyId === journey?.id) ?? set.routes[0];
   return { journey, route };
 }
 
