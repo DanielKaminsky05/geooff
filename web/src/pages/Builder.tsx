@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { mapFor } from "../lib/maps";
 import { WORLD_VIEWBOX, project, xToLon, yToLat } from "../features/daily/geo";
+import { trekNumber } from "../features/daily/trekNumber";
 import type { GeoPoint, JourneyId, DailyLandmark } from "../features/daily/contract";
 import {
   fetchCatalog,
@@ -291,6 +292,7 @@ export default function Builder() {
             <div>
               <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Go-live date (UTC)</label>
               <input type="date" className={ctrl} value={date} onChange={(e) => setDate(e.target.value)} />
+              {date && <p className="mt-1 text-xs font-semibold text-sky-300">Trek #{trekNumber(date)}</p>}
             </div>
 
             {/* Destination city */}
@@ -416,7 +418,7 @@ export default function Builder() {
                     return (
                       <li key={d.dailyDate} className="flex items-center gap-2 px-2 py-1 text-sm">
                         <span className={`shrink-0 rounded px-1 text-[10px] uppercase ${tagCls}`}>{when}</span>
-                        <span className="truncate tabular-nums">{d.dailyDate} · {d.destinationName}</span>
+                        <span className="truncate tabular-nums">#{trekNumber(d.dailyDate)} · {d.dailyDate} · {d.destinationName}</span>
                         <button onClick={() => loadDay(d.dailyDate)} className="ml-auto shrink-0 rounded bg-sky-700/80 px-2 py-0.5 text-xs hover:bg-sky-600">Edit</button>
                         <button onClick={() => removeDay(d.dailyDate)} className="shrink-0 rounded bg-rose-700/80 px-2 py-0.5 text-xs hover:bg-rose-600">Remove</button>
                       </li>

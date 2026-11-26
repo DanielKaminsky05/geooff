@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import type { DailyRunResult } from "../../lib/protocol";
 import { buildShareGrid } from "./shareGrid";
 import { runCategory, promptTier } from "./tiers";
+import { trekNumber } from "./trekNumber";
 
 export interface DailyRecapProps {
   /** The server-reconciled finished run. */
@@ -130,7 +131,7 @@ export default function DailyRecap({ result, percentile, progress = 0, answers, 
             {arrived ? "You reached your destination." : "You died on the road."}
           </p>
           <p className="mt-0.5 text-[11px] uppercase tracking-[0.25em] opacity-50">
-            {journey} journey · {arrived ? "Arrived" : "Died"}
+            Trek #{trekNumber(result.dailyDate)} · {journey} journey · {arrived ? "Arrived" : "Died"}
           </p>
         </div>
 

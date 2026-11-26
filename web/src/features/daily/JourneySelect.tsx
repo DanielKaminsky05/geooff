@@ -13,6 +13,7 @@ import WorldMap from "../../components/WorldMap";
 import { project } from "./geo";
 import { smoothPath } from "./smoothPath";
 import { Star } from "./Star";
+import { trekNumber } from "./trekNumber";
 import type { DailySet, JourneyId } from "./contract";
 
 const ORDER: JourneyId[] = ["short", "medium", "long"];
@@ -125,6 +126,9 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
 
       {/* Start prompt, floating — "select your road", styled like a prompt. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col items-center gap-2 px-4 pt-4 text-center">
+        <p className="text-sm font-semibold uppercase tracking-[0.3em] text-[var(--color-accent)] [text-shadow:0_1px_2px_var(--map-paper)]">
+          Trek #{trekNumber(set.dailyDate)}
+        </p>
         <p className="text-xs uppercase tracking-[0.2em] text-muted [text-shadow:0_1px_2px_var(--map-paper)]">
           Today&apos;s destination · {set.destination.name}
         </p>
