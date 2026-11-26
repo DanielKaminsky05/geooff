@@ -156,7 +156,7 @@ function card(data: ShareData | null): El {
       display: "flex",
       width: "100%",
       height: "100%",
-      padding: 40,
+      padding: 28,
       backgroundColor: PAPER,
       color: INK,
       fontFamily: "Inter",
@@ -168,7 +168,7 @@ function card(data: ShareData | null): El {
         justifyContent: "space-between",
         width: "100%",
         height: "100%",
-        padding: 52,
+        padding: 44,
         borderWidth: 3,
         borderStyle: "solid",
         borderColor: SEPIA,
@@ -188,17 +188,17 @@ function card(data: ShareData | null): El {
         ]),
         // Centre
         h({ display: "flex", flexDirection: "column", alignItems: "center" }, [
-          h({ display: "flex", alignItems: "center", width: "66%", marginBottom: 30 }, [
+          h({ display: "flex", alignItems: "center", width: "66%", marginBottom: 22 }, [
             h({ display: "flex", width: 24, height: 24, borderRadius: 12, backgroundColor: SEPIA }),
             h({ display: "flex", flexGrow: 1, height: 4, backgroundColor: SEPIA, marginLeft: 12, marginRight: 12 }),
             h({ display: "flex", width: 26, height: 26, backgroundColor: accent }),
           ]),
-          h({ display: "flex", fontSize: 88, fontWeight: 800, color: accent }, headline),
-          h({ display: "flex", alignItems: "flex-end", marginTop: 20 }, [
-            h({ display: "flex", fontSize: 128, fontWeight: 800 }, group(points)),
-            h({ display: "flex", fontSize: 36, color: FADE, marginLeft: 14, marginBottom: 16 }, "pts"),
+          h({ display: "flex", fontSize: 76, fontWeight: 800, color: accent }, headline),
+          h({ display: "flex", alignItems: "flex-end", marginTop: 14 }, [
+            h({ display: "flex", fontSize: 104, fontWeight: 800 }, group(points)),
+            h({ display: "flex", fontSize: 34, color: FADE, marginLeft: 14, marginBottom: 12 }, "pts"),
           ]),
-          h({ display: "flex", fontSize: 28, color: SEPIA, marginTop: 14 }, subtitle),
+          h({ display: "flex", fontSize: 28, color: SEPIA, marginTop: 10 }, subtitle),
         ]),
         // Footer
         h({ display: "flex", justifyContent: "space-between", alignItems: "center" }, [
