@@ -21,7 +21,7 @@ import { postAnswer, RateLimitedError } from "./dailyApi";
 import { project } from "./geo";
 import { smoothPath } from "./smoothPath";
 import { buildRouteGeometry, pointAtFraction } from "./routeGeometry";
-import { DAILY_BASE_SECONDS, DAILY_PROMPT_MAX, DAILY_NAME_BONUS } from "./contract";
+import { DAILY_BASE_SECONDS, DAILY_PROMPT_MAX } from "./contract";
 import type { DailyDestination, DailyPrompt, DailyPromptResult, DailyRoute } from "./contract";
 
 export interface DailyPlayProps {
@@ -59,12 +59,12 @@ export default function DailyPlay({
   const [, forceTally] = useState(0);
 
   // Capture base for THIS prompt: your captured share of its pool, 0..150.
+  // Reported to the parent at the end; NOT shown during play (keeps the points
+  // a surprise until the leg reveal).
   const captureBase = (): number =>
     promptMaxRef.current > 0
       ? Math.min(DAILY_PROMPT_MAX, (DAILY_PROMPT_MAX * pointsRef.current) / promptMaxRef.current)
       : 0;
-  // Live score shown to the player: capture base + the flat per-name bonus.
-  const liveScore = (): number => captureBase() + DAILY_NAME_BONUS * namedRef.current.size;
 
   const [rejectMsg, setRejectMsg] = useState<string | null>(null);
   const [rejectSignal, setRejectSignal] = useState(0);
@@ -176,7 +176,7 @@ export default function DailyPlay({
           wrap={false}
         />
 
-        {/* Prompt counter (corner) + Next/Finish — floating, no chrome strip. */}
+        {/* Prompt counter + Next/Finish — top-LEFT (the HUD owns the top-right). */}
         <span className="pointer-events-none absolute left-3 top-3 z-10 text-xs font-semibold uppercase tracking-wide text-muted [text-shadow:0_1px_2px_var(--map-paper)]">
           Prompt {index + 1} of {total}
         </span>
@@ -184,7 +184,7 @@ export default function DailyPlay({
           type="button"
           onClick={finish}
           data-testid="daily-next"
-          className="absolute right-3 top-3 z-10 rounded-lg bg-[var(--color-chrome)]/85 px-4 py-2 text-sm font-semibold text-[var(--color-chrome-ink)] backdrop-blur transition hover:brightness-125"
+          className="absolute left-3 top-9 z-10 rounded-lg bg-[var(--color-chrome)]/85 px-4 py-2 text-sm font-semibold text-[var(--color-chrome-ink)] backdrop-blur transition hover:brightness-125"
         >
           {index + 1 >= total ? "Finish" : "Next"}
         </button>
@@ -210,7 +210,6 @@ export default function DailyPlay({
           <span data-testid="prompt-tally" className="text-sm font-semibold text-foreground [text-shadow:0_1px_2px_var(--map-paper),0_0_6px_var(--map-paper)]">
             {named.size}
             {total_ ? ` of ${total_}` : ""} named
-            {pointsRef.current ? ` · ${Math.round(liveScore())} pts` : ""}
           </span>
         </div>
       </div>

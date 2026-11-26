@@ -27,6 +27,8 @@ export interface JourneyMapProps {
   from?: number;
   /** Fired once the tween reaches `progress`. */
   onArrived?: () => void;
+  /** Fired when the traveler reaches a landmark (with its gold), for the HUD. */
+  onLandmark?: (gold: number) => void;
   className?: string;
 }
 
@@ -42,6 +44,7 @@ export default function JourneyMap({
   progress,
   from = progress,
   onArrived,
+  onLandmark,
   className,
 }: JourneyMapProps) {
   const target = Math.max(0, Math.min(1, progress));
@@ -59,6 +62,8 @@ export default function JourneyMap({
   const [reward, setReward] = useState<{ gold: number; x: number; y: number } | null>(null);
   const onArrivedRef = useRef(onArrived);
   onArrivedRef.current = onArrived;
+  const onLandmarkRef = useRef(onLandmark);
+  onLandmarkRef.current = onLandmark;
   useEffect(() => {
     if (target <= start + 1e-4) {
       setShown(target);
@@ -107,6 +112,7 @@ export default function JourneyMap({
         if (lm && stops.includes(w)) {
           const at = pointAtFraction(geo, w);
           setReward({ gold: lm.gold, x: at.x, y: at.y });
+          onLandmarkRef.current?.(lm.gold);
           await wait(PAUSE_MS);
           if (cancelled) return;
           setReward(null);

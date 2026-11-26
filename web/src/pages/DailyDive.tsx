@@ -32,6 +32,7 @@ import type {
   JourneyId,
 } from "../features/daily/contract";
 import { DAILY_PROMPT_MAX, DAILY_NAME_BONUS } from "../features/daily/contract";
+import { promptTier, FULL_CLEAR_MESSAGE } from "../features/daily/tiers";
 
 /**
  * A prompt's contribution to the run: its capture base (0..150, clamped) plus a
@@ -116,6 +117,13 @@ export default function DailyDive() {
   const [walletBalance, setWalletBalance] = useState(() => localDailyStore.getWallet());
   const [recapResult, setRecapResult] = useState<DailyRunResult | null>(null);
 
+  // Persistent HUD: total points (updated only when a leg's walk ends, never
+  // during the naming challenge — so the per-prompt score stays a surprise) and
+  // gold collected at landmarks so far.
+  const [hudPoints, setHudPoints] = useState(0);
+  const [hudGold, setHudGold] = useState(0);
+  const runGoldRef = useRef(0);
+
   // Load today's set; if already played, jump to the saved recap.
   useEffect(() => {
     let cancelled = false;
@@ -143,10 +151,24 @@ export default function DailyDive() {
     cumPointsRef.current = 0;
     prevProgressRef.current = 0;
     legTargetRef.current = 0;
+    runGoldRef.current = 0;
+    setHudPoints(0);
+    setHudGold(0);
     setJourneyId(id);
     setLegIndex(0);
     setSubPhase("prompt");
     setPhase("play");
+  }, []);
+
+  // Gold ticks up as landmarks are reached; points are revealed when the leg's
+  // walk finishes (handled at the JourneyMap's onArrived below).
+  const handleLandmark = useCallback((gold: number) => {
+    runGoldRef.current += gold;
+    setHudGold(runGoldRef.current);
+  }, []);
+  const handleLegArrived = useCallback(() => {
+    setLegArrived(true);
+    setHudPoints(Math.round(cumPointsRef.current));
   }, []);
 
   const runFinish = useCallback(
@@ -208,6 +230,31 @@ export default function DailyDive() {
     }
   }, [set, journeyId, legIndex, runFinish]);
 
+  // Persistent run HUD — running points + gold, top-right, over play and legs.
+  const hud = (
+    <div
+      data-testid="daily-hud"
+      className="pointer-events-none absolute right-3 top-3 z-20 flex flex-col items-end gap-1"
+    >
+      <div className="flex items-center gap-2 rounded-lg bg-[var(--color-chrome)]/85 px-3 py-1 chrome-ink backdrop-blur">
+        <span className="text-[10px] uppercase tracking-wider opacity-70">Points</span>
+        <span data-testid="hud-points" className="font-display text-lg font-black tabular-nums">
+          {hudPoints.toLocaleString()}
+        </span>
+      </div>
+      <div className="flex items-center gap-2 rounded-lg bg-[var(--color-chrome)]/85 px-3 py-1 chrome-ink backdrop-blur">
+        <span className="text-[10px] uppercase tracking-wider opacity-70">Gold</span>
+        <span
+          data-testid="hud-gold"
+          className="font-display text-lg font-black tabular-nums"
+          style={{ color: "var(--color-chrome-gold)" }}
+        >
+          {hudGold.toLocaleString()}
+        </span>
+      </div>
+    </div>
+  );
+
   if (phase === "loading" || !set) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-surface">
@@ -237,6 +284,7 @@ export default function DailyDive() {
       ).length;
       const isLast = legIndex + 1 >= set.prompts.length;
       const gainedPts = justResult ? Math.round(promptScore(justResult)) : 0;
+      const tier = justResult ? promptTier(justResult.named, justResult.total) : null;
       const travelling = !legArrived && phase !== "finish";
       return (
         <main className="relative h-dvh bg-surface">
@@ -246,18 +294,39 @@ export default function DailyDive() {
             landmarks={journey.landmarks}
             from={start}
             progress={target}
-            onArrived={() => setLegArrived(true)}
+            onArrived={handleLegArrived}
+            onLandmark={handleLandmark}
             className="absolute inset-0"
           />
+          {hud}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
             <div className="pointer-events-auto flex w-full max-w-md flex-col items-center gap-2 rounded-xl border border-[var(--color-chrome-gold)]/40 bg-[var(--color-chrome)]/90 px-5 py-4 text-center chrome-ink backdrop-blur">
               <p className="text-xs uppercase tracking-wide opacity-70">
                 Leg {legIndex + 1} of {set.prompts.length}
               </p>
-              <p className="text-sm">
-                {justResult ? `Named ${justResult.named}${justResult.total ? ` of ${justResult.total}` : ""} · ` : ""}
-                <span className="font-semibold text-[var(--color-chrome-gold)]">+{gainedPts} distance</span>
-              </p>
+              {/* Points + tier revealed only AFTER the walk, to keep the surprise. */}
+              {legArrived && justResult && tier ? (
+                <div className="daily-recap-pop flex flex-col items-center gap-0.5">
+                  <p
+                    className="text-xl font-black uppercase tracking-wide"
+                    style={{ color: tier.full ? "var(--color-chrome-gold)" : undefined }}
+                  >
+                    {tier.label}
+                  </p>
+                  <p className="text-sm">
+                    Named {justResult.named}
+                    {justResult.total ? ` of ${justResult.total}` : ""} ·{" "}
+                    <span className="font-semibold text-[var(--color-chrome-gold)]">+{gainedPts} pts</span>
+                  </p>
+                  {tier.full && (
+                    <p className="text-xs font-semibold text-[var(--color-chrome-gold)]">
+                      {FULL_CLEAR_MESSAGE}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm opacity-80">Travelling…</p>
+              )}
               {/* Overall progress toward the destination. */}
               <div className="w-full">
                 <div className="h-2 w-full overflow-hidden rounded-full bg-black/30">
@@ -290,7 +359,7 @@ export default function DailyDive() {
 
     // Naming a prompt. Re-mounted per prompt (key) so the clock re-seeds.
     return (
-      <main className="h-dvh bg-surface">
+      <main className="relative h-dvh bg-surface">
         <DailyPlay
           key={legIndex}
           dailyDate={set.dailyDate}
@@ -302,6 +371,7 @@ export default function DailyDive() {
           progress={prevProgressRef.current}
           onComplete={handlePromptComplete}
         />
+        {hud}
       </main>
     );
   }
@@ -324,6 +394,7 @@ export default function DailyDive() {
         <DailyRecap
           result={recapResult}
           percentile={percentile}
+          progress={endProgress}
           walletBalance={walletBalance}
           onClose={goHome}
         />
