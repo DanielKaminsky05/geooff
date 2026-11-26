@@ -5,19 +5,19 @@
  * (short/medium/long polylines) that lead to it. `window.ts` (Track A) picks one
  * entry per day (seeded by date) and pairs it with the journey config.
  *
- * CONCEPT: a journey is a long cross-map TREK. You start at a random far-away
- * origin and navigate through intermediate "wonder" waypoints (famous cities and
- * landmarks) to reach the destination — e.g. start in Mongolia, end in France.
- * These are not local approaches; the origin is always clearly distant.
+ * CONCEPT: a journey is a long cross-map TREK. You start at a far-away origin and
+ * navigate through intermediate "wonder" waypoints (famous cities and landmarks)
+ * to reach the destination — e.g. start in Japan, end in Turkey. The origin is
+ * always clearly distant: even the SHORT road is a real cross-region journey
+ * (~Paris→Moscow scale), never a local hop.
  *
- * The three tiers escalate the trek:
- *   - long   : starts farthest (typically another continent), most waypoints,
- *              greatest total great-circle path length.
- *   - medium : a moderate trek from a distant region.
- *   - short  : the nearest origin but STILL a real journey (a different
- *              region/country, never a neighbouring city).
- * Enforced by the test: origin→destination distance of the LONG route is large,
- * and total route length is strictly increasing short < medium < long.
+ * The three tiers escalate the trek (rough great-circle targets, origin→dest):
+ *   - short  : a real journey from a neighbouring region          (~2000-4000 km)
+ *   - medium : a continental crossing                             (~4000-6000 km)
+ *   - long   : an epic, usually trans-continental trek            (~6000-10000 km)
+ * Enforced by the test: every origin is far (> 1200 km), the LONG origin is very
+ * far (> 5000 km), and total route length strictly increases short < medium <
+ * long.
  *
  * There are >= 22 hand-authored entries so destinations don't repeat within a
  * rolling 7-day window. Each route's LAST point deep-equals `destination.at`
@@ -37,26 +37,26 @@ export interface DestinationEntry {
 
 export const destinations: DestinationEntry[] = [
   {
-    // End: Istanbul. Treks arrive from across Asia / the far east.
+    // End: Istanbul. Treks arrive from across Asia.
     destination: { name: "Istanbul", at: { lat: 41.0, lon: 29.0 } },
     routes: [
       {
-        // short: from Egypt, up the Levant.
+        // short: from the Persian Gulf, across Mesopotamia and the Levant.
         journeyId: "short",
         points: [
-          { lat: 30.0, lon: 31.2 }, // Cairo
-          { lat: 33.9, lon: 35.5 }, // Beirut
-          { lat: 36.2, lon: 36.2 }, // Antioch
+          { lat: 25.3, lon: 55.3 }, // Dubai
+          { lat: 33.3, lon: 44.4 }, // Baghdad
+          { lat: 33.5, lon: 36.3 }, // Damascus
           { lat: 39.9, lon: 32.9 }, // Ankara
           { lat: 41.0, lon: 29.0 },
         ],
       },
       {
-        // medium: from the Persian Gulf, across the Iranian plateau and Anatolia.
+        // medium: from the Ganges plain, across Persia and Anatolia.
         journeyId: "medium",
         points: [
-          { lat: 25.3, lon: 55.3 }, // Dubai
-          { lat: 29.6, lon: 52.5 }, // Persepolis
+          { lat: 22.6, lon: 88.4 }, // Kolkata
+          { lat: 28.6, lon: 77.2 }, // Delhi
           { lat: 35.7, lon: 51.4 }, // Tehran
           { lat: 39.9, lon: 41.3 }, // Erzurum
           { lat: 39.9, lon: 32.9 }, // Ankara
@@ -64,14 +64,14 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // long: from Mongolia, the whole Silk Road to the Bosphorus.
+        // long: from Japan, the whole Silk Road to the Bosphorus.
         journeyId: "long",
         points: [
-          { lat: 47.9, lon: 106.9 }, // Ulaanbaatar
+          { lat: 35.7, lon: 139.7 }, // Tokyo
+          { lat: 39.9, lon: 116.4 }, // Beijing
           { lat: 43.3, lon: 76.9 }, // Almaty
           { lat: 39.7, lon: 67.0 }, // Samarkand
           { lat: 35.7, lon: 51.4 }, // Tehran
-          { lat: 41.0, lon: 28.9 }, // Golden Horn approach
           { lat: 41.0, lon: 29.0 },
         ],
       },
@@ -82,13 +82,13 @@ export const destinations: DestinationEntry[] = [
     destination: { name: "Cairo", at: { lat: 30.0, lon: 31.2 } },
     routes: [
       {
-        // short: from the Horn of Africa, up the Red Sea / Nile.
+        // short: from the Gulf, across Arabia and up the Red Sea.
         journeyId: "short",
         points: [
-          { lat: 9.0, lon: 38.7 }, // Addis Ababa
-          { lat: 15.6, lon: 32.5 }, // Khartoum
-          { lat: 24.1, lon: 32.9 }, // Aswan
-          { lat: 25.7, lon: 32.6 }, // Luxor
+          { lat: 25.3, lon: 55.3 }, // Dubai
+          { lat: 24.7, lon: 46.7 }, // Riyadh
+          { lat: 21.4, lon: 39.8 }, // Mecca
+          { lat: 29.5, lon: 35.0 }, // Aqaba
           { lat: 30.0, lon: 31.2 },
         ],
       },
@@ -96,11 +96,11 @@ export const destinations: DestinationEntry[] = [
         // medium: from West Africa, across the Sahel and Sahara.
         journeyId: "medium",
         points: [
-          { lat: 6.5, lon: 3.4 }, // Lagos
+          { lat: 14.7, lon: -17.4 }, // Dakar
+          { lat: 12.6, lon: -8.0 }, // Bamako
           { lat: 12.0, lon: 8.5 }, // Kano
-          { lat: 16.8, lon: -3.0 }, // Timbuktu
-          { lat: 36.8, lon: 10.2 }, // Tunis
-          { lat: 31.2, lon: 29.9 }, // Alexandria
+          { lat: 15.6, lon: 32.5 }, // Khartoum
+          { lat: 24.1, lon: 32.9 }, // Aswan
           { lat: 30.0, lon: 31.2 },
         ],
       },
@@ -145,13 +145,13 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // long: from western Europe, Mediterranean then the length of Africa.
+        // long: from the Baltic, the length of Europe then all of Africa.
         journeyId: "long",
         points: [
-          { lat: 48.9, lon: 2.4 }, // Paris
-          { lat: 36.8, lon: 3.1 }, // Algiers
+          { lat: 59.3, lon: 18.1 }, // Stockholm
+          { lat: 52.5, lon: 13.4 }, // Berlin
+          { lat: 41.9, lon: 12.5 }, // Rome
           { lat: 30.0, lon: 31.2 }, // Cairo
-          { lat: 15.6, lon: 32.5 }, // Khartoum
           { lat: 9.0, lon: 38.7 }, // Addis Ababa
           { lat: -1.3, lon: 36.8 },
         ],
@@ -163,11 +163,10 @@ export const destinations: DestinationEntry[] = [
     destination: { name: "Kyoto", at: { lat: 35.0, lon: 135.8 } },
     routes: [
       {
-        // short: from Southeast Asia, up the island chain.
+        // short: from South China, up the island chain.
         journeyId: "short",
         points: [
-          { lat: 1.4, lon: 103.8 }, // Singapore
-          { lat: 14.6, lon: 121.0 }, // Manila
+          { lat: 22.5, lon: 114.1 }, // Hong Kong
           { lat: 25.0, lon: 121.5 }, // Taipei
           { lat: 33.6, lon: 130.4 }, // Fukuoka
           { lat: 35.0, lon: 135.8 },
@@ -178,6 +177,7 @@ export const destinations: DestinationEntry[] = [
         journeyId: "medium",
         points: [
           { lat: 28.6, lon: 77.2 }, // Delhi
+          { lat: 22.6, lon: 88.4 }, // Kolkata
           { lat: 22.5, lon: 114.1 }, // Hong Kong
           { lat: 31.2, lon: 121.5 }, // Shanghai
           { lat: 37.6, lon: 126.9 }, // Seoul
@@ -213,9 +213,10 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // medium: from the eastern Mediterranean, across Europe and the North Sea.
+        // medium: from North Africa, across Europe and the North Sea.
         journeyId: "medium",
         points: [
+          { lat: 30.0, lon: 31.2 }, // Cairo
           { lat: 37.9, lon: 23.7 }, // Athens
           { lat: 41.9, lon: 12.5 }, // Rome
           { lat: 48.9, lon: 2.4 }, // Paris
@@ -224,13 +225,13 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // long: from the US east coast, across the North Atlantic.
+        // long: from the US west coast, across the continent and North Atlantic.
         journeyId: "long",
         points: [
+          { lat: 34.1, lon: -118.2 }, // Los Angeles
+          { lat: 41.9, lon: -87.6 }, // Chicago
           { lat: 40.7, lon: -74.0 }, // New York
-          { lat: 47.6, lon: -52.7 }, // St. John's
           { lat: 64.2, lon: -51.7 }, // Nuuk
-          { lat: 60.2, lon: -43.2 }, // Cape Farewell
           { lat: 64.1, lon: -21.9 },
         ],
       },
@@ -252,25 +253,25 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // medium: from Patagonia, up the spine of South America.
+        // medium: from Mexico, down through Central America and the Andes.
         journeyId: "medium",
-        points: [
-          { lat: -34.6, lon: -58.4 }, // Buenos Aires
-          { lat: -33.4, lon: -70.7 }, // Santiago
-          { lat: -16.5, lon: -68.1 }, // La Paz
-          { lat: -13.2, lon: -72.5 }, // Machu Picchu
-          { lat: -13.5, lon: -72.0 },
-        ],
-      },
-      {
-        // long: from North America, the full length of the Americas.
-        journeyId: "long",
         points: [
           { lat: 19.4, lon: -99.1 }, // Mexico City
           { lat: 9.0, lon: -79.5 }, // Panama City
           { lat: 4.7, lon: -74.1 }, // Bogota
           { lat: -12.0, lon: -77.0 }, // Lima
-          { lat: -13.2, lon: -72.5 }, // Machu Picchu
+          { lat: -13.5, lon: -72.0 },
+        ],
+      },
+      {
+        // long: from the US west coast, the length of the Americas.
+        journeyId: "long",
+        points: [
+          { lat: 34.1, lon: -118.2 }, // Los Angeles
+          { lat: 19.4, lon: -99.1 }, // Mexico City
+          { lat: 9.0, lon: -79.5 }, // Panama City
+          { lat: 4.7, lon: -74.1 }, // Bogota
+          { lat: -12.0, lon: -77.0 }, // Lima
           { lat: -13.5, lon: -72.0 },
         ],
       },
@@ -292,26 +293,25 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // medium: from the Levant, the whole Maghreb coast.
+        // medium: from Mesopotamia, the whole Maghreb coast.
         journeyId: "medium",
         points: [
+          { lat: 33.3, lon: 44.4 }, // Baghdad
           { lat: 30.0, lon: 31.2 }, // Cairo
           { lat: 36.8, lon: 10.2 }, // Tunis
           { lat: 36.8, lon: 3.1 }, // Algiers
-          { lat: 34.0, lon: -6.8 }, // Rabat
           { lat: 31.6, lon: -8.0 },
         ],
       },
       {
-        // long: from the Baltic, the length of Europe then into Africa.
+        // long: from Central Asia, across Persia and Europe into Africa.
         journeyId: "long",
         points: [
-          { lat: 60.2, lon: 25.0 }, // Helsinki
-          { lat: 59.3, lon: 18.1 }, // Stockholm
-          { lat: 52.5, lon: 13.4 }, // Berlin
-          { lat: 48.9, lon: 2.4 }, // Paris
+          { lat: 41.3, lon: 69.3 }, // Tashkent
+          { lat: 35.7, lon: 51.4 }, // Tehran
+          { lat: 41.0, lon: 29.0 }, // Istanbul
+          { lat: 41.9, lon: 12.5 }, // Rome
           { lat: 40.4, lon: -3.7 }, // Madrid
-          { lat: 33.6, lon: -7.6 }, // Casablanca
           { lat: 31.6, lon: -8.0 },
         ],
       },
@@ -333,22 +333,22 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // medium: from the Mediterranean, across Anatolia and the Caucasus.
+        // medium: from Greece, across Anatolia and the Caucasus.
         journeyId: "medium",
         points: [
+          { lat: 37.9, lon: 23.7 }, // Athens
           { lat: 41.0, lon: 29.0 }, // Istanbul
-          { lat: 40.2, lon: 44.5 }, // Yerevan
           { lat: 40.4, lon: 49.9 }, // Baku
           { lat: 37.9, lon: 58.4 }, // Ashgabat
           { lat: 39.7, lon: 67.0 },
         ],
       },
       {
-        // long: from East Asia, the Silk Road travelled east-to-west.
+        // long: from Japan, the Silk Road travelled east-to-west.
         journeyId: "long",
         points: [
+          { lat: 35.7, lon: 139.7 }, // Tokyo
           { lat: 39.9, lon: 116.4 }, // Beijing
-          { lat: 34.3, lon: 108.9 }, // Xi'an
           { lat: 40.1, lon: 94.7 }, // Dunhuang
           { lat: 43.3, lon: 76.9 }, // Almaty
           { lat: 41.3, lon: 69.3 }, // Tashkent
@@ -372,11 +372,11 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // medium: from East Africa, across the southern cone.
+        // medium: from the Horn, across the southern cone.
         journeyId: "medium",
         points: [
+          { lat: 9.0, lon: 38.7 }, // Addis Ababa
           { lat: -1.3, lon: 36.8 }, // Nairobi
-          { lat: -6.2, lon: 35.7 }, // Dodoma
           { lat: -17.9, lon: 25.9 }, // Victoria Falls
           { lat: -26.2, lon: 28.0 }, // Johannesburg
           { lat: -33.9, lon: 18.4 },
@@ -388,8 +388,8 @@ export const destinations: DestinationEntry[] = [
         points: [
           { lat: 41.9, lon: 12.5 }, // Rome
           { lat: 30.0, lon: 31.2 }, // Cairo
-          { lat: 9.0, lon: 38.7 }, // Addis Ababa
           { lat: -1.3, lon: 36.8 }, // Nairobi
+          { lat: -17.9, lon: 25.9 }, // Victoria Falls
           { lat: -26.2, lon: 28.0 }, // Johannesburg
           { lat: -33.9, lon: 18.4 },
         ],
@@ -440,36 +440,36 @@ export const destinations: DestinationEntry[] = [
     destination: { name: "Lhasa", at: { lat: 29.7, lon: 91.1 } },
     routes: [
       {
-        // short: from the Ganges plain, over the Himalaya.
+        // short: from southern India, over the Himalaya.
         journeyId: "short",
         points: [
+          { lat: 13.1, lon: 80.3 }, // Chennai
           { lat: 22.6, lon: 88.4 }, // Kolkata
           { lat: 27.7, lon: 85.3 }, // Kathmandu
-          { lat: 28.0, lon: 86.9 }, // Everest base
           { lat: 29.3, lon: 88.9 }, // Shigatse
           { lat: 29.7, lon: 91.1 },
         ],
       },
       {
-        // medium: from eastern China, up onto the plateau.
+        // medium: from Japan, across China onto the plateau.
         journeyId: "medium",
         points: [
+          { lat: 35.7, lon: 139.7 }, // Tokyo
           { lat: 31.2, lon: 121.5 }, // Shanghai
           { lat: 30.7, lon: 104.1 }, // Chengdu
           { lat: 29.7, lon: 94.4 }, // Nyingchi
-          { lat: 29.6, lon: 91.9 }, // Ganden
           { lat: 29.7, lon: 91.1 },
         ],
       },
       {
-        // long: from Arabia, across Persia, India and the Himalaya.
+        // long: from Anatolia, across Persia, India and the Himalaya.
         journeyId: "long",
         points: [
-          { lat: 25.3, lon: 55.3 }, // Dubai
+          { lat: 41.0, lon: 29.0 }, // Istanbul
+          { lat: 35.7, lon: 51.4 }, // Tehran
           { lat: 24.9, lon: 67.0 }, // Karachi
           { lat: 28.6, lon: 77.2 }, // Delhi
           { lat: 27.7, lon: 85.3 }, // Kathmandu
-          { lat: 29.3, lon: 88.9 }, // Shigatse
           { lat: 29.7, lon: 91.1 },
         ],
       },
@@ -483,33 +483,33 @@ export const destinations: DestinationEntry[] = [
         // short: from the Gulf of Guinea, up through the Sahel.
         journeyId: "short",
         points: [
-          { lat: 5.6, lon: -0.2 }, // Accra
-          { lat: 12.4, lon: -1.5 }, // Ouagadougou
-          { lat: 14.5, lon: -4.2 }, // Mopti
+          { lat: 0.4, lon: 9.5 }, // Libreville
+          { lat: 6.5, lon: 3.4 }, // Lagos
+          { lat: 12.0, lon: 8.5 }, // Kano
+          { lat: 16.3, lon: -0.0 }, // Gao
           { lat: 16.8, lon: -3.0 },
         ],
       },
       {
-        // medium: from the Atlantic coast, across the western Sahel.
+        // medium: from the Levant, across the Sahara.
         journeyId: "medium",
         points: [
-          { lat: 14.7, lon: -17.4 }, // Dakar
-          { lat: 18.1, lon: -16.0 }, // Nouakchott
-          { lat: 12.6, lon: -8.0 }, // Bamako
-          { lat: 14.5, lon: -4.2 }, // Mopti
+          { lat: 30.0, lon: 31.2 }, // Cairo
+          { lat: 32.9, lon: 13.2 }, // Tripoli
+          { lat: 22.8, lon: 5.5 }, // Tamanrasset
+          { lat: 16.3, lon: -0.0 }, // Gao
           { lat: 16.8, lon: -3.0 },
         ],
       },
       {
-        // long: from northern Europe, the length of Europe and across the Sahara.
+        // long: from Russia, the length of Europe then across the Sahara.
         journeyId: "long",
         points: [
+          { lat: 55.8, lon: 37.6 }, // Moscow
           { lat: 52.5, lon: 13.4 }, // Berlin
           { lat: 48.9, lon: 2.4 }, // Paris
           { lat: 40.4, lon: -3.7 }, // Madrid
           { lat: 31.6, lon: -8.0 }, // Marrakech
-          { lat: 22.8, lon: 5.5 }, // Tamanrasset
-          { lat: 16.3, lon: -0.0 }, // Gao
           { lat: 16.8, lon: -3.0 },
         ],
       },
@@ -520,35 +520,37 @@ export const destinations: DestinationEntry[] = [
     destination: { name: "Petra", at: { lat: 30.3, lon: 35.5 } },
     routes: [
       {
-        // short: from Anatolia, down the Levant.
+        // short: from the Iranian plateau, across Mesopotamia and the Levant.
         journeyId: "short",
         points: [
-          { lat: 41.0, lon: 29.0 }, // Istanbul
+          { lat: 35.7, lon: 51.4 }, // Tehran
+          { lat: 33.3, lon: 44.4 }, // Baghdad
           { lat: 33.5, lon: 36.3 }, // Damascus
           { lat: 31.9, lon: 35.9 }, // Amman
           { lat: 30.3, lon: 35.5 },
         ],
       },
       {
-        // medium: from Arabia, up the incense route.
+        // medium: from India, across the Gulf and Arabia.
         journeyId: "medium",
         points: [
-          { lat: 15.4, lon: 44.2 }, // Sanaa
-          { lat: 21.4, lon: 39.8 }, // Mecca
+          { lat: 28.6, lon: 77.2 }, // Delhi
+          { lat: 24.9, lon: 67.0 }, // Karachi
+          { lat: 25.3, lon: 55.3 }, // Dubai
+          { lat: 24.7, lon: 46.7 }, // Riyadh
           { lat: 24.5, lon: 39.6 }, // Medina
-          { lat: 29.5, lon: 35.0 }, // Aqaba
           { lat: 30.3, lon: 35.5 },
         ],
       },
       {
-        // long: from Central Asia, across Persia and Mesopotamia to the desert.
+        // long: from East Asia, across Central Asia and Mesopotamia.
         journeyId: "long",
         points: [
+          { lat: 39.9, lon: 116.4 }, // Beijing
           { lat: 43.3, lon: 76.9 }, // Almaty
           { lat: 39.7, lon: 67.0 }, // Samarkand
           { lat: 35.7, lon: 51.4 }, // Tehran
           { lat: 33.3, lon: 44.4 }, // Baghdad
-          { lat: 33.5, lon: 36.3 }, // Damascus
           { lat: 30.3, lon: 35.5 },
         ],
       },
@@ -559,9 +561,10 @@ export const destinations: DestinationEntry[] = [
     destination: { name: "Hanoi", at: { lat: 21.0, lon: 105.8 } },
     routes: [
       {
-        // short: from Thailand, up the Indochina coast.
+        // short: from maritime Southeast Asia, up the Indochina coast.
         journeyId: "short",
         points: [
+          { lat: 1.4, lon: 103.8 }, // Singapore
           { lat: 13.8, lon: 100.5 }, // Bangkok
           { lat: 11.6, lon: 104.9 }, // Phnom Penh
           { lat: 16.5, lon: 107.6 }, // Hue
@@ -572,22 +575,22 @@ export const destinations: DestinationEntry[] = [
         // medium: from India, across mainland Southeast Asia.
         journeyId: "medium",
         points: [
+          { lat: 19.1, lon: 72.9 }, // Mumbai
           { lat: 22.6, lon: 88.4 }, // Kolkata
           { lat: 16.8, lon: 96.2 }, // Yangon
           { lat: 17.9, lon: 102.6 }, // Vientiane
-          { lat: 18.7, lon: 105.7 }, // Vinh
           { lat: 21.0, lon: 105.8 },
         ],
       },
       {
-        // long: from Japan, down the Pacific rim of Asia.
+        // long: from western Europe, the full Trans-Eurasian crossing.
         journeyId: "long",
         points: [
-          { lat: 35.7, lon: 139.7 }, // Tokyo
-          { lat: 31.2, lon: 121.5 }, // Shanghai
-          { lat: 22.5, lon: 114.1 }, // Hong Kong
+          { lat: 48.9, lon: 2.4 }, // Paris
+          { lat: 55.8, lon: 37.6 }, // Moscow
+          { lat: 55.0, lon: 82.9 }, // Novosibirsk
+          { lat: 39.9, lon: 116.4 }, // Beijing
           { lat: 22.8, lon: 108.3 }, // Nanning
-          { lat: 21.6, lon: 106.0 }, // Lang Son
           { lat: 21.0, lon: 105.8 },
         ],
       },
@@ -601,32 +604,33 @@ export const destinations: DestinationEntry[] = [
         // short: from the Horn, down the Swahili coast.
         journeyId: "short",
         points: [
+          { lat: 9.0, lon: 38.7 }, // Addis Ababa
           { lat: 2.0, lon: 45.3 }, // Mogadishu
           { lat: -1.3, lon: 36.8 }, // Nairobi
           { lat: -4.0, lon: 39.7 }, // Mombasa
-          { lat: -6.8, lon: 39.3 }, // Dar es Salaam
           { lat: -6.2, lon: 39.2 },
         ],
       },
       {
-        // medium: from Arabia, the dhow route across the Indian Ocean.
+        // medium: from India, across the Arabian Sea and down the coast.
         journeyId: "medium",
         points: [
+          { lat: 19.1, lon: 72.9 }, // Mumbai
           { lat: 23.6, lon: 58.5 }, // Muscat
           { lat: 15.4, lon: 44.2 }, // Sanaa
-          { lat: 9.0, lon: 38.7 }, // Addis Ababa
+          { lat: 2.0, lon: 45.3 }, // Mogadishu
           { lat: -4.0, lon: 39.7 }, // Mombasa
           { lat: -6.2, lon: 39.2 },
         ],
       },
       {
-        // long: from India, across the ocean via the Gulf.
+        // long: from Europe, down through Africa to the Indian Ocean.
         journeyId: "long",
         points: [
-          { lat: 19.1, lon: 72.9 }, // Mumbai
-          { lat: 25.3, lon: 55.3 }, // Dubai
-          { lat: 15.4, lon: 44.2 }, // Sanaa
-          { lat: 2.0, lon: 45.3 }, // Mogadishu
+          { lat: 41.9, lon: 12.5 }, // Rome
+          { lat: 30.0, lon: 31.2 }, // Cairo
+          { lat: 15.6, lon: 32.5 }, // Khartoum
+          { lat: -1.3, lon: 36.8 }, // Nairobi
           { lat: -4.0, lon: 39.7 }, // Mombasa
           { lat: -6.2, lon: 39.2 },
         ],
@@ -649,25 +653,25 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // medium: from the Atlantic side, over the Andes.
+        // medium: from Brazil's northeast, down the Atlantic and over the Andes.
         journeyId: "medium",
         points: [
+          { lat: -8.1, lon: -34.9 }, // Recife
           { lat: -22.9, lon: -43.2 }, // Rio de Janeiro
-          { lat: -25.3, lon: -57.6 }, // Asuncion
           { lat: -34.6, lon: -58.4 }, // Buenos Aires
           { lat: -32.9, lon: -68.8 }, // Mendoza
           { lat: -33.0, lon: -71.6 },
         ],
       },
       {
-        // long: from the Caribbean, the length of the Pacific coast.
+        // long: from North America, the length of the Pacific coast.
         journeyId: "long",
         points: [
-          { lat: 10.5, lon: -66.9 }, // Caracas
+          { lat: 19.4, lon: -99.1 }, // Mexico City
+          { lat: 9.0, lon: -79.5 }, // Panama City
           { lat: 4.7, lon: -74.1 }, // Bogota
           { lat: -12.0, lon: -77.0 }, // Lima
           { lat: -23.7, lon: -70.4 }, // Antofagasta
-          { lat: -33.4, lon: -70.7 }, // Santiago
           { lat: -33.0, lon: -71.6 },
         ],
       },
@@ -678,10 +682,10 @@ export const destinations: DestinationEntry[] = [
     destination: { name: "Bergen", at: { lat: 60.4, lon: 5.3 } },
     routes: [
       {
-        // short: from central Europe, up through the lowlands.
+        // short: from Italy, up through central Europe and the lowlands.
         journeyId: "short",
         points: [
-          { lat: 48.2, lon: 16.4 }, // Vienna
+          { lat: 41.9, lon: 12.5 }, // Rome
           { lat: 52.5, lon: 13.4 }, // Berlin
           { lat: 55.7, lon: 12.6 }, // Copenhagen
           { lat: 59.9, lon: 10.8 }, // Oslo
@@ -689,25 +693,25 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // medium: from Iberia, up the Atlantic facade.
+        // medium: from North Africa, up the Atlantic facade of Europe.
         journeyId: "medium",
         points: [
-          { lat: 38.7, lon: -9.1 }, // Lisbon
+          { lat: 30.0, lon: 31.2 }, // Cairo
+          { lat: 41.9, lon: 12.5 }, // Rome
           { lat: 48.9, lon: 2.4 }, // Paris
           { lat: 51.5, lon: -0.1 }, // London
-          { lat: 55.9, lon: -4.3 }, // Glasgow
           { lat: 60.4, lon: 5.3 },
         ],
       },
       {
-        // long: from North Africa, across the whole of Europe.
+        // long: from India, across Persia and the whole of Europe.
         journeyId: "long",
         points: [
-          { lat: 30.0, lon: 31.2 }, // Cairo
-          { lat: 37.9, lon: 23.7 }, // Athens
+          { lat: 28.6, lon: 77.2 }, // Delhi
+          { lat: 35.7, lon: 51.4 }, // Tehran
+          { lat: 41.0, lon: 29.0 }, // Istanbul
           { lat: 41.9, lon: 12.5 }, // Rome
           { lat: 48.9, lon: 2.4 }, // Paris
-          { lat: 59.9, lon: 10.8 }, // Oslo
           { lat: 60.4, lon: 5.3 },
         ],
       },
@@ -718,34 +722,36 @@ export const destinations: DestinationEntry[] = [
     destination: { name: "Dubrovnik", at: { lat: 42.6, lon: 18.1 } },
     routes: [
       {
-        // short: from Greece, up the Balkan coast.
+        // short: from the Levant, across Anatolia and the Balkans.
         journeyId: "short",
         points: [
-          { lat: 37.9, lon: 23.7 }, // Athens
-          { lat: 41.3, lon: 19.8 }, // Tirana
-          { lat: 42.4, lon: 18.8 }, // Kotor
+          { lat: 33.9, lon: 35.5 }, // Beirut
+          { lat: 41.0, lon: 29.0 }, // Istanbul
+          { lat: 42.7, lon: 23.3 }, // Sofia
+          { lat: 44.8, lon: 20.5 }, // Belgrade
           { lat: 42.6, lon: 18.1 },
         ],
       },
       {
-        // medium: from the Baltic, down through central Europe.
+        // medium: from the Persian Gulf, through Mesopotamia and the Balkans.
         journeyId: "medium",
-        points: [
-          { lat: 52.2, lon: 21.0 }, // Warsaw
-          { lat: 50.1, lon: 14.4 }, // Prague
-          { lat: 48.2, lon: 16.4 }, // Vienna
-          { lat: 45.8, lon: 16.0 }, // Zagreb
-          { lat: 42.6, lon: 18.1 },
-        ],
-      },
-      {
-        // long: from the Persian Gulf, through Anatolia and the Balkans.
-        journeyId: "long",
         points: [
           { lat: 25.3, lon: 55.3 }, // Dubai
           { lat: 33.3, lon: 44.4 }, // Baghdad
           { lat: 41.0, lon: 29.0 }, // Istanbul
           { lat: 42.7, lon: 23.3 }, // Sofia
+          { lat: 44.8, lon: 20.5 }, // Belgrade
+          { lat: 42.6, lon: 18.1 },
+        ],
+      },
+      {
+        // long: from East Asia, across Central Asia and Anatolia.
+        journeyId: "long",
+        points: [
+          { lat: 39.9, lon: 116.4 }, // Beijing
+          { lat: 43.3, lon: 76.9 }, // Almaty
+          { lat: 35.7, lon: 51.4 }, // Tehran
+          { lat: 41.0, lon: 29.0 }, // Istanbul
           { lat: 44.8, lon: 20.5 }, // Belgrade
           { lat: 42.6, lon: 18.1 },
         ],
@@ -768,13 +774,13 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // medium: from Southeast Asia, down through Australia.
+        // medium: from Indonesia, down through Australia.
         journeyId: "medium",
         points: [
-          { lat: 1.4, lon: 103.8 }, // Singapore
           { lat: -6.2, lon: 106.8 }, // Jakarta
           { lat: -31.9, lon: 115.9 }, // Perth
-          { lat: -37.8, lon: 145.0 }, // Melbourne
+          { lat: -33.9, lon: 151.2 }, // Sydney
+          { lat: -41.3, lon: 174.8 }, // Wellington
           { lat: -45.0, lon: 168.7 },
         ],
       },
@@ -819,10 +825,11 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // long: from the Chinese seaboard, over Tibet into the Himalaya.
+        // long: from Japan, across China and over Tibet.
         journeyId: "long",
         points: [
-          { lat: 31.2, lon: 121.5 }, // Shanghai
+          { lat: 35.7, lon: 139.7 }, // Tokyo
+          { lat: 39.9, lon: 116.4 }, // Beijing
           { lat: 30.7, lon: 104.1 }, // Chengdu
           { lat: 29.7, lon: 91.1 }, // Lhasa
           { lat: 29.3, lon: 88.9 }, // Shigatse
@@ -853,17 +860,17 @@ export const destinations: DestinationEntry[] = [
           { lat: -34.6, lon: -58.4 }, // Buenos Aires
           { lat: -30.0, lon: -51.2 }, // Porto Alegre
           { lat: -23.6, lon: -46.6 }, // Sao Paulo
-          { lat: -16.3, lon: -39.0 }, // Porto Seguro
+          { lat: -22.9, lon: -43.2 }, // Rio de Janeiro
           { lat: -12.97, lon: -38.5 },
         ],
       },
       {
-        // long: from West Africa, the Atlantic crossing of the slave trade.
+        // long: from West Africa, the Atlantic crossing of the trade winds.
         journeyId: "long",
         points: [
           { lat: 6.5, lon: 3.4 }, // Lagos
           { lat: 5.6, lon: -0.2 }, // Accra
-          { lat: 14.9, lon: -23.5 }, // Praia (Cape Verde)
+          { lat: 14.7, lon: -17.4 }, // Dakar
           { lat: -8.1, lon: -34.9 }, // Recife
           { lat: -10.9, lon: -37.1 }, // Aracaju
           { lat: -12.97, lon: -38.5 },
@@ -876,20 +883,10 @@ export const destinations: DestinationEntry[] = [
     destination: { name: "Tbilisi", at: { lat: 41.7, lon: 44.8 } },
     routes: [
       {
-        // short: from Anatolia, across the eastern highlands.
+        // short: from the Gulf, up through Mesopotamia and Persia.
         journeyId: "short",
         points: [
-          { lat: 41.0, lon: 29.0 }, // Istanbul
-          { lat: 39.9, lon: 32.9 }, // Ankara
-          { lat: 41.0, lon: 39.7 }, // Trabzon
-          { lat: 41.7, lon: 44.8 },
-        ],
-      },
-      {
-        // medium: from Arabia, up through Mesopotamia and Persia.
-        journeyId: "medium",
-        points: [
-          { lat: 29.4, lon: 47.9 }, // Kuwait City
+          { lat: 25.3, lon: 55.3 }, // Dubai
           { lat: 33.3, lon: 44.4 }, // Baghdad
           { lat: 35.7, lon: 51.4 }, // Tehran
           { lat: 40.4, lon: 49.9 }, // Baku
@@ -897,14 +894,25 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // long: from the Atlantic, across the whole of Europe to the Caucasus.
-        journeyId: "long",
+        // medium: from the Atlantic, across the whole of Europe.
+        journeyId: "medium",
         points: [
           { lat: 38.7, lon: -9.1 }, // Lisbon
-          { lat: 48.9, lon: 2.4 }, // Paris
-          { lat: 50.5, lon: 30.5 }, // Kyiv
+          { lat: 41.9, lon: 12.5 }, // Rome
           { lat: 41.0, lon: 29.0 }, // Istanbul
           { lat: 40.2, lon: 44.5 }, // Yerevan
+          { lat: 41.7, lon: 44.8 },
+        ],
+      },
+      {
+        // long: from East Asia, across Central Asia to the Caucasus.
+        journeyId: "long",
+        points: [
+          { lat: 39.9, lon: 116.4 }, // Beijing
+          { lat: 43.3, lon: 76.9 }, // Almaty
+          { lat: 39.7, lon: 67.0 }, // Samarkand
+          { lat: 35.7, lon: 51.4 }, // Tehran
+          { lat: 40.4, lon: 49.9 }, // Baku
           { lat: 41.7, lon: 44.8 },
         ],
       },
@@ -926,22 +934,22 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // medium: from Central Asia, across the steppe.
+        // medium: from the Gulf, across Central Asia and the steppe.
         journeyId: "medium",
         points: [
+          { lat: 25.3, lon: 55.3 }, // Dubai
           { lat: 41.3, lon: 69.3 }, // Tashkent
           { lat: 43.3, lon: 76.9 }, // Almaty
-          { lat: 51.2, lon: 71.4 }, // Astana
           { lat: 55.0, lon: 82.9 }, // Novosibirsk
           { lat: 47.9, lon: 106.9 },
         ],
       },
       {
-        // long: from Eastern Europe, the Trans-Siberian arc.
+        // long: from western Europe, the Trans-Siberian arc.
         journeyId: "long",
         points: [
+          { lat: 48.9, lon: 2.4 }, // Paris
           { lat: 55.8, lon: 37.6 }, // Moscow
-          { lat: 56.8, lon: 60.6 }, // Yekaterinburg
           { lat: 55.0, lon: 82.9 }, // Novosibirsk
           { lat: 52.3, lon: 104.3 }, // Irkutsk
           { lat: 50.3, lon: 106.5 }, // Kyakhta
@@ -965,12 +973,11 @@ export const destinations: DestinationEntry[] = [
         ],
       },
       {
-        // medium: from the US east coast, across the continent and ocean.
+        // medium: from Mexico, up the coast and across the ocean.
         journeyId: "medium",
         points: [
-          { lat: 40.7, lon: -74.0 }, // New York
-          { lat: 41.9, lon: -87.6 }, // Chicago
-          { lat: 36.1, lon: -115.2 }, // Las Vegas
+          { lat: 19.4, lon: -99.1 }, // Mexico City
+          { lat: 34.1, lon: -118.2 }, // Los Angeles
           { lat: 37.6, lon: -122.4 }, // San Francisco
           { lat: 21.3, lon: -157.9 },
         ],
@@ -979,10 +986,10 @@ export const destinations: DestinationEntry[] = [
         // long: from East Asia, island-hopping across the whole Pacific.
         journeyId: "long",
         points: [
+          { lat: 31.2, lon: 121.5 }, // Shanghai
           { lat: 35.7, lon: 139.7 }, // Tokyo
           { lat: 13.5, lon: 144.8 }, // Guam
           { lat: 7.1, lon: 171.4 }, // Majuro
-          { lat: 1.4, lon: 173.0 }, // Tarawa
           { lat: 21.3, lon: -157.9 },
         ],
       },

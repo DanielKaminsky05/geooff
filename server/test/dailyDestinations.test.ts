@@ -74,7 +74,7 @@ describe("daily dive destinations", () => {
     }
   });
 
-  it("the long route is an epic trek: origin is far (> 3500 km) from the destination", () => {
+  it("the long route is an epic trek: origin is very far (> 5000 km) from the destination", () => {
     for (const { destination, routes } of destinations) {
       const long = routes.find((r) => r.journeyId === "long")!;
       const origin = long.points[0];
@@ -82,11 +82,11 @@ describe("daily dive destinations", () => {
       expect(
         km,
         `${destination.name} long origin->dest distance (${Math.round(km)} km)`,
-      ).toBeGreaterThan(3500);
+      ).toBeGreaterThan(5000);
     }
   });
 
-  it("every route's origin is clearly distant (> 500 km) — never a local hop", () => {
+  it("every route's origin is a real cross-region journey (> 1200 km) — never a local hop", () => {
     for (const { destination, routes } of destinations) {
       for (const route of routes) {
         const origin = route.points[0];
@@ -94,7 +94,7 @@ describe("daily dive destinations", () => {
         expect(
           km,
           `${destination.name}/${route.journeyId} origin->dest (${Math.round(km)} km)`,
-        ).toBeGreaterThan(500);
+        ).toBeGreaterThan(1200);
       }
     }
   });
