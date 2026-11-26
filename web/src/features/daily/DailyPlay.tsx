@@ -21,7 +21,7 @@ import { postAnswer, RateLimitedError } from "./dailyApi";
 import { project } from "./geo";
 import { smoothPath } from "./smoothPath";
 import { buildRouteGeometry, pointAtFraction } from "./routeGeometry";
-import { DAILY_BASE_SECONDS } from "./contract";
+import { DAILY_BASE_SECONDS, DAILY_PROMPT_MAX } from "./contract";
 import type { DailyDestination, DailyPrompt, DailyPromptResult, DailyRoute } from "./contract";
 
 export interface DailyPlayProps {
@@ -53,9 +53,16 @@ export default function DailyPlay({
 }: DailyPlayProps) {
   const namedRef = useRef<Set<string>>(new Set());
   const [named, setNamed] = useState<Set<string>>(() => namedRef.current);
-  const pointsRef = useRef(0);
+  const pointsRef = useRef(0); // raw rarity-weighted points captured so far
+  const promptMaxRef = useRef(0); // this prompt's full weighted pool (from server)
   const totalRef = useRef(0);
   const [, forceTally] = useState(0);
+
+  // Normalized score for THIS prompt: your captured share of its pool, 0..100.
+  const normScore = (): number =>
+    promptMaxRef.current > 0
+      ? Math.min(DAILY_PROMPT_MAX, (DAILY_PROMPT_MAX * pointsRef.current) / promptMaxRef.current)
+      : 0;
 
   const [rejectMsg, setRejectMsg] = useState<string | null>(null);
   const [rejectSignal, setRejectSignal] = useState(0);
@@ -65,11 +72,14 @@ export default function DailyPlay({
   const finish = useCallback(() => {
     if (doneRef.current) return;
     doneRef.current = true;
+    // Report the NORMALIZED base (0..100); the server re-applies the sweep bonus.
+    const max = promptMaxRef.current;
+    const base = max > 0 ? Math.min(DAILY_PROMPT_MAX, (DAILY_PROMPT_MAX * pointsRef.current) / max) : 0;
     onComplete({
       promptId: prompt.id,
       named: namedRef.current.size,
       total: totalRef.current,
-      points: pointsRef.current,
+      points: base,
     });
   }, [onComplete, prompt.id]);
 
@@ -85,6 +95,7 @@ export default function DailyPlay({
         try {
           const res = await postAnswer({ dailyDate, promptId: prompt.id, answer: text });
           if (res.promptTotal !== undefined) totalRef.current = res.promptTotal;
+          if (res.promptMax !== undefined) promptMaxRef.current = res.promptMax;
 
           if (res.valid && res.iso) {
             const iso = res.iso.toLowerCase();
@@ -199,7 +210,7 @@ export default function DailyPlay({
           <span data-testid="prompt-tally" className="text-sm font-semibold text-foreground [text-shadow:0_1px_2px_var(--map-paper),0_0_6px_var(--map-paper)]">
             {named.size}
             {total_ ? ` of ${total_}` : ""} named
-            {pointsRef.current ? ` · ${Math.round(pointsRef.current)} pts` : ""}
+            {pointsRef.current ? ` · ${Math.round(normScore())} / ${DAILY_PROMPT_MAX}` : ""}
           </span>
         </div>
       </div>

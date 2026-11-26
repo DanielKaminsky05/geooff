@@ -29,6 +29,7 @@ export type {
 
 export {
   DAILY_PROMPT_COUNT,
+  DAILY_PROMPT_MAX,
   DAILY_BASE_SECONDS,
   DAILY_TIME_BONUS_SECONDS,
   DAILY_COMPLETION_BONUS,
@@ -45,22 +46,36 @@ export const FIXTURE_DAILY_SET: DailySet = {
     { id: "name-ends-stan", label: "Name a country whose name ends in “-stan”" },
   ],
   journeys: [
-    { id: "short", distance: 300, landmarks: [{ atFraction: 1, gold: 40 }] },
+    {
+      id: "short",
+      distance: 300,
+      landmarks: [
+        { atFraction: 0.5, gold: 20 },
+        { atFraction: 1, gold: 30 },
+      ],
+    },
     {
       id: "medium",
-      distance: 600,
+      distance: 490,
       landmarks: [
-        { atFraction: 0.5, gold: 25 },
-        { atFraction: 1, gold: 60 },
+        { atFraction: 0.2, gold: 12 },
+        { atFraction: 0.4, gold: 15 },
+        { atFraction: 0.6, gold: 18 },
+        { atFraction: 0.8, gold: 20 },
+        { atFraction: 1, gold: 35 },
       ],
     },
     {
       id: "long",
-      distance: 1000,
+      distance: 640,
       landmarks: [
-        { atFraction: 0.33, gold: 30 },
-        { atFraction: 0.66, gold: 45 },
-        { atFraction: 1, gold: 100 },
+        { atFraction: 0.14, gold: 18 },
+        { atFraction: 0.29, gold: 22 },
+        { atFraction: 0.43, gold: 25 },
+        { atFraction: 0.57, gold: 28 },
+        { atFraction: 0.71, gold: 32 },
+        { atFraction: 0.86, gold: 35 },
+        { atFraction: 1, gold: 40 },
       ],
     },
   ],

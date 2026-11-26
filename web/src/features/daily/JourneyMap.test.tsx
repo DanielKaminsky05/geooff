@@ -65,9 +65,9 @@ describe("JourneyMap", () => {
       <JourneyMap route={mediumRoute} destination={istanbul} landmarks={mediumLandmarks} progress={0.5} />,
     );
     const pins = getAllByTestId("journey-landmark");
-    // medium landmarks at 0.5 and 1.0; at progress 0.5 the first is lit, last not.
-    expect(pins[0].getAttribute("data-lit")).toBe("true");
-    expect(pins[1].getAttribute("data-lit")).toBe("false");
+    // At progress 0.5, landmarks at/below 0.5 are lit; the final (1.0) is not.
+    expect(pins[0].getAttribute("data-lit")).toBe("true"); // earliest fraction
+    expect(pins[pins.length - 1].getAttribute("data-lit")).toBe("false"); // arrival (1.0)
   });
 
   it("places the traveler between the start and the destination at mid progress", () => {
