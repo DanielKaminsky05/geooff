@@ -397,8 +397,9 @@ export interface DailyAnswerRes {
    *  — the denominator the client normalizes against so each prompt tops out at
    *  DAILY_PROMPT_MAX. A scalar aggregate; reveals no answers. (present when valid) */
   promptMax?: number;
-  /** why a guess was rejected. */
-  reason?: "wrong" | "duplicate" | "empty";
+  /** why a guess was rejected. Daily dedup is client-side (the server is
+   *  stateless), so it never returns "duplicate" here — only "wrong"/"empty". */
+  reason?: "wrong" | "empty";
 }
 
 /** How a single prompt went — part of the finish payload + recap. */
