@@ -74,9 +74,14 @@ export function registerDailyAdminRoutes(app: Express, options: DailyAdminOption
 
   app.get("/daily/admin/catalog", requireToken, async (_req: Request, res: Response) => {
     let usage = new Map<string, string[]>();
+    // Whether `usedOn` reflects the real published set. On a repo failure we
+    // still serve the catalog (the builder is usable), but flag the usage as
+    // unknown so the UI doesn't present every prompt as never-used.
+    let usageAvailable = true;
     try {
       if (repo) usage = usageMap(await repo.list());
     } catch (err) {
+      usageAvailable = false;
       console.warn("[daily/admin] usage lookup failed — returning empty usage.", err);
     }
     // Admin-only, so revealing each prompt's valid answers (country names) is
@@ -93,7 +98,7 @@ export function registerDailyAdminRoutes(app: Express, options: DailyAdminOption
       .sort((a, b) => a.label.localeCompare(b.label));
     // The default temple layout per journey — the builder seeds its gold editor
     // from this (positions fixed; the author tunes the gold).
-    res.json({ prompts, journeyDefaults: JOURNEY_LANDMARKS });
+    res.json({ prompts, journeyDefaults: JOURNEY_LANDMARKS, usageAvailable });
   });
 
   app.post("/daily/admin/sets", requireToken, async (req: Request, res: Response) => {

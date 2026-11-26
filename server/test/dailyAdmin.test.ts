@@ -199,6 +199,19 @@ describe("GET /daily/admin/catalog", () => {
     const after = await request(app).get("/daily/admin/catalog").set("x-admin-token", TOKEN);
     const used1 = after.body.prompts.find((p: { id: string }) => p.id === FIVE[0]);
     expect(used1.usedOn).toContain(DATE);
+    expect(after.body.usageAvailable).toBe(true);
+  });
+
+  it("still serves the catalog but flags usage unavailable when the repo fails", async () => {
+    const { app } = makeApp(makeFakeAuthoredSetsRepo({ failWith: new Error("db down") }));
+    const res = await request(app).get("/daily/admin/catalog").set("x-admin-token", TOKEN);
+    // Degrade, don't 500: the builder stays usable, but usage is marked unknown
+    // so it can't present every prompt as never-used.
+    expect(res.status).toBe(200);
+    expect(res.body.prompts.length).toBeGreaterThan(0);
+    expect(res.body.usageAvailable).toBe(false);
+    const p0 = res.body.prompts.find((p: { id: string }) => p.id === FIVE[0]);
+    expect(p0.usedOn).toEqual([]);
   });
 });
 

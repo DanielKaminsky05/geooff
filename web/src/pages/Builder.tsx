@@ -79,7 +79,12 @@ export default function Builder() {
               long: cat.journeyDefaults.long.map((l) => ({ ...l })),
             },
       );
-      setStatus(`Loaded ${cat.prompts.length} prompts.`);
+      setStatus(
+        `Loaded ${cat.prompts.length} prompts.` +
+          (cat.usageAvailable
+            ? ""
+            : " Warning: usage data unavailable — prompt reuse across days is not shown."),
+      );
     } catch (err) {
       setCatalog(null);
       setError(err instanceof Error ? err.message : String(err));

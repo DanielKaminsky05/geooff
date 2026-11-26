@@ -30,6 +30,9 @@ export interface BuilderCatalog {
   prompts: CatalogPrompt[];
   /** Default temple layout per journey — the gold editor seeds from this. */
   journeyDefaults: Record<JourneyId, DailyLandmark[]>;
+  /** False when the server couldn't load published-set usage, so every prompt's
+   *  `usedOn` is empty because it's UNKNOWN, not because it's unused. */
+  usageAvailable: boolean;
 }
 
 /** The authored payload the server validates, compiles, and stores. Destination
@@ -80,7 +83,9 @@ export async function fetchCatalog(token: string): Promise<BuilderCatalog> {
   const res = await adminFetch("/daily/admin/catalog", token);
   if (res.status === 401) throw new Error("Unauthorized — check the admin token.");
   if (!res.ok) throw new Error(`GET /daily/admin/catalog -> ${res.status}`);
-  return (await res.json()) as BuilderCatalog;
+  const data = (await res.json()) as BuilderCatalog;
+  // Default to true for forward-compat with a server that doesn't send the flag.
+  return { ...data, usageAvailable: data.usageAvailable ?? true };
 }
 
 /** Save an authored trek. Throws with the server's reason on a 400. */
