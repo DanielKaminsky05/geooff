@@ -117,10 +117,10 @@ export default function DailyRecap({ result, percentile, progress = 0, answers, 
       <header className="chrome-bar chrome-ink shrink-0 border-b border-[var(--color-chrome-gold)]/40 px-4 py-5 text-center">
         <h2
           data-testid="daily-recap-headline"
-          className="daily-tier-pop max-w-full px-2 font-display font-black uppercase"
+          className="daily-tier-pop max-w-full break-words px-2 font-display font-black uppercase leading-[1.05]"
           style={{
             color: arrived ? "var(--color-chrome-gold)" : "var(--color-accent)",
-            fontSize: "clamp(1.4rem, 7.5vw, 3rem)",
+            fontSize: "clamp(1.2rem, 6vw, 2.4rem)",
           }}
         >
           {category}

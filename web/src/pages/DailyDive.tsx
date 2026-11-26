@@ -308,7 +308,7 @@ export default function DailyDive() {
               className="pointer-events-none absolute inset-x-0 top-14 z-20 flex flex-col items-center gap-2 px-8 text-center"
             >
               <div
-                className="daily-tier-pop max-w-full font-display font-black uppercase leading-none"
+                className="daily-tier-pop max-w-full break-words font-display font-black uppercase leading-[1.05]"
                 style={{ color: tier.color, fontSize: "clamp(1.4rem, 8vw, 3.5rem)" }}
               >
                 {tier.label}
