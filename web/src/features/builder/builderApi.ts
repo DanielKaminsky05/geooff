@@ -46,6 +46,12 @@ export interface SaveResult {
   set: DailySet;
 }
 
+/** A currently-published authored day (what overrides the generator now). */
+export interface PublishedDay {
+  dailyDate: string;
+  destinationName: string;
+}
+
 async function adminFetch(path: string, token: string, init?: RequestInit): Promise<Response> {
   return fetch(url(path), {
     ...init,
@@ -78,4 +84,19 @@ export async function saveSet(token: string, authored: AuthoredDailySet): Promis
   }
   if (!res.ok) throw new Error(`POST /daily/admin/sets -> ${res.status}`);
   return (await res.json()) as SaveResult;
+}
+
+/** List the currently-published authored days. */
+export async function listSets(token: string): Promise<PublishedDay[]> {
+  const res = await adminFetch("/daily/admin/sets", token);
+  if (res.status === 401) throw new Error("Unauthorized — check the admin token.");
+  if (!res.ok) throw new Error(`GET /daily/admin/sets -> ${res.status}`);
+  return ((await res.json()) as { sets: PublishedDay[] }).sets;
+}
+
+/** Unpublish a day: removes it from the DB and the live server overlay. */
+export async function deleteSet(token: string, dailyDate: string): Promise<void> {
+  const res = await adminFetch(`/daily/admin/sets/${dailyDate}`, token, { method: "DELETE" });
+  if (res.status === 401) throw new Error("Unauthorized — check the admin token.");
+  if (!res.ok) throw new Error(`DELETE /daily/admin/sets -> ${res.status}`);
 }

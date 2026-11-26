@@ -16,9 +16,12 @@ import type { GeoPoint, JourneyId } from "../features/daily/contract";
 import {
   fetchCatalog,
   saveSet,
+  listSets,
+  deleteSet,
   DAILY_PROMPT_COUNT,
   type BuilderCatalog,
   type CatalogPrompt,
+  type PublishedDay,
 } from "../features/builder/builderApi";
 
 const TOKEN_KEY = "geofight.builder.token";
@@ -42,6 +45,7 @@ const { viewBox, locations } = mapFor("countries");
 export default function Builder() {
   const [token, setToken] = useState<string>(() => localStorage.getItem(TOKEN_KEY) ?? "");
   const [catalog, setCatalog] = useState<BuilderCatalog | null>(null);
+  const [published, setPublished] = useState<PublishedDay[]>([]);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
 
@@ -59,8 +63,9 @@ export default function Builder() {
     setError("");
     setStatus("Loading catalog…");
     try {
-      const cat = await fetchCatalog(token);
+      const [cat, sets] = await Promise.all([fetchCatalog(token), listSets(token)]);
       setCatalog(cat);
+      setPublished(sets);
       setStatus(`Loaded ${cat.prompts.length} prompts.`);
     } catch (err) {
       setCatalog(null);
@@ -68,6 +73,18 @@ export default function Builder() {
       setStatus("");
     }
   }, [token]);
+
+  const removeDay = async (d: string) => {
+    if (!window.confirm(`Unpublish ${d}? It will revert to the generator.`)) return;
+    setError("");
+    try {
+      await deleteSet(token, d);
+      setStatus(`Unpublished ${d}.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   useEffect(() => {
     if (token) void load();
@@ -309,6 +326,21 @@ export default function Builder() {
               {status && <p className="text-sm text-emerald-400">{status}</p>}
               {error && <p className="text-sm text-rose-400">{error}</p>}
             </div>
+
+            {/* Published days — remove to revert a date to the generator. */}
+            {published.length > 0 && (
+              <div className="border-t border-slate-700 pt-3">
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Published days ({published.length})</label>
+                <ul className="divide-y divide-slate-800 border border-slate-700">
+                  {published.map((d) => (
+                    <li key={d.dailyDate} className="flex items-center justify-between gap-2 px-2 py-1 text-sm">
+                      <span className="truncate tabular-nums">{d.dailyDate} · {d.destinationName}</span>
+                      <button onClick={() => removeDay(d.dailyDate)} className="shrink-0 rounded bg-rose-700/80 px-2 py-0.5 text-xs hover:bg-rose-600">Remove</button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
