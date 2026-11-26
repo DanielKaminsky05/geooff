@@ -9,8 +9,14 @@ import Home from "./pages/Home";
 // demand, and the ~1.2MB of map path data (@svg-maps/*) only with the match.
 const loadLobby = () => import("./pages/Lobby");
 const loadMatch = () => import("./pages/Match");
+const loadDaily = () => import("./pages/DailyDive");
 const Lobby = lazy(loadLobby);
 const Match = lazy(loadMatch);
+const DailyDive = lazy(loadDaily);
+
+// Phase 3: the Trek Builder is a dev-only authoring tool — its route and chunk
+// only exist in a dev build (`import.meta.env.DEV`), never in production.
+const Builder = import.meta.env.DEV ? lazy(() => import("./pages/Builder")) : null;
 
 /** Warm the next route's chunk once the current page is idle. */
 function usePreload(load: () => Promise<unknown>) {
@@ -66,6 +72,8 @@ export function AppRoutes() {
         <Routes>
           <Route path="/" element={<HomeRoute />} />
           <Route path="/room/:code" element={<LobbyRoute />} />
+          <Route path="/daily" element={<DailyDive />} />
+          {Builder && <Route path="/builder" element={<Builder />} />}
           <Route path="/game/:code" element={<Match />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -5,6 +5,9 @@
  * round timer (via `endsAt`), and never sends the answer list to clients.
  */
 
+// Load server/.env (Supabase creds, Phase 2) before anything reads process.env.
+// No-ops when the file is absent, so CI/offline need no credentials.
+import "dotenv/config";
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import express, { type Express } from "express";
@@ -65,6 +68,10 @@ import {
   allIdsFor,
 } from "./sets.js";
 import { buildPromptPool } from "./prompts.js";
+import { registerDailyRoutes } from "./daily/routes.js";
+import { makeSupabaseRunsRepo } from "./daily/supabaseRunsRepo.js";
+import { registerDailyAdminRoutes, hydrateAuthoredSets } from "./daily/adminRoutes.js";
+import { makeSupabaseAuthoredSetsRepo } from "./daily/authoredSetsRepo.js";
 import { REVEAL_MS_DEFAULT, voteSkipReveal } from "./reveal.js";
 import {
   MAX_ANSWER_LENGTH,
@@ -157,6 +164,10 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
   /* ---------------------------------------------------------------- */
 
   const app = express();
+  // Trust one proxy hop (Fly's edge) so `req.ip` is the real client IP — the
+  // Daily Trek answer route rate-limits per IP, which only works with the true
+  // address. Local/direct connections are unaffected (no X-Forwarded-For).
+  app.set("trust proxy", 1);
   app.use(cors({ origin: true }));
   app.use(express.json());
 
@@ -173,6 +184,25 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
     }
     res.json({ exists: true, status: room.phase, playerCount: room.players.length });
   });
+
+  // Daily Trek — stateless REST (GET /daily, POST /daily/answer, /daily/finish).
+  // Phase 2: a Supabase repo persists finished runs for a real percentile; it's
+  // `null` when Supabase is unconfigured, degrading to the synthetic percentile.
+  registerDailyRoutes(app, { runsRepo: makeSupabaseRunsRepo() });
+
+  // Phase 3: the Trek Builder admin surface. LOCAL-ONLY by design — it mounts
+  // only when BOTH hold: DAILY_ADMIN_TOKEN is set AND we're not in production.
+  // The NODE_ENV guard means even if the token ever leaks into a prod
+  // environment, the /daily/admin/* routes still never exist there.
+  const adminToken = process.env.DAILY_ADMIN_TOKEN?.trim();
+  const isProduction = process.env.NODE_ENV === "production";
+  if (adminToken && !isProduction) {
+    const authoredRepo = makeSupabaseAuthoredSetsRepo();
+    registerDailyAdminRoutes(app, { token: adminToken, repo: authoredRepo });
+    void hydrateAuthoredSets(authoredRepo)
+      .then((n) => n > 0 && console.log(`[daily/admin] hydrated ${n} authored set(s).`))
+      .catch((err) => console.warn("[daily/admin] hydrate failed.", err));
+  }
 
   const httpServer = createHttpServer(app);
 

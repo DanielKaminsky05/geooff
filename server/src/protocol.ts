@@ -281,3 +281,172 @@ export interface ServerToClientEvents {
   rematch_start: () => void;
   error_msg: (payload: { code: string; message: string }) => void;
 }
+
+/* ------------------------------------------------------------------ */
+/* Daily Trek (stateless REST — see docs/daily-dive-requirements.md)   */
+/*                                                                     */
+/* A single-player daily mode served over REST, NOT Socket.IO:         */
+/*   GET  /daily         -> DailySet       (labels only; validIds stay  */
+/*                                           server-side as ever)        */
+/*   POST /daily/answer   -> DailyAnswerRes (validates ONE guess; this   */
+/*                                           is the only call that reads  */
+/*                                           the secret set — rate-limit) */
+/*   POST /daily/finish    -> DailyFinishRes (totals + synthetic %ile)    */
+/*                                                                     */
+/* The feed-the-clock timer is CLIENT-run in phase 1 (nothing persisted  */
+/* or ranked yet). Types here are DB-ready so phase 2 adds accounts +    */
+/* persistence without reshaping the wire.                               */
+/* ------------------------------------------------------------------ */
+
+/** Prompts in a daily set. */
+export const DAILY_PROMPT_COUNT = 5;
+/** Feed-the-clock: base seconds per prompt. */
+export const DAILY_BASE_SECONDS = 20;
+/** Feed-the-clock: seconds added per newly-named correct answer. */
+export const DAILY_TIME_BONUS_SECONDS = 2;
+/** Fraction used by the pool-bonus helpers (promptFullPoints/completionBonus).
+ *  Run scoring no longer applies a sweep multiplier — see DAILY_NAME_BONUS. */
+export const DAILY_COMPLETION_BONUS = 0.5;
+/** Per-prompt CAPTURE ceiling: fully capturing a prompt's rarity-weighted pool is
+ *  worth this, scaled by your captured share — so a huge-pool prompt ("a European
+ *  country") and a tiny-pool one ("ends in -stan") have the SAME skill ceiling. */
+export const DAILY_PROMPT_MAX = 150;
+/** Flat points for EACH correct country named, added ON TOP of the capture score.
+ *  Makes naming always pay off. This is what PLAYERS earn per name. */
+export const DAILY_NAME_BONUS = 10;
+/** The per-name bonus COUNTED when resolving journey distances (see
+ *  scoring.distanceScoreMax) — lower than DAILY_NAME_BONUS, so a tier's fraction
+ *  is measured against a smaller max than players can actually earn. Net effect:
+ *  the roads are more lenient to reach even though naming still pays full value. */
+export const DAILY_DISTANCE_NAME_BONUS = 5;
+
+export type JourneyId = "short" | "medium" | "long";
+export type DailyOutcome = "arrived" | "died";
+
+/** A geographic point in degrees (projected on the client via lonToX/latToY). */
+export interface GeoPoint {
+  lat: number;
+  lon: number;
+}
+
+/** One landmark on a journey: sits at `atFraction` of the route (0..1), banks `gold`. */
+export interface DailyLandmark {
+  atFraction: number;
+  gold: number;
+}
+
+/** One of the three routes to the day's destination — a risk/reward dial, not a
+ *  content difficulty. `distance` is the run-points needed to arrive, resolved
+ *  per day as a fraction of that day's score max (capture ceilings + per-name
+ *  bonuses) — so each tier is the same share of the day's challenge every day. */
+export interface DailyJourney {
+  id: JourneyId;
+  distance: number;
+  landmarks: DailyLandmark[];
+}
+
+/** A prompt as shown to the player: label only. The valid set stays server-side. */
+export interface DailyPrompt {
+  id: string;
+  label: string;
+}
+
+/** The day's destination city. */
+export interface DailyDestination {
+  name: string;
+  at: GeoPoint;
+}
+
+/** A journey's drawn path: ordered waypoints from the start to the destination. */
+export interface DailyRoute {
+  journeyId: JourneyId;
+  points: GeoPoint[];
+}
+
+/** Today's full set — identical for every player on `dailyDate` (UTC "YYYY-MM-DD"). */
+export interface DailySet {
+  dailyDate: string;
+  prompts: DailyPrompt[];
+  journeys: DailyJourney[];
+  destination: DailyDestination;
+  routes: DailyRoute[];
+}
+
+/** POST /daily/answer request: one guess against one prompt of the day. */
+export interface DailyAnswerReq {
+  dailyDate: string;
+  promptId: string;
+  answer: string;
+}
+
+/** POST /daily/answer response: validity and — when valid — what it scored. */
+export interface DailyAnswerRes {
+  valid: boolean;
+  /** matched country (present when valid). */
+  iso?: string;
+  name?: string;
+  /** rarity-weighted points this answer earned (present when valid). The client
+   *  sums these and divides by `promptMax` to get its normalized 0..100 score. */
+  points?: number;
+  /** seconds to add to the prompt clock (present when valid). */
+  timeBonusSec?: number;
+  /** total valid answers for this prompt — lets the client show "N of total"
+   *  and detect completion. Not the set itself. */
+  promptTotal?: number;
+  /** the prompt's FULL rarity-weighted pool (sum of every valid answer's points)
+   *  — the denominator the client normalizes against so each prompt tops out at
+   *  DAILY_PROMPT_MAX. A scalar aggregate; reveals no answers. (present when valid) */
+  promptMax?: number;
+  /** why a guess was rejected. Daily dedup is client-side (the server is
+   *  stateless), so it never returns "duplicate" here — only "wrong"/"empty". */
+  reason?: "wrong" | "empty";
+}
+
+/** How a single prompt went — part of the finish payload + recap. */
+export interface DailyPromptResult {
+  promptId: string;
+  named: number;
+  total: number;
+  /** normalized capture base for this prompt, 0..DAILY_PROMPT_MAX = your
+   *  rarity-weighted share of the prompt's pool. At finish the server adds a
+   *  flat DAILY_NAME_BONUS per named country on top of this base. */
+  points: number;
+  /** lowercase ISO codes the player named for this prompt — lets the recap
+   *  highlight which valid answers were got (green) vs missed (red). */
+  namedIsos?: string[];
+}
+
+/**
+ * A completed run. DB-ready: phase 1 stores this in localStorage; phase 2 writes
+ * the same shape to the DB. `playerId` is an anonymous device id in phase 1, a
+ * real account id once accounts land.
+ */
+export interface DailyRunResult {
+  runId: string;
+  dailyDate: string;
+  journey: JourneyId;
+  points: number;
+  perPrompt: DailyPromptResult[];
+  gold: number;
+  outcome: DailyOutcome;
+  playerId: string | null;
+}
+
+/** POST /daily/finish request: the client's completed run. */
+export interface DailyFinishReq {
+  result: DailyRunResult;
+}
+
+/** POST /daily/finish response: a synthetic percentile + the server-reconciled
+ *  result (completion bonuses applied, outcome recomputed against the journey). */
+export interface DailyFinishRes {
+  /** 0..100, "you beat ~N% of players" — hardcoded curve in phase 1. */
+  percentile: number;
+  result: DailyRunResult;
+  /** promptId → every valid answer ({iso, name}), alphabetised — revealed only
+   *  AFTER the run so the player can review (and see got/missed) per prompt. */
+  answers?: Record<string, { iso: string; name: string }[]>;
+  /** gold the player collected en route but FORFEITED by dying (0 if arrived) —
+   *  shown as "Gold lost" in red. Banked gold is on result.gold. */
+  goldLost?: number;
+}

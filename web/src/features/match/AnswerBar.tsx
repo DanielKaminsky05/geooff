@@ -9,6 +9,7 @@ export default function AnswerBar({
   rejectSignal,
   rejectMsg,
   disabled,
+  autoFocus,
   onGiveUp,
   onLeave,
 }: {
@@ -21,6 +22,8 @@ export default function AnswerBar({
   rejectSignal: number;
   rejectMsg: string | null;
   disabled: boolean;
+  /** Focus the field on mount (desktop only). */
+  autoFocus?: boolean;
   /** When set, show a "Give up" button (solo, while playing). */
   onGiveUp?: () => void;
   /** When set, show a "Leave" button (multiplayer, while the match is live). */
@@ -43,6 +46,7 @@ export default function AnswerBar({
             acceptSignal={acceptSignal}
             rejectSignal={rejectSignal}
             disabled={disabled}
+            autoFocus={autoFocus}
           />
         </div>
         {onGiveUp && (
