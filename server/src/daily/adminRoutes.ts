@@ -128,6 +128,24 @@ export function registerDailyAdminRoutes(app: Express, options: DailyAdminOption
     res.json({ sets });
   });
 
+  // Load one authored day back into an editable payload (destination, drawn
+  // routes, prompt ids, effective per-journey gold) — powers "Edit" in the builder.
+  app.get("/daily/admin/sets/:date", requireToken, (req: Request, res: Response) => {
+    const date = String(req.params.date);
+    const compiled = getAuthoredSet(date);
+    if (!compiled) {
+      res.status(404).json({ error: "not found" } as never);
+      return;
+    }
+    res.json({
+      dailyDate: date,
+      destination: compiled.destination,
+      routes: compiled.routes,
+      promptIds: compiled.prompts.map((p) => p.id),
+      landmarks: Object.fromEntries(compiled.journeys.map((j) => [j.id, j.landmarks])),
+    });
+  });
+
   // Unpublish a day: remove it from BOTH the DB and the live overlay, so
   // getDailySet reverts to the generator immediately (no restart needed).
   app.delete("/daily/admin/sets/:date", requireToken, async (req: Request, res: Response) => {

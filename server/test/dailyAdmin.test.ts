@@ -155,6 +155,30 @@ describe("GET /daily/admin/sets — published days", () => {
   });
 });
 
+describe("GET /daily/admin/sets/:date — load for editing", () => {
+  it("returns the full authored day (destination, routes, prompts, gold)", async () => {
+    const { app } = makeApp();
+    await request(app).post("/daily/admin/sets").set("x-admin-token", TOKEN).send(body());
+    const res = await request(app).get(`/daily/admin/sets/${DATE}`).set("x-admin-token", TOKEN);
+    expect(res.status).toBe(200);
+    expect(res.body.destination).toEqual(DEST);
+    expect(res.body.promptIds).toEqual(FIVE);
+    expect(res.body.routes.map((r: { journeyId: string }) => r.journeyId)).toEqual(["short", "medium", "long"]);
+    expect(res.body.landmarks.short.length).toBeGreaterThan(0);
+  });
+
+  it("404s for a date that isn't authored", async () => {
+    const { app } = makeApp();
+    const res = await request(app).get("/daily/admin/sets/2099-01-01").set("x-admin-token", TOKEN);
+    expect(res.status).toBe(404);
+  });
+
+  it("requires the token", async () => {
+    const { app } = makeApp();
+    expect((await request(app).get(`/daily/admin/sets/${DATE}`)).status).toBe(401);
+  });
+});
+
 describe("GET /daily/admin/catalog", () => {
   it("requires the token", async () => {
     const { app } = makeApp();
