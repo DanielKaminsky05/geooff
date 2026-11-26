@@ -9,15 +9,18 @@
  * The prop signature is the FROZEN CONTRACT; Track C composes it unchanged.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { DailyRunResult } from "../../lib/protocol";
 import { buildShareGrid } from "./shareGrid";
+import { runCategory, promptTier } from "./tiers";
 
 export interface DailyRecapProps {
   /** The server-reconciled finished run. */
   result: DailyRunResult;
   /** 0..100 synthetic percentile from /daily/finish. */
   percentile: number;
+  /** How far along the road the run got (0..1) — drives the result category. */
+  progress?: number;
   /** Gold balance AFTER this run was banked. */
   walletBalance: number;
   /** Optional: go back to Home / close the recap. */
@@ -56,11 +59,36 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export default function DailyRecap({ result, percentile, walletBalance, onClose }: DailyRecapProps) {
+export default function DailyRecap({ result, percentile, progress = 0, walletBalance, onClose }: DailyRecapProps) {
   const [copied, setCopied] = useState(false);
   const arrived = result.outcome === "arrived";
   const journey = JOURNEY_LABEL[result.journey] ?? result.journey;
   const pct = Math.max(0, Math.min(100, Math.round(percentile)));
+  const category = runCategory(result.outcome, result.journey, progress);
+
+  // Count the points up on reveal (the "pop"), respecting reduced motion.
+  const [shownPoints, setShownPoints] = useState(0);
+  useEffect(() => {
+    const target = result.points;
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || target <= 0) {
+      setShownPoints(target);
+      return;
+    }
+    let raf = 0;
+    const t0 = performance.now();
+    const dur = 900;
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / dur);
+      setShownPoints(Math.round(target * ease(t)));
+      if (t < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [result.points]);
 
   async function onShare() {
     const ok = await copyText(buildShareGrid(result));
@@ -82,15 +110,17 @@ export default function DailyRecap({ result, percentile, walletBalance, onClose 
       <header className="chrome-bar chrome-ink shrink-0 border-b border-[var(--color-chrome-gold)]/40 px-4 py-5 text-center">
         <h2
           data-testid="daily-recap-headline"
-          className="font-display text-3xl font-black tracking-wide sm:text-4xl"
+          className="daily-recap-pop font-display text-4xl font-black uppercase tracking-wide sm:text-5xl"
           style={{ color: arrived ? "var(--color-chrome-gold)" : "var(--color-accent)" }}
         >
-          {arrived ? "Arrived" : "Died"}
+          {category}
         </h2>
         <p className="mt-1 text-sm text-muted">
           {arrived ? "You reached your destination." : "You died on the road."}
         </p>
-        <p className="mt-0.5 text-xs text-muted">{journey} journey</p>
+        <p className="mt-0.5 text-xs uppercase tracking-widest text-muted">
+          {journey} journey · {arrived ? "Arrived" : "Died"}
+        </p>
       </header>
 
       {/* Body */}
@@ -102,7 +132,7 @@ export default function DailyRecap({ result, percentile, walletBalance, onClose 
               data-testid="daily-recap-points"
               className="font-display text-5xl font-black tabular-nums"
             >
-              {result.points.toLocaleString()}
+              {shownPoints.toLocaleString()}
             </div>
             <div className="text-xs uppercase tracking-widest text-muted">points</div>
 
@@ -110,18 +140,27 @@ export default function DailyRecap({ result, percentile, walletBalance, onClose 
               data-testid="daily-recap-breakdown"
               className="chrome-bar chrome-ink mt-3 flex flex-col gap-0.5 rounded-lg border border-[var(--color-chrome-gold)]/30 p-3 text-left text-sm"
             >
-              {result.perPrompt.map((p, i) => (
-                <li
-                  key={p.promptId}
-                  className="flex items-center justify-between gap-3 tabular-nums"
-                >
-                  <span className="text-muted">Prompt {i + 1}</span>
-                  <span className="flex-1 text-center text-muted">
-                    {p.named} / {p.total}
-                  </span>
-                  <span className="font-semibold">{p.points.toLocaleString()}</span>
-                </li>
-              ))}
+              {result.perPrompt.map((p, i) => {
+                const tier = promptTier(p.named, p.total);
+                return (
+                  <li
+                    key={p.promptId}
+                    className="flex items-center justify-between gap-3 tabular-nums"
+                  >
+                    <span className="text-muted">Prompt {i + 1}</span>
+                    <span className="flex-1 text-center text-muted">
+                      {p.named} / {p.total}
+                    </span>
+                    <span
+                      className="w-16 text-right text-xs font-semibold uppercase tracking-wide"
+                      style={{ color: tier.full ? "var(--color-chrome-gold)" : undefined }}
+                    >
+                      {tier.label}
+                    </span>
+                    <span className="w-12 text-right font-semibold">{p.points.toLocaleString()}</span>
+                  </li>
+                );
+              })}
             </ol>
           </section>
 
