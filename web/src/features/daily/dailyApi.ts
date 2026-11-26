@@ -24,9 +24,29 @@ import { FIXTURE_DAILY_SET } from "./contract";
 /** Same origin as the socket client (socket.tsx). Daily Dive is REST on it. */
 const BASE_URL = import.meta.env.VITE_WS_URL ?? "http://localhost:3001";
 
+/** Timeout (ms) for the initial daily set fetch and the finish submission. */
+const TIMEOUT_FETCH_MS = 10_000;
+/** Timeout (ms) for interactive answer validation — kept shorter for responsiveness. */
+const TIMEOUT_ANSWER_MS = 6_000;
+
 /** Build an absolute URL to a daily route on the server origin. */
 function url(path: string): string {
   return `${BASE_URL.replace(/\/$/, "")}${path}`;
+}
+
+/**
+ * Returns an AbortSignal that fires after `ms` milliseconds.
+ * Uses `AbortSignal.timeout` where available (modern browsers/Node 17+) and
+ * falls back to `AbortController + setTimeout` for environments (e.g. jsdom in
+ * tests) that do not expose `AbortSignal.timeout`.
+ */
+function timeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(ms);
+  }
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(new Error(`Request timed out after ${ms} ms`)), ms);
+  return controller.signal;
 }
 
 /** A rejected answer response the UI can treat as a soft "slow down". */
@@ -37,11 +57,12 @@ export class RateLimitedError extends Error {
   }
 }
 
-async function postJSON(path: string, body: unknown): Promise<Response> {
+async function postJSON(path: string, body: unknown, signal: AbortSignal): Promise<Response> {
   return fetch(url(path), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
 }
 
@@ -55,7 +76,10 @@ async function postJSON(path: string, body: unknown): Promise<Response> {
  */
 export async function fetchDailySet(): Promise<DailySet> {
   try {
-    const res = await fetch(url("/daily"), { headers: { accept: "application/json" } });
+    const res = await fetch(url("/daily"), {
+      headers: { accept: "application/json" },
+      signal: timeoutSignal(TIMEOUT_FETCH_MS),
+    });
     if (!res.ok) throw new Error(`GET /daily -> ${res.status}`);
     return (await res.json()) as DailySet;
   } catch (err) {
@@ -75,7 +99,7 @@ export async function fetchDailySet(): Promise<DailySet> {
  * down" hint instead of crashing. Any other HTTP failure throws.
  */
 export async function postAnswer(req: DailyAnswerReq): Promise<DailyAnswerRes> {
-  const res = await postJSON("/daily/answer", req);
+  const res = await postJSON("/daily/answer", req, timeoutSignal(TIMEOUT_ANSWER_MS));
   if (res.status === 429) {
     throw new RateLimitedError();
   }
@@ -88,7 +112,7 @@ export async function postAnswer(req: DailyAnswerReq): Promise<DailyAnswerRes> {
  * completion bonuses + outcome and returns the synthetic percentile.
  */
 export async function postFinish(req: DailyFinishReq): Promise<DailyFinishRes> {
-  const res = await postJSON("/daily/finish", req);
+  const res = await postJSON("/daily/finish", req, timeoutSignal(TIMEOUT_FETCH_MS));
   if (!res.ok) throw new Error(`POST /daily/finish -> ${res.status}`);
   return (await res.json()) as DailyFinishRes;
 }
