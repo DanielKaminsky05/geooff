@@ -8,7 +8,7 @@
  */
 
 import { DAILY_PROMPT_COUNT } from "../daily/contract";
-import type { DailySet, JourneyId, DailyLandmark } from "../daily/contract";
+import type { DailySet, JourneyId, DailyLandmark, GeoPoint, DailyRoute } from "../daily/contract";
 
 const BASE_URL = import.meta.env.VITE_WS_URL ?? "http://localhost:3001";
 
@@ -18,22 +18,24 @@ function url(path: string): string {
   return `${BASE_URL.replace(/\/$/, "")}${path}`;
 }
 
-/** One pickable prompt plus the dates it has already been used on (de-dup). */
+/** One pickable prompt: its label, correct answers, and the dates it's been used. */
 export interface CatalogPrompt {
   id: string;
   label: string;
   usedOn: string[];
+  answers: string[];
 }
 
 export interface BuilderCatalog {
   prompts: CatalogPrompt[];
-  destinations: string[];
 }
 
-/** The authored payload the server validates, compiles, and stores. */
+/** The authored payload the server validates, compiles, and stores. Destination
+ *  and routes are drawn geometry; prompts are catalog ids. */
 export interface AuthoredDailySet {
   dailyDate: string;
-  destinationName: string;
+  destination: { name: string; at: GeoPoint };
+  routes: DailyRoute[];
   promptIds: string[];
   landmarks?: Partial<Record<JourneyId, DailyLandmark[]>>;
 }
@@ -55,7 +57,7 @@ async function adminFetch(path: string, token: string, init?: RequestInit): Prom
   });
 }
 
-/** Load the prompt catalog (with usage) and destination names. */
+/** Load the prompt catalog (labels, answers, usage). */
 export async function fetchCatalog(token: string): Promise<BuilderCatalog> {
   const res = await adminFetch("/daily/admin/catalog", token);
   if (res.status === 401) throw new Error("Unauthorized — check the admin token.");

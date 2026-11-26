@@ -18,6 +18,11 @@ const PX_PER_DEG_LAT = 3.138;
 export const lonToX = (lon: number): number => X0 + PX_PER_DEG_LON * lon;
 export const latToY = (lat: number): number => EQUATOR_Y - PX_PER_DEG_LAT * lat;
 
+/** Inverse projection: SVG world-viewBox coordinates back to lon/lat. Used by
+ *  the Trek Builder to turn a map click into a geographic point. */
+export const xToLon = (x: number): number => (x - X0) / PX_PER_DEG_LON;
+export const yToLat = (y: number): number => (EQUATOR_Y - y) / PX_PER_DEG_LAT;
+
 /** The world-map viewBox string, shared with OutlineMap/WorldMap. */
 export const WORLD_VIEWBOX: string = maps.countries?.viewBox ?? "0 0 1010 666";
 
