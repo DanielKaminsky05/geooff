@@ -194,16 +194,28 @@ function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
       Math.min(DAILY_PROMPT_MAX, Number.isFinite(pp.points) ? pp.points : 0),
     );
     let named = Math.max(0, Number.isFinite(pp.named) ? pp.named : 0);
-    if (total > 0) named = Math.min(named, total);
+    if (prompt) {
+      // Known prompt: clamp `named` to the real (secret) pool size so the bonus
+      // can't exceed what the prompt actually allows.
+      if (total > 0) named = Math.min(named, total);
+    } else {
+      // Unknown/wrong-day prompt: we have no pool to clamp against, so a
+      // client-supplied `named` would grant an unbounded name bonus. Force it
+      // to 0 — no name bonus for prompts not in today's set.
+      named = 0;
+    }
     const score = base + DAILY_NAME_BONUS * named;
-    points += score;
+    const rounded = Math.round(score);
     const namedIsos = Array.isArray(pp.namedIsos)
       ? pp.namedIsos.filter((x): x is string => typeof x === "string").map((x) => x.toLowerCase())
       : [];
-    perPrompt.push({ promptId: pp.promptId, named, total, points: Math.round(score), namedIsos });
+    perPrompt.push({ promptId: pp.promptId, named, total, points: rounded, namedIsos });
+    // Accumulate the already-rounded per-prompt points so the recap's parts
+    // always sum to result.points exactly.
+    points += rounded;
   }
   result.perPrompt = perPrompt;
-  result.points = Math.round(points);
+  result.points = points;
 
   // Distance covered is run points. Arrive iff it clears the journey's distance.
   const distance = journey?.distance ?? Infinity;
