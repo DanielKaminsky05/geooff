@@ -44,12 +44,16 @@ getDailySet(date):  authored overlay  →  else procedural generator
   re-resolves them against its catalogs, so no secret valid-sets are persisted
   and the stored row stays tiny.
 
-## Security
+## Security — local-only by construction
 
-- Admin routes mount **only when `DAILY_ADMIN_TOKEN` is set** (dev); production
-  without the env has no admin surface at all.
+- **Client:** the `/builder` route and its code are gated behind
+  `import.meta.env.DEV`, so Vite tree-shakes them out of the production bundle
+  entirely (no Builder chunk, no admin-API strings ship).
+- **Server:** admin routes mount only when **both** `DAILY_ADMIN_TOKEN` is set
+  **and** `NODE_ENV !== "production"`. The env guard means even a leaked token in
+  a prod environment can't expose `/daily/admin/*`.
 - Every admin request must send a matching `x-admin-token`; mismatches are 401.
-- The builder route mounts **only in `import.meta.env.DEV`**.
+- The token lives only in `server/.env` (gitignored); `.env.example` ships blank.
 
 ## Deferred (later slices)
 - Freehand route/waypoint drawing on the map.

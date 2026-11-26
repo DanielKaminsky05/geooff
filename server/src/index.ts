@@ -190,11 +190,13 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
   // `null` when Supabase is unconfigured, degrading to the synthetic percentile.
   registerDailyRoutes(app, { runsRepo: makeSupabaseRunsRepo() });
 
-  // Phase 3: the Trek Builder admin surface. Mounts ONLY when DAILY_ADMIN_TOKEN
-  // is set (dev authoring); hydrates any persisted authored days into the overlay
-  // so curated treks survive a restart. No token in prod → no admin routes.
+  // Phase 3: the Trek Builder admin surface. LOCAL-ONLY by design — it mounts
+  // only when BOTH hold: DAILY_ADMIN_TOKEN is set AND we're not in production.
+  // The NODE_ENV guard means even if the token ever leaks into a prod
+  // environment, the /daily/admin/* routes still never exist there.
   const adminToken = process.env.DAILY_ADMIN_TOKEN?.trim();
-  if (adminToken) {
+  const isProduction = process.env.NODE_ENV === "production";
+  if (adminToken && !isProduction) {
     const authoredRepo = makeSupabaseAuthoredSetsRepo();
     registerDailyAdminRoutes(app, { token: adminToken, repo: authoredRepo });
     void hydrateAuthoredSets(authoredRepo)
