@@ -21,7 +21,7 @@ import { postAnswer, RateLimitedError } from "./dailyApi";
 import { project } from "./geo";
 import { smoothPath } from "./smoothPath";
 import { buildRouteGeometry, pointAtFraction } from "./routeGeometry";
-import { DAILY_BASE_SECONDS, DAILY_PROMPT_MAX } from "./contract";
+import { DAILY_BASE_SECONDS, DAILY_PROMPT_MAX, DAILY_NAME_BONUS } from "./contract";
 import type { DailyDestination, DailyPrompt, DailyPromptResult, DailyRoute } from "./contract";
 
 export interface DailyPlayProps {
@@ -58,11 +58,13 @@ export default function DailyPlay({
   const totalRef = useRef(0);
   const [, forceTally] = useState(0);
 
-  // Normalized score for THIS prompt: your captured share of its pool, 0..100.
-  const normScore = (): number =>
+  // Capture base for THIS prompt: your captured share of its pool, 0..150.
+  const captureBase = (): number =>
     promptMaxRef.current > 0
       ? Math.min(DAILY_PROMPT_MAX, (DAILY_PROMPT_MAX * pointsRef.current) / promptMaxRef.current)
       : 0;
+  // Live score shown to the player: capture base + the flat per-name bonus.
+  const liveScore = (): number => captureBase() + DAILY_NAME_BONUS * namedRef.current.size;
 
   const [rejectMsg, setRejectMsg] = useState<string | null>(null);
   const [rejectSignal, setRejectSignal] = useState(0);
@@ -72,14 +74,12 @@ export default function DailyPlay({
   const finish = useCallback(() => {
     if (doneRef.current) return;
     doneRef.current = true;
-    // Report the NORMALIZED base (0..100); the server re-applies the sweep bonus.
-    const max = promptMaxRef.current;
-    const base = max > 0 ? Math.min(DAILY_PROMPT_MAX, (DAILY_PROMPT_MAX * pointsRef.current) / max) : 0;
+    // Report the capture base (0..150); the server adds the per-name bonus.
     onComplete({
       promptId: prompt.id,
       named: namedRef.current.size,
       total: totalRef.current,
-      points: base,
+      points: captureBase(),
     });
   }, [onComplete, prompt.id]);
 
@@ -210,7 +210,7 @@ export default function DailyPlay({
           <span data-testid="prompt-tally" className="text-sm font-semibold text-foreground [text-shadow:0_1px_2px_var(--map-paper),0_0_6px_var(--map-paper)]">
             {named.size}
             {total_ ? ` of ${total_}` : ""} named
-            {pointsRef.current ? ` · ${Math.round(normScore())} / ${DAILY_PROMPT_MAX}` : ""}
+            {pointsRef.current ? ` · ${Math.round(liveScore())} pts` : ""}
           </span>
         </div>
       </div>

@@ -31,23 +31,17 @@ import type {
   DailyRunResult,
   JourneyId,
 } from "../features/daily/contract";
-import {
-  DAILY_PROMPT_MAX,
-  DAILY_PROMPT_COUNT,
-  DAILY_COMPLETION_BONUS,
-} from "../features/daily/contract";
-
-/** The fixed run max: 5 prompts × 100, ×1.5 if every prompt is swept (= 750). */
-const RUN_MAX = DAILY_PROMPT_COUNT * DAILY_PROMPT_MAX * (1 + DAILY_COMPLETION_BONUS);
+import { DAILY_PROMPT_MAX, DAILY_NAME_BONUS } from "../features/daily/contract";
 
 /**
- * A prompt's contribution to the run: its normalized base (0..100, clamped),
- * ×1.5 when the player named the whole set. Mirrors the server's reconcile so
- * the live leg animation agrees with the authoritative finish.
+ * A prompt's contribution to the run: its capture base (0..150, clamped) plus a
+ * flat bonus per named country (clamped to the pool size). Mirrors the server's
+ * reconcile so the live leg animation agrees with the authoritative finish.
  */
-function sweptScore(r: DailyPromptResult): number {
+function promptScore(r: DailyPromptResult): number {
   const base = Math.max(0, Math.min(DAILY_PROMPT_MAX, r.points));
-  return r.total > 0 && r.named >= r.total ? base * (1 + DAILY_COMPLETION_BONUS) : base;
+  const named = r.total > 0 ? Math.min(Math.max(0, r.named), r.total) : Math.max(0, r.named);
+  return base + DAILY_NAME_BONUS * named;
 }
 
 type Phase = "loading" | "select" | "play" | "finish" | "recap";
@@ -69,9 +63,14 @@ function pick(set: DailySet, id: JourneyId): { journey: DailyJourney; route: Dai
   return { journey, route };
 }
 
-/** Client-side percentile fallback used only if /daily/finish is unreachable. */
+/** Client-side percentile fallback used only if /daily/finish is unreachable.
+ *  Approximates the day's score max from the per-prompt pool sizes we saw. */
 function fallbackPercentile(result: DailyRunResult): number {
-  const ratio = RUN_MAX > 0 ? Math.min(1, result.points / RUN_MAX) : 0;
+  const dayMax = result.perPrompt.reduce(
+    (s, r) => s + DAILY_PROMPT_MAX + DAILY_NAME_BONUS * Math.max(0, r.total),
+    0,
+  );
+  const ratio = dayMax > 0 ? Math.min(1, result.points / dayMax) : 0;
   return Math.round(Math.min(99, Math.max(1, ratio * 100)));
 }
 
@@ -80,7 +79,7 @@ function assembleResult(
   journey: JourneyId,
   perPrompt: DailyPromptResult[],
 ): DailyRunResult {
-  const points = Math.round(perPrompt.reduce((sum, r) => sum + sweptScore(r), 0));
+  const points = Math.round(perPrompt.reduce((sum, r) => sum + promptScore(r), 0));
   return {
     runId: crypto.randomUUID(),
     dailyDate,
@@ -187,7 +186,7 @@ export default function DailyDive() {
     (result: DailyPromptResult) => {
       if (!set || !journeyId) return;
       perPromptRef.current = [...perPromptRef.current, result];
-      cumPointsRef.current += sweptScore(result);
+      cumPointsRef.current += promptScore(result);
       const { journey } = pick(set, journeyId);
       legTargetRef.current =
         journey.distance > 0 ? Math.min(1, cumPointsRef.current / journey.distance) : 1;
@@ -237,7 +236,7 @@ export default function DailyDive() {
         (l) => l.atFraction > start && l.atFraction <= target,
       ).length;
       const isLast = legIndex + 1 >= set.prompts.length;
-      const gainedPts = justResult ? Math.round(sweptScore(justResult)) : 0;
+      const gainedPts = justResult ? Math.round(promptScore(justResult)) : 0;
       const travelling = !legArrived && phase !== "finish";
       return (
         <main className="relative h-dvh bg-surface">
