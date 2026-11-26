@@ -187,19 +187,18 @@ export default function JourneyMap({
           const at = pointAtFraction(geo, lm.atFraction);
           const lit = shown >= lm.atFraction;
           const justPassed = lit && shown - lm.atFraction <= JUST_PASSED_WINDOW;
+          // Always drawn (so you see temples ahead on the path); dimmed until reached.
           return (
             <g key={`lm-${i}-${lm.atFraction}`} data-testid="journey-landmark" data-lit={lit ? "true" : "false"} data-fraction={lm.atFraction}>
-              {lit && (
-                <g transform={`translate(${at.x} ${at.y}) scale(${u})`}>
-                  {justPassed && (
-                    <circle r={1} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={0.4}>
-                      <animate attributeName="r" values="1;6" dur="1.3s" repeatCount="indefinite" />
-                      <animate attributeName="stroke-opacity" values="0.9;0" dur="1.3s" repeatCount="indefinite" />
-                    </circle>
-                  )}
-                  <Temple />
-                </g>
-              )}
+              <g transform={`translate(${at.x} ${at.y}) scale(${u * 0.55})`} opacity={lit ? 1 : 0.5}>
+                {justPassed && (
+                  <circle r={1} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={0.4}>
+                    <animate attributeName="r" values="1;6" dur="1.3s" repeatCount="indefinite" />
+                    <animate attributeName="stroke-opacity" values="0.9;0" dur="1.3s" repeatCount="indefinite" />
+                  </circle>
+                )}
+                <Temple />
+              </g>
             </g>
           );
         })}
@@ -251,8 +250,10 @@ function Temple() {
   const gold = "var(--color-chrome-gold)";
   const shade = "#b8862b";
   const ink = "var(--map-ink)";
+  // Base coords put the temple above the origin; shift it down by half its height
+  // so the marker is CENTERED on the line point.
   return (
-    <g stroke={ink} strokeWidth={0.14} strokeLinejoin="round">
+    <g transform="translate(0 3.05)" stroke={ink} strokeWidth={0.14} strokeLinejoin="round">
       {/* steps */}
       <rect x={-3.1} y={-0.95} width={6.2} height={0.95} rx={0.12} fill={shade} />
       <rect x={-2.6} y={-1.55} width={5.2} height={0.65} fill={gold} />
