@@ -23,16 +23,18 @@ create index if not exists daily_runs_daily_date_idx
   on public.daily_runs (daily_date);
 
 -- Real percentile for a score within a day's field: the share of that day's runs
--- whose points are <= p_points (the player's own row is already recorded, so it
--- counts). 0 when the day has no runs yet. Matches supabaseRunsRepo.fieldStats().
+-- you STRICTLY beat (points < p_points), so your own just-recorded row and anyone
+-- tied with you don't count toward beating yourself. Rounded to a whole percent
+-- and returned as an integer (a clean JSON number for the repo). 0 for an empty
+-- day. Must match the fake in server/test/fakeRunsRepo.ts.
 create or replace function public.daily_percentile(p_date date, p_points integer)
-returns numeric
+returns integer
 language sql
 stable
 as $$
   select case
     when count(*) = 0 then 0
-    else round(100.0 * count(*) filter (where points <= p_points) / count(*), 2)
+    else round(100.0 * count(*) filter (where points < p_points) / count(*))::int
   end
   from public.daily_runs
   where daily_date = p_date;
