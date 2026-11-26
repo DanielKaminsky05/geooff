@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { promptScore } from "./DailyDive";
-import { DAILY_NAME_BONUS, DAILY_PROMPT_MAX } from "../features/daily/contract";
-import type { DailyPromptResult } from "../features/daily/contract";
+import { promptScore, pick } from "./runScore";
+import { DAILY_NAME_BONUS, DAILY_PROMPT_MAX, FIXTURE_DAILY_SET } from "./contract";
+import type { DailyPromptResult, JourneyId } from "./contract";
 
 /**
  * Mirror of the server's per-prompt reconcile (server/src/daily/routes.ts):
@@ -47,5 +47,24 @@ describe("promptScore", () => {
     expect(promptScore(mk(999))).toBe(DAILY_PROMPT_MAX);
     expect(promptScore(mk(0, 50, 3))).toBe(DAILY_NAME_BONUS * 3); // named clamped to total
     expect(promptScore(mk(-5, -5, 10))).toBe(0);
+  });
+});
+
+describe("pick", () => {
+  it("returns the matching journey and route for a valid id", () => {
+    const { journey, route } = pick(FIXTURE_DAILY_SET, "medium");
+    expect(journey.id).toBe("medium");
+    expect(route.journeyId).toBe("medium");
+  });
+
+  it("falls back to the first journey/route instead of crashing on a corrupt id", () => {
+    // Simulates a corrupt DailyRunResult.journey read from localStorage: the recap
+    // path passes it straight into pick(). It must degrade, never dereference undefined.
+    const bogus = "not-a-journey" as JourneyId;
+    expect(() => pick(FIXTURE_DAILY_SET, bogus)).not.toThrow();
+    const { journey, route } = pick(FIXTURE_DAILY_SET, bogus);
+    expect(journey).toBe(FIXTURE_DAILY_SET.journeys[0]);
+    // The route matches the fallen-back journey, so distance/landmarks stay coherent.
+    expect(route.journeyId).toBe(journey.id);
   });
 });
