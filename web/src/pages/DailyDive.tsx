@@ -58,6 +58,14 @@ const ALLOW_REPLAY =
   import.meta.env.DEV ||
   (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("replay"));
 
+/** Read the user's reduced-motion preference once (SSR-guarded). When true, we
+ *  don't trap the player behind the travel animation — consistent with the
+ *  JourneyMap snapping to its target instantly. */
+const PREFERS_REDUCED_MOTION =
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 function pick(set: DailySet, id: JourneyId): { journey: DailyJourney; route: DailyRoute } {
   const journey = set.journeys.find((j) => j.id === id)!;
   const route = set.routes.find((r) => r.journeyId === id)!;
@@ -180,15 +188,21 @@ export default function DailyDive() {
     runGoldRef.current += gold;
     setHudGold(runGoldRef.current);
   }, []);
+  const markLegArrived = useCallback(
+    (index: number) => {
+      // onArrived can fire more than once (a re-tween, StrictMode double-invoke).
+      // Run the arrival bookkeeping once per leg; reset in handlePromptComplete
+      // when the next leg begins.
+      if (arrivedForLegRef.current === index) return;
+      arrivedForLegRef.current = index;
+      setLegArrived(true);
+      setHudPoints(Math.round(cumPointsRef.current));
+    },
+    [],
+  );
   const handleLegArrived = useCallback(() => {
-    // onArrived can fire more than once (a re-tween, StrictMode double-invoke).
-    // Run the arrival bookkeeping once per leg; reset in handlePromptComplete
-    // when the next leg begins.
-    if (arrivedForLegRef.current === legIndex) return;
-    arrivedForLegRef.current = legIndex;
-    setLegArrived(true);
-    setHudPoints(Math.round(cumPointsRef.current));
-  }, [legIndex]);
+    markLegArrived(legIndex);
+  }, [legIndex, markLegArrived]);
 
   const runFinish = useCallback(
     (result: DailyRunResult) => {
@@ -250,8 +264,13 @@ export default function DailyDive() {
         journey.distance > 0 ? Math.min(1, cumPointsRef.current / journey.distance) : 1;
       setLegArrived(false);
       setSubPhase("leg");
+      // Reduced motion: the JourneyMap snaps to its target instantly, so don't
+      // trap the player behind the (CSS-neutralised) travel animation. Run the
+      // arrival bookkeeping now — HUD points update and the reveal shows — so
+      // Continue is enabled immediately without waiting on onArrived.
+      if (PREFERS_REDUCED_MOTION) markLegArrived(legIndex);
     },
-    [set, journeyId],
+    [set, journeyId, legIndex, markLegArrived],
   );
 
   // Continue past the leg: either the next prompt, or finish after the last.
@@ -299,7 +318,9 @@ export default function DailyDive() {
   if (phase === "loading" || !set) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-surface">
-        <p className="text-muted">Charting today&apos;s route…</p>
+        <p role="status" aria-live="polite" aria-busy="true" className="text-muted">
+          Charting today&apos;s route…
+        </p>
       </main>
     );
   }
@@ -323,7 +344,9 @@ export default function DailyDive() {
       const isLast = legIndex + 1 >= set.prompts.length;
       const gainedPts = justResult ? Math.round(promptScore(justResult)) : 0;
       const tier = justResult ? promptTier(justResult.named, justResult.total) : null;
-      const travelling = !legArrived && phase !== "finish";
+      // Reduced motion: never gate Continue on the travel tween (the map snaps
+      // instantly and arrival bookkeeping already ran in handlePromptComplete).
+      const travelling = !PREFERS_REDUCED_MOTION && !legArrived && phase !== "finish";
       return (
         <main className="relative h-dvh bg-surface">
           <JourneyMap
@@ -342,6 +365,9 @@ export default function DailyDive() {
           {legArrived && justResult && tier && (
             <div
               key={legIndex}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
               className="pointer-events-none absolute inset-x-0 top-14 z-20 flex flex-col items-center gap-2 px-8 text-center"
             >
               <div
