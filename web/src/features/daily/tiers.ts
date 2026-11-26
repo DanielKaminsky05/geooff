@@ -1,5 +1,5 @@
 /**
- * Daily Dive — result tiers.
+ * Daily Trek — result tiers.
  *
  * Shared keyword logic so the end-of-run recap and the per-leg reveal agree:
  *  - runCategory: a headline keyword for the WHOLE run (how far you got).

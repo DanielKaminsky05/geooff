@@ -1,5 +1,5 @@
 /**
- * Daily Dive — map projection helpers (PHASE 0 foundation).
+ * Daily Trek — map projection helpers.
  *
  * Mirrors the equirectangular calibration in `components/OutlineMap.tsx` so that
  * daily journey overlays (routes, traveler, landmarks) line up exactly with the

@@ -1,5 +1,5 @@
 /**
- * Daily Dive — route choice, overlaid on the game board (Track C).
+ * Daily Trek — route choice, overlaid on the game board.
  *
  * No separate carded screen: the three roads are clickable dotted lines (with
  * their stops) drawn directly on the world board you'll play on, which you can

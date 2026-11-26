@@ -1,5 +1,5 @@
 /**
- * Daily Dive — route polyline geometry (owned by Track D).
+ * Daily Trek — route polyline geometry.
  *
  * Pure math over a *projected* polyline (SVG points already run through
  * `geo.project`). Used by `JourneyMap` to place the traveler and landmark pins

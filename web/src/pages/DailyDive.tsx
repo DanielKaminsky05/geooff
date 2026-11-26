@@ -1,5 +1,5 @@
 /**
- * Daily Dive — page orchestrator (Track C).
+ * Daily Trek — page orchestrator.
  *
  * Phase machine:
  *   loading → fetchDailySet()

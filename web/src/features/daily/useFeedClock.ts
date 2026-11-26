@@ -1,5 +1,5 @@
 /**
- * Daily Dive — feed-the-clock timer (Track C).
+ * Daily Trek — feed-the-clock timer.
  *
  * Each prompt starts with `DAILY_BASE_SECONDS` (20s) on the clock and counts
  * down in real time. Every NEW correct answer feeds the clock

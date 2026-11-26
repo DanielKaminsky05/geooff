@@ -1,5 +1,5 @@
 /**
- * Daily Dive — deterministic per-date set generation (Track A).
+ * Daily Trek — deterministic per-date set generation.
  *
  * The day's set MUST be identical for every player and every server instance on
  * a given UTC date — so selection is seeded ENTIRELY by the "YYYY-MM-DD" string

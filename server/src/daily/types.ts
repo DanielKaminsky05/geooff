@@ -1,12 +1,12 @@
 /**
- * Daily Dive — server-internal types (PHASE 0 contract).
+ * Daily Trek — server-internal types.
  *
  * The public wire types live in `protocol.ts` (mirrored to web). These are the
  * server-only shapes the `daily` module passes around — chiefly the COMPILED
  * daily set, which keeps each prompt's `validIds` (never serialized to clients).
  *
- * Track A implements the behaviour (window / scoring / percentile / routes)
- * against these signatures; they are frozen here so parallel tracks agree.
+ * The behaviour (window / scoring / percentile / routes) is implemented against
+ * these signatures.
  */
 
 import type {
@@ -43,7 +43,7 @@ export function toPublicDailySet(set: CompiledDailySet): DailySet {
   };
 }
 
-/* ---- Function contracts Track A fulfils (documented, not implemented) ---- */
+/* ---- Function contracts the daily module fulfils (documented here) ---- */
 
 /** `window.ts` — deterministic per-date set from a rolling 7-day cache. */
 export type GetDailySet = (dailyDate: string) => CompiledDailySet | null;

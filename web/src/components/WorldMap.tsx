@@ -35,7 +35,7 @@ export interface WorldMapProps {
   className?: string;
   /**
    * Extra SVG content rendered INSIDE the map's svg (world viewBox coords), on
-   * top of the land — so it pans/zooms WITH the countries. Used by Daily Dive to
+   * top of the land — so it pans/zooms WITH the countries. Used by Daily Trek to
    * draw the journey road/markers on the board. Express positions in the
    * 0..1010 × 0..666 world space (e.g. via geo.project).
    */

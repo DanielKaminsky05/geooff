@@ -1,5 +1,5 @@
 /**
- * Daily Dive — synthetic percentile (Track A).
+ * Daily Trek — synthetic percentile.
  *
  * Phase 1 has no cross-player data, so "you beat ~N% of players" is a HARDCODED,
  * monotonic, plausible curve mapping a capture ratio (your points ÷ the day's

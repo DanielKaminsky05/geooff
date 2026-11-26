@@ -1,8 +1,8 @@
 /**
- * Daily Dive — destination + route content (owned by Track B).
+ * Daily Trek — destination + route content.
  *
  * Each entry is one destination city plus its three authored routes
- * (short/medium/long polylines) that lead to it. `window.ts` (Track A) picks one
+ * (short/medium/long polylines) that lead to it. `window.ts` picks one
  * entry per day (seeded by date) and pairs it with the journey config.
  *
  * CONCEPT: a journey is a long cross-map TREK. You start at a far-away origin and

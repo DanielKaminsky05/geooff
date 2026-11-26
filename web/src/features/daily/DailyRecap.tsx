@@ -1,12 +1,10 @@
 /**
- * Daily Dive — end-of-run recap (owned by Track E).
+ * Daily Trek — end-of-run recap.
  *
  * Charcoal-themed end screen: the arrived/died headline, points (total +
  * per-prompt breakdown, no answer names so it stays spoiler-free), gold earned
  * and the new wallet balance, a synthetic percentile line, and a Share button
  * that copies a spoiler-free grid (see shareGrid.ts) to the clipboard.
- *
- * The prop signature is the FROZEN CONTRACT; Track C composes it unchanged.
  */
 
 import { useEffect, useState } from "react";

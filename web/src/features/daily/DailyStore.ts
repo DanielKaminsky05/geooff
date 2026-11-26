@@ -1,9 +1,9 @@
 /**
- * Daily Dive — local persistence seam (PHASE 0).
+ * Daily Trek — local persistence seam.
  *
  * All saving goes through this interface so callers never touch `localStorage`
- * directly. Phase 2 can swap `localDailyStore` for a server-backed implementation
- * (accounts/DB) WITHOUT changing a single caller.
+ * directly. `localDailyStore` can later be swapped for a server-backed
+ * implementation (accounts/DB) WITHOUT changing a single caller.
  *
  * Phase-1 reality: the wallet and the one-attempt-per-day lock are device-local
  * and clearable. That's acceptable while there's no leaderboard to protect.

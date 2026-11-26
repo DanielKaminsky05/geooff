@@ -1,9 +1,9 @@
 /**
- * Daily Dive — client contract (PHASE 0).
+ * Daily Trek — client contract.
  *
  * Re-exports the daily wire types and ships a static `FIXTURE_DAILY_SET` so the
- * client tracks (play flow, map/travel, recap) develop against real-shaped data
- * with ZERO dependency on the server. Phase 2 swaps the live API in; the fixture
+ * client (play flow, map/travel, recap) can develop against real-shaped data
+ * with ZERO dependency on the server. The live API supersedes it; the fixture
  * stays as a test/storybook aid.
  */
 

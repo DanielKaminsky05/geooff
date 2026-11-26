@@ -1,5 +1,5 @@
 /**
- * Daily Dive — rarity-weighted scoring (Track A).
+ * Daily Trek — rarity-weighted scoring.
  *
  * Each correct country is worth a base of 10 points scaled by a rarity weight
  * derived from population: obscure, small-population countries are worth more

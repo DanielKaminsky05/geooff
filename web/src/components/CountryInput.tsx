@@ -26,7 +26,7 @@ export interface CountryInputProps {
    */
   rejectSignal: number;
   disabled?: boolean;
-  /** Focus the field on mount (desktop only). Daily Dive opts in so each prompt
+  /** Focus the field on mount (desktop only). Daily Trek opts in so each prompt
    *  drops you straight into typing. */
   autoFocus?: boolean;
 }

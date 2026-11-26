@@ -1,5 +1,5 @@
 /**
- * Daily Dive — one prompt of the run (Track C).
+ * Daily Trek — one prompt of the run.
  *
  * The prompt and timer FLOAT on the world map (no chrome strip). The map doubles
  * as the game board: countries you name light up, and your current position + the

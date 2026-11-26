@@ -16,7 +16,7 @@ export default function Home() {
   const [code, setCode] = useState("");
   const [creating, setCreating] = useState<"versus" | "solo" | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
-  // Daily Dive entry: zoom the atlas in + fade the UI, then navigate.
+  // Daily Trek entry: zoom the atlas in + fade the UI, then navigate.
   const [diving, setDiving] = useState(false);
   const creatingRef = useRef(creating);
   useEffect(() => {
@@ -87,7 +87,7 @@ export default function Home() {
     navigate(`/room/${trimmed}`);
   }
 
-  /** Enter the Daily Dive with a short zoom-into-the-map transition (skipped for
+  /** Enter the Daily Trek with a short zoom-into-the-map transition (skipped for
    *  reduced-motion users, who navigate straight there). */
   function startDaily() {
     if (diving) return;
@@ -107,7 +107,7 @@ export default function Home() {
       {/* Walnut cover framing the whole page. */}
       <div aria-hidden className="journal-frame" />
 
-      {/* Faint solid-outline world map filling the journal page. On a Daily Dive
+      {/* Faint solid-outline world map filling the journal page. On a Daily Trek
           it zooms in to carry the eye onto the map before the route loads. */}
       <div
         aria-hidden

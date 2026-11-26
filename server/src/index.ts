@@ -159,7 +159,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
 
   const app = express();
   // Trust one proxy hop (Fly's edge) so `req.ip` is the real client IP — the
-  // Daily Dive answer route rate-limits per IP, which only works with the true
+  // Daily Trek answer route rate-limits per IP, which only works with the true
   // address. Local/direct connections are unaffected (no X-Forwarded-For).
   app.set("trust proxy", 1);
   app.use(cors({ origin: true }));
@@ -179,7 +179,7 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
     res.json({ exists: true, status: room.phase, playerCount: room.players.length });
   });
 
-  // Daily Dive — stateless REST (GET /daily, POST /daily/answer, /daily/finish).
+  // Daily Trek — stateless REST (GET /daily, POST /daily/answer, /daily/finish).
   registerDailyRoutes(app);
 
   const httpServer = createHttpServer(app);

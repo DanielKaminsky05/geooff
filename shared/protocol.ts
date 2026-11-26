@@ -283,7 +283,7 @@ export interface ServerToClientEvents {
 }
 
 /* ------------------------------------------------------------------ */
-/* Daily Dive (stateless REST — see docs/daily-dive-requirements.md)   */
+/* Daily Trek (stateless REST — see docs/daily-dive-requirements.md)   */
 /*                                                                     */
 /* A single-player daily mode served over REST, NOT Socket.IO:         */
 /*   GET  /daily         -> DailySet       (labels only; validIds stay  */

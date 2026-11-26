@@ -1,9 +1,9 @@
 /**
- * Daily Dive — REST client (Track C).
+ * Daily Trek — REST client.
  *
  * Thin typed `fetch` wrappers over the three stateless daily routes. The server
  * base URL is derived the SAME way as the socket client (`socket.tsx`): the
- * `VITE_WS_URL` env, falling back to the local dev server. Daily Dive is REST,
+ * `VITE_WS_URL` env, falling back to the local dev server. Daily Trek is REST,
  * not Socket.IO, but it talks to the same backend origin.
  *
  * Dev-friendliness: a failed `GET /daily` falls back to `FIXTURE_DAILY_SET` so
@@ -21,7 +21,7 @@ import type {
 } from "./contract";
 import { FIXTURE_DAILY_SET } from "./contract";
 
-/** Same origin as the socket client (socket.tsx). Daily Dive is REST on it. */
+/** Same origin as the socket client (socket.tsx). Daily Trek is REST on it. */
 const BASE_URL = import.meta.env.VITE_WS_URL ?? "http://localhost:3001";
 
 /** Timeout (ms) for the initial daily set fetch and the finish submission. */

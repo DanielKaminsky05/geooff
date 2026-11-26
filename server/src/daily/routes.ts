@@ -1,5 +1,5 @@
 /**
- * Daily Dive — Express routes (Track A implementation).
+ * Daily Trek — Express routes.
  *
  * `registerDailyRoutes(app)` is the single mount point wired from `index.ts`:
  *   - GET  /daily          -> today's set from `window.ts` (via toPublicDailySet)

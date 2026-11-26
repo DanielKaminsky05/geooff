@@ -1,5 +1,5 @@
 /**
- * Daily Dive — smooth route paths.
+ * Daily Trek — smooth route paths.
  *
  * Turns a polyline of projected points into a smooth SVG path `d` string that
  * curves THROUGH every point (a Catmull-Rom spline converted to cubic beziers),

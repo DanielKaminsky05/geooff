@@ -1,5 +1,5 @@
 /**
- * Daily Dive — spoiler-free share text (owned by Track E).
+ * Daily Trek — spoiler-free share text.
  *
  * Builds a Wordle-style recap a player can paste anywhere: the date, journey
  * chosen, lived/died, and a per-prompt capture tier — WITHOUT revealing answers.

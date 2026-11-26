@@ -1,5 +1,5 @@
 /**
- * Daily Dive — journey map (owned by Track D).
+ * Daily Trek — journey map.
  *
  * The travel beat between prompts: a regional atlas that ZOOMS to the segment
  * just earned and animates the trekker + gold trail forward across it, so the
