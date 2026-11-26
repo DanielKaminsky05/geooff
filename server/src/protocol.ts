@@ -304,8 +304,15 @@ export const DAILY_PROMPT_COUNT = 5;
 export const DAILY_BASE_SECONDS = 20;
 /** Feed-the-clock: seconds added per newly-named correct answer. */
 export const DAILY_TIME_BONUS_SECONDS = 2;
-/** Completion bonus: fraction of a prompt's full weighted pool for naming all. */
+/** Sweep bonus: naming EVERY valid answer in a prompt multiplies that prompt's
+ *  normalized score by (1 + this) — e.g. a cleared prompt scores 150 not 100. */
 export const DAILY_COMPLETION_BONUS = 0.5;
+/** The normalized ceiling for a single prompt BEFORE the sweep bonus. Every
+ *  prompt is scored 0..100 = your share of its rarity-weighted pool, so prompts
+ *  with huge pools (e.g. "name a European country") and tiny pools (e.g. "ends
+ *  in -stan") are worth the same. A run's max is thus fixed regardless of which
+ *  prompts the day drew: DAILY_PROMPT_COUNT × DAILY_PROMPT_MAX × (1 + bonus). */
+export const DAILY_PROMPT_MAX = 100;
 
 export type JourneyId = "short" | "medium" | "long";
 export type DailyOutcome = "arrived" | "died";
@@ -323,7 +330,9 @@ export interface DailyLandmark {
 }
 
 /** One of the three routes to the day's destination — a risk/reward dial, not a
- *  content difficulty. `distance` is in the same units as run points. */
+ *  content difficulty. `distance` is the normalized run-points needed to arrive:
+ *  a fraction of the fixed run max (DAILY_PROMPT_COUNT × DAILY_PROMPT_MAX ×
+ *  (1 + DAILY_COMPLETION_BONUS) = 750), so it means the same thing every day. */
 export interface DailyJourney {
   id: JourneyId;
   distance: number;
@@ -370,14 +379,18 @@ export interface DailyAnswerRes {
   /** matched country (present when valid). */
   iso?: string;
   name?: string;
-  /** rarity-weighted points this answer earned (present when valid). Completion
-   *  bonuses are reconciled at /daily/finish, not here. */
+  /** rarity-weighted points this answer earned (present when valid). The client
+   *  sums these and divides by `promptMax` to get its normalized 0..100 score. */
   points?: number;
   /** seconds to add to the prompt clock (present when valid). */
   timeBonusSec?: number;
   /** total valid answers for this prompt — lets the client show "N of total"
    *  and detect completion. Not the set itself. */
   promptTotal?: number;
+  /** the prompt's FULL rarity-weighted pool (sum of every valid answer's points)
+   *  — the denominator the client normalizes against so each prompt tops out at
+   *  DAILY_PROMPT_MAX. A scalar aggregate; reveals no answers. (present when valid) */
+  promptMax?: number;
   /** why a guess was rejected. */
   reason?: "wrong" | "duplicate" | "empty";
 }
@@ -387,7 +400,9 @@ export interface DailyPromptResult {
   promptId: string;
   named: number;
   total: number;
-  /** points on this prompt, pre-completion-bonus (server reconciles at finish). */
+  /** normalized score for this prompt, 0..DAILY_PROMPT_MAX = share of its
+   *  rarity-weighted pool captured. The server re-applies the sweep bonus at
+   *  finish (×1.5 when named === total), so this is the pre-sweep base. */
   points: number;
 }
 

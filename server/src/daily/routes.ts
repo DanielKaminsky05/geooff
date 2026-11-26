@@ -22,15 +22,22 @@ import type {
   DailyFinishReq,
   DailyFinishRes,
   DailyRunResult,
+  DailyPromptResult,
   DailyJourney,
 } from "../protocol.js";
-import { DAILY_TIME_BONUS_SECONDS, normalizeAnswer } from "../protocol.js";
+import {
+  DAILY_TIME_BONUS_SECONDS,
+  DAILY_PROMPT_MAX,
+  DAILY_PROMPT_COUNT,
+  DAILY_COMPLETION_BONUS,
+  normalizeAnswer,
+} from "../protocol.js";
 import { validIdsFor, promptById } from "../prompts.js";
 import { matchAnswer } from "../matching.js";
 import { lookupFor, canonicalFor } from "../sets.js";
 import { TokenBucket, DEFAULT_ANSWER_LIMIT, type BucketConfig } from "../rateLimit.js";
 import { getDailySet, todayUtc, JOURNEYS } from "./window.js";
-import { answerPoints, completionBonus, promptFullPoints } from "./scoring.js";
+import { answerPoints, promptBasePoints } from "./scoring.js";
 import { capturePercentile } from "./percentile.js";
 
 /** Options for wiring the daily routes — overridable so tests drive them
@@ -128,6 +135,9 @@ export function registerDailyRoutes(app: Express, options: DailyRoutesOptions = 
       points: answerPoints(match.iso),
       timeBonusSec: DAILY_TIME_BONUS_SECONDS,
       promptTotal: valid.size,
+      // The full weighted pool — the client's normalization denominator so this
+      // prompt tops out at DAILY_PROMPT_MAX however big/small its answer set is.
+      promptMax: promptBasePoints(prompt),
     });
   });
 
@@ -139,14 +149,19 @@ export function registerDailyRoutes(app: Express, options: DailyRoutesOptions = 
 }
 
 /**
- * Reconcile a client-reported run into the authoritative finish response:
- *  - recompute each prompt's completion bonus from `named === total`,
- *  - recompute the points total (per-prompt base points + earned bonuses),
- *  - distance covered = points (1:1 scalar); outcome = arrived iff covered ≥
- *    the chosen journey's distance, else died,
- *  - gold = sum of the journey's landmark gold if arrived, else 0,
- *  - percentile = capturePercentile(points ÷ theoretical max), where the max is
- *    the sum over the DAY's prompts of promptFullPoints (incl. completion bonus).
+ * Reconcile a client-reported run into the authoritative finish response. Scoring
+ * is NORMALIZED: each prompt is worth up to DAILY_PROMPT_MAX (= your captured
+ * share of its rarity-weighted pool, which the client computes), so prompts are
+ * comparable regardless of pool size.
+ *  - per prompt: clamp the client's base share to [0, DAILY_PROMPT_MAX], then
+ *    apply the sweep bonus ourselves (×1+DAILY_COMPLETION_BONUS) when the player
+ *    named the full set — `total` is recomputed server-side from the secret pool,
+ *    so the bonus is never client-trusted.
+ *  - distance covered = normalized points; outcome = arrived iff covered ≥ the
+ *    chosen journey's distance, else died.
+ *  - gold = sum of the journey's landmark gold if arrived, else 0.
+ *  - percentile = capturePercentile(points ÷ the FIXED run max of
+ *    DAILY_PROMPT_COUNT × DAILY_PROMPT_MAX × (1 + bonus)).
  *
  * The response shape mirrors the request (same DailyRunResult), with corrected
  * values. Defensive against a malformed/partial body.
@@ -157,7 +172,7 @@ function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
     dailyDate: raw?.dailyDate ?? "",
     journey: raw?.journey ?? "short",
     points: 0,
-    perPrompt: Array.isArray(raw?.perPrompt) ? raw!.perPrompt : [],
+    perPrompt: [],
     gold: 0,
     outcome: "died",
     playerId: raw?.playerId ?? null,
@@ -165,24 +180,33 @@ function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
 
   const set = getDailySet(result.dailyDate);
   const journey = findJourney(result.journey);
+  const SWEEP = 1 + DAILY_COMPLETION_BONUS;
 
-  // Recompute points: for each reported prompt, trust the client's named/total
-  // and reported base points, but award the completion bonus ourselves when the
-  // player named the full set (named === total). The prompt's bonus comes from
-  // the secret valid pool, so it is recomputed server-side, never trusted.
+  // Recompute points: the client's per-prompt base is its normalized 0..100
+  // share (trusted but clamped). The sweep bonus is server-owned — applied only
+  // when the player named the whole set, whose size we read from the secret pool.
   let points = 0;
-  for (const pp of result.perPrompt) {
-    const base = Number.isFinite(pp.points) ? Math.max(0, pp.points) : 0;
-    points += base;
+  const perPrompt: DailyPromptResult[] = [];
+  for (const pp of Array.isArray(raw?.perPrompt) ? raw!.perPrompt : []) {
     const prompt = set?.prompts.find((p) => p.id === pp.promptId);
-    const total = prompt ? validIdsFor(prompt, "countries").size : pp.total;
-    if (prompt && pp.named >= total && total > 0) {
-      points += completionBonus(prompt);
-    }
+    const total = prompt
+      ? validIdsFor(prompt, "countries").size
+      : Number.isFinite(pp.total)
+        ? pp.total
+        : 0;
+    const base = Math.max(
+      0,
+      Math.min(DAILY_PROMPT_MAX, Number.isFinite(pp.points) ? pp.points : 0),
+    );
+    const swept = total > 0 && pp.named >= total;
+    const score = swept ? base * SWEEP : base;
+    points += score;
+    perPrompt.push({ promptId: pp.promptId, named: pp.named, total, points: Math.round(score) });
   }
+  result.perPrompt = perPrompt;
   result.points = Math.round(points);
 
-  // Distance covered is points 1:1. Arrive iff it clears the journey distance.
+  // Distance covered is normalized points. Arrive iff it clears the distance.
   const distance = journey?.distance ?? Infinity;
   const arrived = result.points >= distance;
   result.outcome = arrived ? "arrived" : "died";
@@ -190,10 +214,8 @@ function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
     ? journey.landmarks.reduce((sum, l) => sum + l.gold, 0)
     : 0;
 
-  // Theoretical max = full capture of every prompt in the day's set (base pool +
-  // completion bonus). Capture ratio drives the synthetic percentile.
-  let theoreticalMax = 0;
-  if (set) for (const p of set.prompts) theoreticalMax += promptFullPoints(p);
+  // Fixed run max (same every day): 5 prompts × 100, ×1.5 for a full sweep.
+  const theoreticalMax = DAILY_PROMPT_COUNT * DAILY_PROMPT_MAX * SWEEP;
   const ratio = theoreticalMax > 0 ? result.points / theoreticalMax : 0;
   const percentile = capturePercentile(ratio);
 

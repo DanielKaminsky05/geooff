@@ -63,14 +63,14 @@ function randInt(rng: () => number, n: number): number {
  * spaced evenly with the final (arrival) landmark as the biggest payoff. Totals
  * escalate with risk: short 50, medium 100, long 200.
  */
-// Distances are in POINTS (1 point = 1 unit of distance). Tuned low enough that
-// a single prompt moves you a visible chunk and arrival is achievable: a casual
-// run clears the short road, a strong run reaches the far road. (First-pass
-// numbers — the one open tuning knob.)
+// Distances are NORMALIZED run points out of a fixed max of 750 (5 prompts ×
+// 100, ×1.5 if every prompt is swept). So they read as "capture this share of
+// the day": short ≈ 40% (300), medium ≈ 65% (490), long ≈ 85% (640). Identical
+// difficulty every day regardless of which prompts were drawn. (Tuning knob.)
 export const JOURNEYS: DailyJourney[] = [
   {
     id: "short",
-    distance: 110,
+    distance: 300,
     landmarks: [
       { atFraction: 0.5, gold: 20 },
       { atFraction: 1, gold: 30 },
@@ -78,7 +78,7 @@ export const JOURNEYS: DailyJourney[] = [
   },
   {
     id: "medium",
-    distance: 230,
+    distance: 490,
     landmarks: [
       { atFraction: 0.2, gold: 12 },
       { atFraction: 0.4, gold: 15 },
@@ -89,7 +89,7 @@ export const JOURNEYS: DailyJourney[] = [
   },
   {
     id: "long",
-    distance: 400,
+    distance: 640,
     landmarks: [
       { atFraction: 0.14, gold: 18 },
       { atFraction: 0.29, gold: 22 },
