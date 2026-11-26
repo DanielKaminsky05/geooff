@@ -29,6 +29,8 @@ const JOURNEYS: { id: JourneyId; label: string; color: string }[] = [
   { id: "long", label: "Long", color: "#b83a3a" },
 ];
 const DEST_COLOR = "#2563eb";
+/** Click-to-connect radius around the destination, in world-viewBox units. */
+const SNAP_RADIUS = 6;
 
 /** What a click on the map does. */
 type Mode = "none" | "dest" | JourneyId;
@@ -91,14 +93,22 @@ export default function Builder() {
       pt.x = e.clientX;
       pt.y = e.clientY;
       const p = pt.matrixTransform(ctm.inverse());
-      const geo: GeoPoint = { lat: yToLat(p.y), lon: xToLon(p.x) };
       if (mode === "dest") {
-        setDestAt(geo);
-      } else {
-        setRoutes((prev) => ({ ...prev, [mode]: [...prev[mode], geo] }));
+        setDestAt({ lat: yToLat(p.y), lon: xToLon(p.x) });
+        return;
       }
+      // Route mode: if the click lands on the destination, SNAP the point exactly
+      // to it so the route connects cleanly (no stray point beside the marker).
+      let geo: GeoPoint;
+      if (destAt) {
+        const d = project(destAt);
+        geo = Math.hypot(p.x - d.x, p.y - d.y) <= SNAP_RADIUS ? destAt : { lat: yToLat(p.y), lon: xToLon(p.x) };
+      } else {
+        geo = { lat: yToLat(p.y), lon: xToLon(p.x) };
+      }
+      setRoutes((prev) => ({ ...prev, [mode]: [...prev[mode], geo] }));
     },
-    [mode],
+    [mode, destAt],
   );
 
   const undo = () => {
@@ -185,7 +195,12 @@ export default function Builder() {
           </g>
           {/* Routes */}
           {JOURNEYS.map((j) => {
-            const pts = destAt ? [...routes[j.id], destAt] : routes[j.id];
+            const drawn = routes[j.id];
+            const last = drawn[drawn.length - 1];
+            // Preview the connection to the destination, but don't double the
+            // endpoint if the last drawn point already snapped to it.
+            const endsAtDest = destAt && last && last.lat === destAt.lat && last.lon === destAt.lon;
+            const pts = destAt && !endsAtDest ? [...drawn, destAt] : drawn;
             return (
               <g key={j.id}>
                 {pts.length >= 2 && (
@@ -196,8 +211,10 @@ export default function Builder() {
             );
           })}
           {/* Destination */}
-          {destAt && (() => { const s = project(destAt); return (
+          {destAt && (() => { const s = project(destAt); const drawingRoute = mode !== "none" && mode !== "dest"; return (
             <g>
+              {/* Snap-target ring while drawing a route — click inside to connect. */}
+              {drawingRoute && <circle cx={s.x} cy={s.y} r={SNAP_RADIUS} fill="none" stroke={DEST_COLOR} strokeWidth={0.5} strokeDasharray="1.5 1.5" opacity={0.7} />}
               <circle cx={s.x} cy={s.y} r={3.2} fill={DEST_COLOR} stroke="#fff" strokeWidth={0.8} />
               {destName.trim() && (
                 <text x={s.x + 5} y={s.y + 1.5} fontSize={9} fontWeight="bold" fill="#13233b" stroke="#fff" strokeWidth={0.6} paintOrder="stroke" style={{ userSelect: "none" }}>{destName.trim()}</text>
@@ -206,7 +223,7 @@ export default function Builder() {
           ); })()}
         </svg>
         <div className="pointer-events-none absolute left-3 top-3 rounded bg-slate-900/80 px-3 py-1.5 text-xs">
-          {mode === "none" ? "Pan mode" : mode === "dest" ? "Click the map to place the destination" : `Click to add points to the ${mode} route`}
+          {mode === "none" ? "Pan mode" : mode === "dest" ? "Click the map to place the destination" : `Click to add points to the ${mode} route${destAt ? " — click the destination to connect" : ""}`}
         </div>
       </div>
 
