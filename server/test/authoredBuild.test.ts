@@ -51,6 +51,14 @@ describe("compileAuthoredSet", () => {
     ]);
   });
 
+  it("rejects a landmark override with duplicate positions", () => {
+    const r = compileAuthoredSet(
+      base({ landmarks: { short: [{ atFraction: 0.5, gold: 10 }, { atFraction: 0.5, gold: 20 }] } }),
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error).toMatch(/invalid landmarks/);
+  });
+
   it("rejects the wrong number of prompts", () => {
     expect(compileAuthoredSet(base({ promptIds: FIVE.slice(0, 4) }))).toMatchObject({ ok: false });
   });

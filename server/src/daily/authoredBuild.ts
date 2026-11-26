@@ -42,12 +42,14 @@ function validPoint(p: unknown): p is GeoPoint {
   );
 }
 
-/** Validate a per-journey landmark override: a non-empty, well-formed array. */
+/** Validate a per-journey landmark override: a non-empty, well-formed array with
+ *  DISTINCT positions (two temples at the same atFraction are ambiguous — the
+ *  map shows one, the server banks both). */
 function validLandmarks(ls: unknown): ls is DailyLandmark[] {
-  return (
-    Array.isArray(ls) &&
-    ls.length > 0 &&
-    ls.every(
+  if (
+    !Array.isArray(ls) ||
+    ls.length === 0 ||
+    !ls.every(
       (l) =>
         l != null &&
         typeof (l as DailyLandmark).atFraction === "number" &&
@@ -56,7 +58,11 @@ function validLandmarks(ls: unknown): ls is DailyLandmark[] {
         typeof (l as DailyLandmark).gold === "number" &&
         (l as DailyLandmark).gold >= 0,
     )
-  );
+  ) {
+    return false;
+  }
+  const fractions = new Set((ls as DailyLandmark[]).map((l) => l.atFraction));
+  return fractions.size === ls.length;
 }
 
 /**
