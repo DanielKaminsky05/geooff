@@ -124,6 +124,8 @@ function loadFonts(): Promise<SatoriFont[]> {
 type Style = Record<string, unknown>;
 type El = { type: "div"; props: { style: Style; children?: unknown } };
 const h = (style: Style, children?: unknown): El => ({ type: "div", props: { style, children } });
+// Text node: tight line-height so box height == fontSize (predictable layout).
+const t = (style: Style, children?: unknown): El => h({ ...style, lineHeight: 1 }, children);
 
 function card(data: ShareData | null): El {
   const arrived = data?.outcome === "arrived";
@@ -137,14 +139,14 @@ function card(data: ShareData | null): El {
   const accent = arrived ? GOLD : RED;
 
   const headerRight: El[] = [];
-  if (trek != null && trek > 0) headerRight.push(h({ display: "flex" }, `TREK #${trek}`));
-  if (data?.date) headerRight.push(h({ display: "flex", marginTop: 6 }, data.date));
+  if (trek != null && trek > 0) headerRight.push(t({ display: "flex" }, `TREK #${trek}`));
+  if (data?.date) headerRight.push(t({ display: "flex", marginTop: 8 }, data.date));
 
   const cells = grid.slice(0, 12).map((c) =>
     h({
       display: "flex",
       width: 30,
-      height: 44,
+      height: 40,
       borderRadius: 7,
       marginRight: 9,
       backgroundColor: tierColor(c.named, c.total),
@@ -154,9 +156,10 @@ function card(data: ShareData | null): El {
   return h(
     {
       display: "flex",
+      boxSizing: "border-box",
       width: "100%",
       height: "100%",
-      padding: 28,
+      padding: 24,
       backgroundColor: PAPER,
       color: INK,
       fontFamily: "Inter",
@@ -166,9 +169,10 @@ function card(data: ShareData | null): El {
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
+        boxSizing: "border-box",
         width: "100%",
         height: "100%",
-        padding: 44,
+        padding: 34,
         borderWidth: 3,
         borderStyle: "solid",
         borderColor: SEPIA,
@@ -178,32 +182,32 @@ function card(data: ShareData | null): El {
         // Header
         h({ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }, [
           h({ display: "flex", flexDirection: "column" }, [
-            h({ display: "flex", fontSize: 44, fontWeight: 800, letterSpacing: 2 }, "GEOFIGHT"),
-            h({ display: "flex", fontSize: 20, letterSpacing: 8, color: FADE, marginTop: 6 }, "DAILY TREK"),
+            t({ display: "flex", fontSize: 40, fontWeight: 800, letterSpacing: 2 }, "GEOFIGHT"),
+            t({ display: "flex", fontSize: 18, letterSpacing: 8, color: FADE, marginTop: 8 }, "DAILY TREK"),
           ]),
           h(
-            { display: "flex", flexDirection: "column", alignItems: "flex-end", color: FADE, fontSize: 24 },
+            { display: "flex", flexDirection: "column", alignItems: "flex-end", color: FADE, fontSize: 22 },
             headerRight,
           ),
         ]),
         // Centre
         h({ display: "flex", flexDirection: "column", alignItems: "center" }, [
-          h({ display: "flex", alignItems: "center", width: "66%", marginBottom: 22 }, [
+          h({ display: "flex", alignItems: "center", width: "66%", marginBottom: 20 }, [
             h({ display: "flex", width: 24, height: 24, borderRadius: 12, backgroundColor: SEPIA }),
             h({ display: "flex", flexGrow: 1, height: 4, backgroundColor: SEPIA, marginLeft: 12, marginRight: 12 }),
             h({ display: "flex", width: 26, height: 26, backgroundColor: accent }),
           ]),
-          h({ display: "flex", fontSize: 76, fontWeight: 800, color: accent }, headline),
-          h({ display: "flex", alignItems: "flex-end", marginTop: 14 }, [
-            h({ display: "flex", fontSize: 104, fontWeight: 800 }, group(points)),
-            h({ display: "flex", fontSize: 34, color: FADE, marginLeft: 14, marginBottom: 12 }, "pts"),
+          t({ display: "flex", fontSize: 60, fontWeight: 800, color: accent }, headline),
+          h({ display: "flex", alignItems: "flex-end", marginTop: 12 }, [
+            t({ display: "flex", fontSize: 96, fontWeight: 800 }, group(points)),
+            t({ display: "flex", fontSize: 30, color: FADE, marginLeft: 14, marginBottom: 10 }, "pts"),
           ]),
-          h({ display: "flex", fontSize: 28, color: SEPIA, marginTop: 10 }, subtitle),
+          t({ display: "flex", fontSize: 26, color: SEPIA, marginTop: 10 }, subtitle),
         ]),
         // Footer
         h({ display: "flex", justifyContent: "space-between", alignItems: "center" }, [
           h({ display: "flex", alignItems: "center" }, cells),
-          h({ display: "flex", fontSize: 22, color: FADE }, "geofight — play today's trek"),
+          t({ display: "flex", fontSize: 20, color: FADE }, "geofight — play today's trek"),
         ]),
       ],
     ),
