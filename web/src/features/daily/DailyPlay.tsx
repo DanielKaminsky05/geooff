@@ -13,7 +13,7 @@
  * `onComplete`.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import WorldMap from "../../components/WorldMap";
 import AnswerBar from "../match/AnswerBar";
 import { useFeedClock } from "./useFeedClock";
@@ -21,8 +21,13 @@ import { postAnswer, RateLimitedError } from "./dailyApi";
 import { project } from "./geo";
 import { smoothPath } from "./smoothPath";
 import { buildRouteGeometry, pointAtFraction } from "./routeGeometry";
+import { Walker } from "./Walker";
 import { DAILY_BASE_SECONDS, DAILY_PROMPT_MAX } from "./contract";
 import type { DailyDestination, DailyPrompt, DailyPromptResult, DailyRoute } from "./contract";
+
+/** Once the player names every answer, auto-advance the leg this long later, so
+ *  the full clear registers before moving on. */
+const FULL_CLEAR_BUFFER_MS = 2000;
 
 export interface DailyPlayProps {
   dailyDate: string;
@@ -74,6 +79,9 @@ export default function DailyPlay({
   // these to settle (capped) so a last optimistic answer isn't lost to the race
   // between its late response and the onComplete snapshot.
   const inFlightRef = useRef(0);
+  // Full-clear auto-advance: once every answer is named, move on after a short
+  // buffer so the player sees they cleared it. Holds the pending timer id.
+  const fullClearTimerRef = useRef<number | null>(null);
 
   const doneRef = useRef(false);
   // Max time finish() will wait for in-flight answers to settle before
@@ -113,6 +121,14 @@ export default function DailyPlay({
 
   const clock = useFeedClock(finish);
 
+  // Clear any pending full-clear timer if the prompt unmounts first.
+  useEffect(
+    () => () => {
+      if (fullClearTimerRef.current != null) window.clearTimeout(fullClearTimerRef.current);
+    },
+    [],
+  );
+
   const handleSubmit = useCallback(
     (text: string): boolean => {
       if (doneRef.current) return false;
@@ -139,6 +155,14 @@ export default function DailyPlay({
               setAcceptSignal((s) => s + 1);
               clock.addTime();
               forceTally((n) => n + 1);
+              // Named them all → auto-advance after a short buffer (once).
+              if (
+                totalRef.current > 0 &&
+                namedRef.current.size >= totalRef.current &&
+                fullClearTimerRef.current == null
+              ) {
+                fullClearTimerRef.current = window.setTimeout(finish, FULL_CLEAR_BUFFER_MS);
+              }
             }
           } else {
             setRejectMsg(res.reason === "empty" ? "Type a country" : "Not a match");
@@ -156,7 +180,7 @@ export default function DailyPlay({
       })();
       return true;
     },
-    [dailyDate, prompt.id, clock],
+    [dailyDate, prompt.id, clock, finish],
   );
 
   const colorByIso = useMemo(() => {
@@ -185,7 +209,13 @@ export default function DailyPlay({
         <text x={dest.x} y={dest.y - 4.5} textAnchor="middle" fontFamily="var(--font-serif)" fontSize={7} fill="var(--map-ink)" style={{ paintOrder: "stroke" }} stroke="var(--map-paper)" strokeWidth={1.5} strokeOpacity={0.85}>
           {destination.name}
         </text>
-        <circle data-testid="you-are-here" cx={you.x} cy={you.y} r={2.6} fill="var(--color-chrome-gold)" stroke="var(--map-paper)" strokeWidth={1.3} vectorEffect="non-scaling-stroke" />
+        {/* "You are here": a little idle trekker standing on the spot, instead of
+            a plain dot — feet at the point. A soft paper halo keeps it legible
+            over any country colour. */}
+        <g data-testid="you-are-here" transform={`translate(${you.x} ${you.y}) scale(0.9)`}>
+          <ellipse cx={0} cy={0} rx={2.4} ry={0.9} fill="var(--map-paper)" opacity={0.55} />
+          <Walker />
+        </g>
       </g>
     );
   }, [route.points, destination.at, progress]);
