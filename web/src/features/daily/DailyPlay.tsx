@@ -132,7 +132,7 @@ export default function DailyPlay({
     const dest = project(destination.at);
     return (
       <g aria-hidden="true" style={{ pointerEvents: "none" }}>
-        <polyline points={line} fill="none" stroke="var(--map-terracotta)" strokeWidth={1.4} strokeOpacity={0.5} strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />
+        <polyline points={line} fill="none" stroke="var(--map-terracotta)" strokeWidth={3.2} strokeOpacity={0.85} strokeDasharray="5 5" vectorEffect="non-scaling-stroke" />
         {pts.map((s, i) => (
           <circle key={i} cx={s.x} cy={s.y} r={1.3} fill="var(--map-terracotta)" stroke="var(--map-paper)" strokeWidth={0.6} vectorEffect="non-scaling-stroke" />
         ))}

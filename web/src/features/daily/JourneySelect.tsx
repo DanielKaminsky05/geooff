@@ -61,7 +61,7 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
             >
               {/* Wide invisible hit area so the thin road is easy to click. */}
               <polyline points={line} fill="none" stroke="transparent" strokeWidth={22} vectorEffect="non-scaling-stroke" style={{ pointerEvents: "stroke" }} />
-              <polyline points={line} fill="none" stroke={stroke} strokeWidth={on ? 3 : 1.8} strokeDasharray="1 7" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+              <polyline points={line} fill="none" stroke={stroke} strokeWidth={on ? 5 : 3.4} strokeDasharray="2 7" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
               {/* Stops (the locations along the way) reveal only on hover. */}
               {on &&
                 pts.map((p, i) => (

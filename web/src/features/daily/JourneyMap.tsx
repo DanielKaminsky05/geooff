@@ -119,8 +119,8 @@ export default function JourneyMap({
 
         {geo.points.length >= 2 && (
           <>
-            <polyline points={fullLine} fill="none" stroke="var(--map-terracotta)" strokeWidth={1.4} strokeOpacity={0.35} strokeDasharray="4 5" vectorEffect="non-scaling-stroke" />
-            <polyline points={travelledPolyline} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={2.6} strokeOpacity={0.95} strokeLinecap="round" vectorEffect="non-scaling-stroke" data-testid="journey-route" />
+            <polyline points={fullLine} fill="none" stroke="var(--map-terracotta)" strokeWidth={3} strokeOpacity={0.55} strokeDasharray="5 6" vectorEffect="non-scaling-stroke" />
+            <polyline points={travelledPolyline} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={4} strokeOpacity={0.95} strokeLinecap="round" vectorEffect="non-scaling-stroke" data-testid="journey-route" />
           </>
         )}
 
