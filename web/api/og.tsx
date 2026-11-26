@@ -1,18 +1,20 @@
 /**
  * Dynamic Open Graph card for a shared Daily Trek score (/api/og?d=<payload>).
  *
- * Renders a 1200x630 "atlas/journal" card from a stateless share payload using
- * @vercel/og (Satori). No fonts are bundled — the default sans is used — so the
- * brand comes from the kraft-paper palette, the drawn route line, and the
- * capture grid.
+ * Renders a 1200x630 "atlas/journal" card from a stateless share payload.
  *
- * Node.js runtime (Edge rejects @vercel/og here as an "unsupported module").
+ * Uses satori (JSX -> SVG) + @resvg/resvg-wasm (SVG -> PNG) DIRECTLY rather than
+ * @vercel/og: @vercel/og crashes at module-load in this project's functions
+ * (its bundled wasm/font init). Driving the two pieces ourselves lets us init
+ * the wasm explicitly and catch every error. The font (Inter) is fetched over
+ * HTTP since relative asset files don't bundle into the function.
+ *
  * SINGLE-FILE ON PURPOSE: Vercel doesn't bundle this project's /api functions'
- * relative imports, so the decode helpers are inlined (kept in sync with the
- * client encoder in src/features/daily/shareLink.ts, stable v1 wire format).
- * Only node_modules imports (@vercel/og) survive bundling.
+ * relative imports — only node_modules. Decode helpers are inlined (kept in
+ * sync with the client encoder in src/features/daily/shareLink.ts, v1 format).
  */
-import { ImageResponse } from "@vercel/og";
+import satori from "satori";
+import { Resvg, initWasm } from "@resvg/resvg-wasm";
 
 // Journal/atlas palette (mirrors index.css map + chrome tokens).
 const PAPER = "#e6d7b4";
@@ -91,19 +93,42 @@ const trekNumber = (d: string): number =>
 
 const group = (n: number): string => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
-// @vercel/og's bundled default font isn't shipped in this project's function,
-// so load an explicit one over HTTP (Satori supports woff). Without a font,
-// rendering crashes with FUNCTION_INVOCATION_FAILED.
+// Satori needs an explicit font; fetch Inter (woff) over HTTP (assets don't
+// bundle into the function). Cached across warm invocations.
 const FONT_BASE = "https://cdn.jsdelivr.net/npm/@fontsource/inter@5.1.1/files";
-async function loadFonts() {
-  const [r4, r8] = await Promise.all([
-    fetch(`${FONT_BASE}/inter-latin-400-normal.woff`),
-    fetch(`${FONT_BASE}/inter-latin-800-normal.woff`),
-  ]);
-  const fonts: { name: string; data: ArrayBuffer; weight: 400 | 800; style: "normal" }[] = [];
-  if (r4.ok) fonts.push({ name: "Inter", data: await r4.arrayBuffer(), weight: 400, style: "normal" });
-  if (r8.ok) fonts.push({ name: "Inter", data: await r8.arrayBuffer(), weight: 800, style: "normal" });
-  return fonts;
+type SatoriFont = { name: string; data: ArrayBuffer; weight: 400 | 800; style: "normal" };
+let fontsPromise: Promise<SatoriFont[]> | null = null;
+function loadFonts(): Promise<SatoriFont[]> {
+  if (!fontsPromise) {
+    fontsPromise = Promise.all([
+      fetch(`${FONT_BASE}/inter-latin-400-normal.woff`).then((r) => r.arrayBuffer()),
+      fetch(`${FONT_BASE}/inter-latin-800-normal.woff`).then((r) => r.arrayBuffer()),
+    ])
+      .then(
+        ([d4, d8]): SatoriFont[] => [
+          { name: "Inter", data: d4, weight: 400, style: "normal" },
+          { name: "Inter", data: d8, weight: 800, style: "normal" },
+        ],
+      )
+      .catch((e) => {
+        fontsPromise = null; // allow a retry on the next request
+        throw e;
+      });
+  }
+  return fontsPromise;
+}
+
+// resvg wasm must be initialised once before use.
+const RESVG_WASM = "https://cdn.jsdelivr.net/npm/@resvg/resvg-wasm@2.6.2/index_bg.wasm";
+let wasmPromise: Promise<void> | null = null;
+function ensureWasm(): Promise<void> {
+  if (!wasmPromise) {
+    wasmPromise = initWasm(fetch(RESVG_WASM)).catch((e) => {
+      wasmPromise = null;
+      throw e;
+    });
+  }
+  return wasmPromise;
 }
 
 export async function GET(req: Request): Promise<Response> {
@@ -111,7 +136,6 @@ export async function GET(req: Request): Promise<Response> {
     // req.url can be host-less on Vercel's Node Web-handler — give it a base.
     const url = new URL(req.url, "http://localhost");
     const data = decode(url.searchParams.get("d") ?? "");
-    const fonts = await loadFonts();
 
     const arrived = data?.outcome === "arrived";
     const points = data?.points ?? 0;
@@ -123,7 +147,8 @@ export async function GET(req: Request): Promise<Response> {
     const trek = data ? trekNumber(data.date) : null;
     const accent = arrived ? GOLD : RED;
 
-    const image = new ImageResponse(
+    const fonts = await loadFonts();
+    const svg = await satori(
       (
         <div
           style={{
@@ -150,7 +175,7 @@ export async function GET(req: Request): Promise<Response> {
               borderRadius: 16,
             }}
           >
-            {/* Header: wordmark + date/trek number */}
+            {/* Header */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div style={{ display: "flex", flexDirection: "column" }}>
                 <div style={{ display: "flex", fontSize: 44, fontWeight: 800, letterSpacing: 2 }}>GEOFIGHT</div>
@@ -172,7 +197,7 @@ export async function GET(req: Request): Promise<Response> {
               </div>
             </div>
 
-            {/* Centre: route line, headline, points */}
+            {/* Centre */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", width: "66%", marginBottom: 30 }}>
                 <div style={{ display: "flex", width: 24, height: 24, borderRadius: 12, backgroundColor: SEPIA }} />
@@ -189,19 +214,17 @@ export async function GET(req: Request): Promise<Response> {
                 <div style={{ display: "flex", width: 26, height: 26, backgroundColor: accent }} />
               </div>
 
-              <div style={{ display: "flex", fontSize: 88, fontWeight: 800, color: accent, lineHeight: 1 }}>
-                {headline}
-              </div>
+              <div style={{ display: "flex", fontSize: 88, fontWeight: 800, color: accent }}>{headline}</div>
 
               <div style={{ display: "flex", alignItems: "flex-end", marginTop: 20 }}>
-                <div style={{ display: "flex", fontSize: 128, fontWeight: 800, lineHeight: 1 }}>{group(points)}</div>
+                <div style={{ display: "flex", fontSize: 128, fontWeight: 800 }}>{group(points)}</div>
                 <div style={{ display: "flex", fontSize: 36, color: FADE, marginLeft: 14, marginBottom: 16 }}>pts</div>
               </div>
 
               <div style={{ display: "flex", fontSize: 28, color: SEPIA, marginTop: 14 }}>{subtitle}</div>
             </div>
 
-            {/* Footer: capture grid + tagline */}
+            {/* Footer */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center" }}>
                 {grid.slice(0, 12).map((cell, i) => (
@@ -225,11 +248,10 @@ export async function GET(req: Request): Promise<Response> {
       ),
       { width: 1200, height: 630, fonts },
     );
-    // Force the render to complete here so any Satori/resvg error is caught
-    // below (rather than escaping as an opaque FUNCTION_INVOCATION_FAILED when
-    // the platform streams the body after this handler returns).
-    const png = await image.arrayBuffer();
-    return new Response(png, {
+
+    await ensureWasm();
+    const png = new Resvg(svg).render().asPng();
+    return new Response(png.buffer as ArrayBuffer, {
       headers: {
         "content-type": "image/png",
         "cache-control": "public, max-age=0, s-maxage=86400, immutable",
