@@ -109,150 +109,113 @@ export default function DailyRecap({ result, percentile, progress = 0, answers, 
     <div
       data-testid="daily-recap"
       aria-live="polite"
-      className="fade-in absolute inset-0 z-20 flex items-center justify-center p-3 bg-black/40 backdrop-blur-sm"
+      className="daily-recap-backdrop fade-in absolute inset-0 z-20 overflow-y-auto"
     >
-      {/* Floating card — the journey map stays visible behind/around it. */}
-      <div className="chrome-ink flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[var(--color-chrome-gold)]/40 bg-[var(--color-chrome)]/95 shadow-2xl">
-      {/* Headline */}
-      <header className="chrome-bar chrome-ink shrink-0 border-b border-[var(--color-chrome-gold)]/40 px-4 py-5 text-center">
-        <h2
-          data-testid="daily-recap-headline"
-          className="daily-tier-pop max-w-full break-words px-2 font-display font-black uppercase leading-[1.05]"
-          style={{
-            color: arrived ? "var(--color-chrome-gold)" : "var(--color-accent)",
-            fontSize: "clamp(1.2rem, 6vw, 2.4rem)",
-          }}
-        >
-          {category}
-        </h2>
-        <p className="mt-1 text-sm text-muted">
-          {arrived ? "You reached your destination." : "You died on the road."}
-        </p>
-        <p className="mt-0.5 text-xs uppercase tracking-widest text-muted">
-          {journey} journey · {arrived ? "Arrived" : "Died"}
-        </p>
-      </header>
-
-      {/* Body */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5">
-        <div className="mx-auto flex w-full max-w-md flex-col gap-5">
-          {/* Points */}
-          <section className="text-center">
-            <div
-              data-testid="daily-recap-points"
-              className="font-display text-5xl font-black tabular-nums"
-            >
-              {shownPoints.toLocaleString()}
-            </div>
-            <div className="text-xs uppercase tracking-widest text-muted">points</div>
-
-            <ol
-              data-testid="daily-recap-breakdown"
-              className="chrome-bar chrome-ink mt-3 flex flex-col gap-0.5 rounded-lg border border-[var(--color-chrome-gold)]/30 p-2 text-left text-sm"
-            >
-              {result.perPrompt.map((p, i) => {
-                const tier = promptTier(p.named, p.total);
-                const label = labelById[p.promptId] ?? `Prompt ${i + 1}`;
-                const list = answers?.[p.promptId];
-                const isOpen = openPrompt === p.promptId;
-                return (
-                  <li key={p.promptId}>
-                    <button
-                      type="button"
-                      onClick={() => list && setOpenPrompt(isOpen ? null : p.promptId)}
-                      aria-expanded={isOpen}
-                      className={`flex w-full items-start justify-between gap-2 rounded-md px-2 py-1 text-left tabular-nums transition ${list ? "hover:bg-white/10" : "cursor-default"}`}
-                    >
-                      <span className="flex min-w-0 flex-1 items-start gap-1.5">
-                        {list && (
-                          <span className="mt-0.5 text-[10px] text-muted">{isOpen ? "▾" : "▸"}</span>
-                        )}
-                        {/* Full prompt — wraps to the next line instead of truncating. */}
-                        <span className="min-w-0 break-words text-muted">{label}</span>
-                      </span>
-                      <span className="mt-0.5 shrink-0 text-xs text-muted">
-                        {p.named}/{p.total}
-                      </span>
-                      <span
-                        className="mt-0.5 w-14 shrink-0 text-right text-xs font-black uppercase"
-                        style={{ color: tier.color }}
-                      >
-                        {tier.label}
-                      </span>
-                      <span className="mt-0.5 w-10 shrink-0 text-right font-semibold">
-                        {p.points.toLocaleString()}
-                      </span>
-                    </button>
-                    {isOpen && list && (
-                      <div className="flex flex-wrap gap-1 px-3 pb-2 pt-1">
-                        {list.map((name) => (
-                          <span key={name} className="rounded bg-white/10 px-1.5 py-0.5 text-xs">
-                            {name}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
-            {answers && (
-              <p className="mt-1 text-center text-[10px] text-muted">
-                Tap a prompt to reveal its answers
-              </p>
-            )}
-          </section>
-
-          {/* Gold */}
-          <section
-            data-testid="daily-recap-gold"
-            className="chrome-bar chrome-ink flex items-center justify-between gap-3 rounded-lg border border-[var(--color-chrome-gold)]/30 p-3"
+      <div className="mx-auto flex min-h-full w-full max-w-md flex-col items-center justify-center gap-6 px-6 py-10 text-center text-[var(--color-chrome-ink)]">
+        {/* Category + outcome */}
+        <div className="max-w-full">
+          <h2
+            data-testid="daily-recap-headline"
+            className="daily-tier-pop max-w-full break-words font-display font-black uppercase leading-[1.05]"
+            style={{
+              color: arrived ? "var(--color-chrome-gold)" : "var(--color-accent)",
+              fontSize: "clamp(1.5rem, 9.5vw, 2.75rem)",
+            }}
           >
-            <div>
-              <div className="text-xs uppercase tracking-widest text-muted">Gold banked</div>
-              <div
-                className="font-display text-2xl font-black tabular-nums"
-                style={{ color: "var(--color-chrome-gold)" }}
-              >
-                +{result.gold.toLocaleString()}
-              </div>
-              {!arrived && (
-                <div className="text-[11px] text-muted">
-                  Kept what you collected — missed the reward at the destination.
-                </div>
-              )}
-            </div>
-            <div className="text-right">
-              <div className="text-xs uppercase tracking-widest text-muted">Wallet</div>
-              <div
-                data-testid="daily-recap-wallet"
-                className="font-display text-2xl font-black tabular-nums"
-                style={{ color: "var(--color-chrome-gold)" }}
-              >
-                {walletBalance.toLocaleString()}
-              </div>
-              <div className="text-[11px] text-muted">Spend soon.</div>
-            </div>
-          </section>
-
-          {/* Percentile */}
-          <section data-testid="daily-recap-percentile" className="text-center">
-            <p className="text-sm">
-              You beat about <span className="font-bold tabular-nums">{pct}%</span> of players
-            </p>
-            <p className="text-[11px] text-muted">estimate</p>
-          </section>
+            {category}
+          </h2>
+          <p className="mt-2 text-sm opacity-75">
+            {arrived ? "You reached your destination." : "You died on the road."}
+          </p>
+          <p className="mt-0.5 text-[11px] uppercase tracking-[0.25em] opacity-50">
+            {journey} journey · {arrived ? "Arrived" : "Died"}
+          </p>
         </div>
-      </div>
 
-      {/* Actions */}
-      <footer className="chrome-bar chrome-ink shrink-0 border-t border-[var(--color-chrome-gold)]/40 px-4 py-4">
-        <div className="mx-auto flex w-full max-w-md items-center justify-center gap-3">
+        {/* Points hero */}
+        <div>
+          <div
+            data-testid="daily-recap-points"
+            className="font-display text-6xl font-black leading-none tabular-nums sm:text-7xl"
+            style={{ textShadow: "0 3px 16px rgba(0,0,0,0.55)" }}
+          >
+            {shownPoints.toLocaleString()}
+          </div>
+          <div className="mt-1 text-[11px] uppercase tracking-[0.3em] opacity-55">points</div>
+        </div>
+
+        {/* Three stats, hairline-separated, no boxes */}
+        <div className="flex w-full items-stretch justify-center">
+          <Stat testid="daily-recap-gold" label="Gold banked" value={`+${result.gold.toLocaleString()}`} color="var(--color-chrome-gold)" />
+          <div className="w-px self-stretch bg-white/15" />
+          <Stat testid="daily-recap-wallet" label="Wallet" value={walletBalance.toLocaleString()} color="var(--color-chrome-gold)" />
+          <div className="w-px self-stretch bg-white/15" />
+          <Stat testid="daily-recap-percentile" label="Players beaten" value={`${pct}%`} />
+        </div>
+        {!arrived && (
+          <p className="-mt-3 text-[11px] opacity-60">
+            Kept what you collected — missed the reward at the destination.
+          </p>
+        )}
+
+        {/* Breakdown — borderless, hairline-divided, tap to reveal answers */}
+        <div className="w-full">
+          <ol data-testid="daily-recap-breakdown" className="w-full text-left text-sm">
+            {result.perPrompt.map((p, i) => {
+              const tier = promptTier(p.named, p.total);
+              const label = labelById[p.promptId] ?? `Prompt ${i + 1}`;
+              const list = answers?.[p.promptId];
+              const isOpen = openPrompt === p.promptId;
+              return (
+                <li key={p.promptId} className="border-t border-white/10 first:border-t-0">
+                  <button
+                    type="button"
+                    onClick={() => list && setOpenPrompt(isOpen ? null : p.promptId)}
+                    aria-expanded={isOpen}
+                    className={`flex w-full items-start justify-between gap-2 py-2 text-left tabular-nums transition ${list ? "hover:opacity-80" : "cursor-default"}`}
+                  >
+                    <span className="flex min-w-0 flex-1 items-start gap-1.5">
+                      {list && <span className="mt-0.5 text-[10px] opacity-50">{isOpen ? "▾" : "▸"}</span>}
+                      <span className="min-w-0 break-words opacity-80">{label}</span>
+                    </span>
+                    <span className="mt-0.5 shrink-0 text-xs opacity-55">
+                      {p.named}/{p.total}
+                    </span>
+                    <span
+                      className="mt-0.5 w-14 shrink-0 text-right text-xs font-black uppercase"
+                      style={{ color: tier.color }}
+                    >
+                      {tier.label}
+                    </span>
+                    <span className="mt-0.5 w-10 shrink-0 text-right font-semibold">
+                      {p.points.toLocaleString()}
+                    </span>
+                  </button>
+                  {isOpen && list && (
+                    <div className="flex flex-wrap gap-1 pb-2 pl-4">
+                      {list.map((name) => (
+                        <span key={name} className="rounded bg-white/10 px-1.5 py-0.5 text-xs">
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+          {answers && (
+            <p className="mt-2 text-center text-[10px] opacity-45">Tap a prompt to reveal its answers</p>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="mt-1 flex w-full items-center justify-center gap-3">
           <button
             type="button"
             onClick={onShare}
             data-testid="daily-recap-share"
-            className="rounded-lg bg-[var(--color-chrome-gold)] px-5 py-2 text-sm font-semibold text-[var(--color-chrome)] transition hover:brightness-110"
+            className="rounded-lg bg-[var(--color-chrome-gold)] px-6 py-2 text-sm font-bold text-[var(--color-chrome)] transition hover:brightness-110"
           >
             {copied ? "Copied" : "Share"}
           </button>
@@ -261,14 +224,35 @@ export default function DailyRecap({ result, percentile, progress = 0, answers, 
               type="button"
               onClick={onClose}
               data-testid="daily-recap-close"
-              className="rounded-lg border border-[var(--color-chrome-gold)]/40 bg-surface-raised px-5 py-2 text-sm font-semibold transition hover:brightness-110"
+              className="rounded-lg border border-white/25 px-6 py-2 text-sm font-semibold text-current transition hover:bg-white/10"
             >
               Back home
             </button>
           )}
         </div>
-      </footer>
       </div>
+    </div>
+  );
+}
+
+/** One stat in the recap's hairline-separated stat row. */
+function Stat({
+  testid,
+  label,
+  value,
+  color,
+}: {
+  testid?: string;
+  label: string;
+  value: string;
+  color?: string;
+}) {
+  return (
+    <div data-testid={testid} className="flex flex-1 flex-col items-center px-2">
+      <div className="font-display text-xl font-black tabular-nums" style={{ color }}>
+        {value}
+      </div>
+      <div className="mt-0.5 text-[10px] uppercase tracking-wider opacity-55">{label}</div>
     </div>
   );
 }
