@@ -314,7 +314,7 @@ export const DAILY_PROMPT_MAX = 150;
 /** Flat points for EACH correct country named, added ON TOP of the capture score.
  *  Makes naming always pay off; it also makes a run's max depend on the day's
  *  pool sizes, so journey distances are resolved as a fraction of that max. */
-export const DAILY_NAME_BONUS = 10;
+export const DAILY_NAME_BONUS = 5;
 
 export type JourneyId = "short" | "medium" | "long";
 export type DailyOutcome = "arrived" | "died";
