@@ -30,6 +30,7 @@ import type {
   JourneyId,
 } from "../features/daily/contract";
 import { DAILY_PROMPT_MAX, DAILY_NAME_BONUS } from "../features/daily/contract";
+import { capturePercentile } from "../features/daily/percentile";
 import { promptScore, pick } from "../features/daily/runScore";
 import { promptTier, FULL_CLEAR_MESSAGE } from "../features/daily/tiers";
 
@@ -55,14 +56,16 @@ const PREFERS_REDUCED_MOTION =
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** Client-side percentile fallback used only if /daily/finish is unreachable.
- *  Approximates the day's score max from the per-prompt pool sizes we saw. */
+ *  Approximates the day's score max from the per-prompt pool sizes we saw, then
+ *  runs it through the SAME capturePercentile S-curve the server uses — a linear
+ *  ratio*100 here would show a different number than the authoritative finish. */
 function fallbackPercentile(result: DailyRunResult): number {
   const dayMax = result.perPrompt.reduce(
     (s, r) => s + DAILY_PROMPT_MAX + DAILY_NAME_BONUS * Math.max(0, r.total),
     0,
   );
   const ratio = dayMax > 0 ? Math.min(1, result.points / dayMax) : 0;
-  return Math.round(Math.min(99, Math.max(1, ratio * 100)));
+  return capturePercentile(ratio);
 }
 
 function assembleResult(
