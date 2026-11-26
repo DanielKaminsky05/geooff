@@ -11,6 +11,7 @@
 import { useMemo, useState } from "react";
 import WorldMap from "../../components/WorldMap";
 import { project } from "./geo";
+import { smoothPath } from "./smoothPath";
 import type { DailySet, JourneyId } from "./contract";
 
 const ORDER: JourneyId[] = ["short", "medium", "long"];
@@ -43,7 +44,7 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
           const route = routeOf(id);
           if (!route) return null;
           const pts = route.points.map(project);
-          const line = pts.map((p) => `${p.x},${p.y}`).join(" ");
+          const line = smoothPath(pts);
           const on = hover === id;
           const stroke = on ? "var(--color-chrome-gold)" : "var(--map-terracotta)";
           const origin = pts[0];
@@ -60,12 +61,12 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
               opacity={hover && !on ? 0.5 : 1}
             >
               {/* Wide invisible hit area so the thin road is easy to click. */}
-              <polyline points={line} fill="none" stroke="transparent" strokeWidth={22} vectorEffect="non-scaling-stroke" style={{ pointerEvents: "stroke" }} />
-              <polyline points={line} fill="none" stroke={stroke} strokeWidth={on ? 5 : 3.4} strokeDasharray="2 7" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+              <path d={line} fill="none" stroke="transparent" strokeWidth={22} vectorEffect="non-scaling-stroke" style={{ pointerEvents: "stroke" }} />
+              <path d={line} fill="none" stroke={stroke} strokeWidth={on ? 5 : 3.4} strokeDasharray="2 7" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
               {/* Stops (the locations along the way) reveal only on hover. */}
               {on &&
                 pts.map((p, i) => (
-                  <circle key={i} cx={p.x} cy={p.y} r={2} fill={stroke} stroke="var(--map-paper)" strokeWidth={0.7} vectorEffect="non-scaling-stroke" />
+                  <rect key={i} x={p.x - 2} y={p.y - 2} width={4} height={4} rx={0.7} fill={stroke} stroke="var(--map-paper)" strokeWidth={0.7} vectorEffect="non-scaling-stroke" />
                 ))}
               <text
                 x={origin.x}

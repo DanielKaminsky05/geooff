@@ -19,6 +19,7 @@ import AnswerBar from "../match/AnswerBar";
 import { useFeedClock } from "./useFeedClock";
 import { postAnswer, RateLimitedError } from "./dailyApi";
 import { project } from "./geo";
+import { smoothPath } from "./smoothPath";
 import { buildRouteGeometry, pointAtFraction } from "./routeGeometry";
 import { DAILY_BASE_SECONDS } from "./contract";
 import type { DailyDestination, DailyPrompt, DailyPromptResult, DailyRoute } from "./contract";
@@ -127,14 +128,14 @@ export default function DailyPlay({
   const overlayEl = useMemo(() => {
     const pts = route.points.map(project);
     const geo = buildRouteGeometry(pts);
-    const line = pts.map((p) => `${p.x},${p.y}`).join(" ");
+    const line = smoothPath(pts);
     const you = pointAtFraction(geo, Math.max(0, Math.min(1, progress)));
     const dest = project(destination.at);
     return (
       <g aria-hidden="true" style={{ pointerEvents: "none" }}>
-        <polyline points={line} fill="none" stroke="var(--map-terracotta)" strokeWidth={3.2} strokeOpacity={0.85} strokeDasharray="5 5" vectorEffect="non-scaling-stroke" />
+        <path d={line} fill="none" stroke="var(--map-terracotta)" strokeWidth={3.2} strokeOpacity={0.85} strokeDasharray="5 5" vectorEffect="non-scaling-stroke" />
         {pts.map((s, i) => (
-          <circle key={i} cx={s.x} cy={s.y} r={1.3} fill="var(--map-terracotta)" stroke="var(--map-paper)" strokeWidth={0.6} vectorEffect="non-scaling-stroke" />
+          <rect key={i} x={s.x - 1.3} y={s.y - 1.3} width={2.6} height={2.6} rx={0.45} fill="var(--map-terracotta)" stroke="var(--map-paper)" strokeWidth={0.6} vectorEffect="non-scaling-stroke" />
         ))}
         <circle cx={dest.x} cy={dest.y} r={3} fill="none" stroke="var(--color-accent)" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
         <Star cx={dest.x} cy={dest.y} r={1.9} fill="var(--color-accent)" />

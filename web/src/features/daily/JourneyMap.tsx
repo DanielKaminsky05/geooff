@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { maps } from "../../lib/maps";
 import type { DailyDestination, DailyLandmark, DailyRoute } from "../../lib/protocol";
 import { project, fitViewBox } from "./geo";
+import { smoothPath } from "./smoothPath";
 import { buildRouteGeometry, pointAtFraction } from "./routeGeometry";
 
 export interface JourneyMapProps {
@@ -89,13 +90,13 @@ export default function JourneyMap({
   }, [geo, start, target, dest]);
 
   const traveler = pointAtFraction(geo, shown);
-  const travelledPolyline = (() => {
+  const travelledPath = (() => {
     const targetLen = geo.length * shown;
     const pts = geo.points.filter((_, i) => geo.cumulative[i] <= targetLen);
     pts.push(traveler);
-    return pts.map((p) => `${p.x},${p.y}`).join(" ");
+    return smoothPath(pts);
   })();
-  const fullLine = geo.points.map((p) => `${p.x},${p.y}`).join(" ");
+  const fullLine = smoothPath(geo.points);
 
   // Marker/label scale relative to the (zoomed) view. Smaller than before.
   const u = Math.max(1, Number(viewBox.split(" ")[2]) || 170) / 100;
@@ -119,8 +120,8 @@ export default function JourneyMap({
 
         {geo.points.length >= 2 && (
           <>
-            <polyline points={fullLine} fill="none" stroke="var(--map-terracotta)" strokeWidth={3} strokeOpacity={0.55} strokeDasharray="5 6" vectorEffect="non-scaling-stroke" />
-            <polyline points={travelledPolyline} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={4} strokeOpacity={0.95} strokeLinecap="round" vectorEffect="non-scaling-stroke" data-testid="journey-route" />
+            <path d={fullLine} fill="none" stroke="var(--map-terracotta)" strokeWidth={3} strokeOpacity={0.55} strokeDasharray="5 6" vectorEffect="non-scaling-stroke" />
+            <path d={travelledPath} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={4} strokeOpacity={0.95} strokeLinecap="round" vectorEffect="non-scaling-stroke" data-testid="journey-route" />
           </>
         )}
 
@@ -138,7 +139,7 @@ export default function JourneyMap({
                       <animate attributeName="stroke-opacity" values="0.8;0" dur="1.3s" repeatCount="indefinite" />
                     </circle>
                   )}
-                  <circle cx={at.x} cy={at.y} r={1.1 * u} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+                  <rect x={at.x - 1.1 * u} y={at.y - 1.1 * u} width={2.2 * u} height={2.2 * u} rx={0.4 * u} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
                 </>
               )}
             </g>
