@@ -26,13 +26,16 @@ const JOURNEY_LABEL: Record<JourneyId, string> = {
 const TIER_GLYPHS = ["█", "▓", "▒", "░", "·"] as const;
 //                    █          ▓          ▒          ░          ·
 
-/** Map a named/total capture ratio to one of the five tier glyphs. */
+/** Map a named/total capture ratio to one of the five tier glyphs. Thresholds
+ *  mirror promptTier() in tiers.ts (1.0 / 0.75 / 0.4 / >0 / 0) so the share grid
+ *  and the recap grade agree — a 0.45 capture is "Solid" in both, not a near-
+ *  empty glyph here and green there. Keep the two in sync. */
 function tierGlyph(named: number, total: number): string {
   if (total <= 0) return TIER_GLYPHS[0]; // nothing to capture → treat as full
   const ratio = Math.max(0, Math.min(1, named / total));
   if (ratio >= 1) return TIER_GLYPHS[0];
   if (ratio >= 0.75) return TIER_GLYPHS[1];
-  if (ratio >= 0.5) return TIER_GLYPHS[2];
+  if (ratio >= 0.4) return TIER_GLYPHS[2];
   if (ratio > 0) return TIER_GLYPHS[3];
   return TIER_GLYPHS[4]; // zero named
 }

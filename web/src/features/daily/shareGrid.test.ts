@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildShareGrid } from "./shareGrid";
+import { promptTier } from "./tiers";
 import type { DailyPromptResult, DailyRunResult } from "../../lib/protocol";
 
 function promptResult(named: number, total: number, points = named * 10): DailyPromptResult {
@@ -69,6 +70,32 @@ describe("buildShareGrid", () => {
       const ok = ch.charCodeAt(0) < 128 || allowedBlocks.has(ch);
       expect(ok, `unexpected char: ${JSON.stringify(ch)}`).toBe(true);
     }
+  });
+
+  it("uses glyphs consistent with promptTier's grade (no threshold drift)", () => {
+    // Each promptTier label maps to exactly one glyph; they must stay aligned so
+    // a prompt reads as the same tier in the recap and the share grid.
+    const LABEL_TO_GLYPH: Record<string, string> = {
+      Flawless: "█",
+      Great: "▓",
+      Solid: "▒",
+      Scraped: "░",
+      Blank: "·",
+    };
+    const cases: Array<[number, number]> = [
+      [5, 5], // 1.0  Flawless
+      [8, 10], // 0.8  Great
+      [9, 20], // 0.45 Solid — the boundary the two systems used to disagree on
+      [2, 10], // 0.2  Scraped
+      [0, 8], // 0    Blank
+    ];
+    const result = makeResult({ perPrompt: cases.map(([n, t]) => promptResult(n, t)) });
+    const lines = buildShareGrid(result).split("\n");
+    cases.forEach(([named, total], i) => {
+      const line = lines.find((l) => l.startsWith(`${i + 1} `))!;
+      const expected = LABEL_TO_GLYPH[promptTier(named, total).label];
+      expect(line, `prompt ${i + 1} (ratio ${named}/${total})`).toContain(expected);
+    });
   });
 
   it("renders a perfect prompt and an empty prompt as different tiers", () => {
