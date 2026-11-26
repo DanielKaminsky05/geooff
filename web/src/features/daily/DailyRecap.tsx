@@ -74,8 +74,10 @@ export default function DailyRecap({ result, percentile, walletBalance, onClose 
     <div
       data-testid="daily-recap"
       aria-live="polite"
-      className="fade-in chrome-ink absolute inset-0 z-20 flex flex-col bg-[var(--color-chrome)]/95 backdrop-blur"
+      className="fade-in absolute inset-0 z-20 flex items-center justify-center p-3 bg-black/40 backdrop-blur-sm"
     >
+      {/* Floating card — the journey map stays visible behind/around it. */}
+      <div className="chrome-ink flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[var(--color-chrome-gold)]/40 bg-[var(--color-chrome)]/95 shadow-2xl">
       {/* Headline */}
       <header className="chrome-bar chrome-ink shrink-0 border-b border-[var(--color-chrome-gold)]/40 px-4 py-5 text-center">
         <h2
@@ -190,6 +192,7 @@ export default function DailyRecap({ result, percentile, walletBalance, onClose 
           )}
         </div>
       </footer>
+      </div>
     </div>
   );
 }

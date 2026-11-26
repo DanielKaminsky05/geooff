@@ -307,8 +307,20 @@ export default function DailyDive() {
   }
 
   if (phase === "recap" && recapResult) {
+    // Show the final journey state behind the recap so it overlays the map
+    // (where you arrived, or where you died) instead of replacing it.
+    const { journey, route } = pick(set, journeyId ?? recapResult.journey);
+    const endProgress = journey.distance > 0 ? Math.min(1, recapResult.points / journey.distance) : 0;
     return (
-      <main className="min-h-dvh bg-surface">
+      <main className="relative h-dvh bg-surface">
+        <JourneyMap
+          route={route}
+          destination={set.destination}
+          landmarks={journey.landmarks}
+          from={endProgress}
+          progress={endProgress}
+          className="absolute inset-0"
+        />
         <DailyRecap
           result={recapResult}
           percentile={percentile}
