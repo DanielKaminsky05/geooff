@@ -32,6 +32,8 @@ export interface JourneyMapProps {
 
 const JUST_PASSED_WINDOW = 0.06;
 const TWEEN_MS = 2800;
+/** How long the traveler pauses on a landmark to show its gold reward. */
+const PAUSE_MS = 700;
 
 export default function JourneyMap({
   route,
@@ -50,9 +52,11 @@ export default function JourneyMap({
     return { geo: buildRouteGeometry(pts), dest: project(destination.at) };
   }, [route.points, destination.at]);
 
-  // Tween `shown` from start → target so the character AND the gold trail grow
-  // together (and the camera, which is framed on this leg's segment).
+  // Tween `shown` from start → target, PAUSING on each landmark crossed to pop a
+  // gold reward — so reaching a landmark is a felt beat, not a blur. The traveler
+  // and gold trail grow with `shown`; the camera frames this leg's segment.
   const [shown, setShown] = useState(start);
+  const [reward, setReward] = useState<{ gold: number; x: number; y: number } | null>(null);
   const onArrivedRef = useRef(onArrived);
   onArrivedRef.current = onArrived;
   useEffect(() => {
@@ -61,18 +65,63 @@ export default function JourneyMap({
       onArrivedRef.current?.();
       return;
     }
+    let cancelled = false;
     let raf = 0;
-    const t0 = performance.now();
+    const timers: number[] = [];
     const ease = (t: number) => 1 - Math.pow(1 - t, 3);
-    const loop = (now: number) => {
-      const t = Math.min(1, (now - t0) / TWEEN_MS);
-      setShown(start + (target - start) * ease(t));
-      if (t < 1) raf = requestAnimationFrame(loop);
-      else onArrivedRef.current?.();
+
+    // Landmark fractions crossed on this leg, in order — the pause points.
+    const stops = landmarks
+      .map((l) => l.atFraction)
+      .filter((f) => f > start + 1e-4 && f <= target + 1e-6)
+      .sort((a, b) => a - b);
+    const waypoints = stops.slice();
+    if (waypoints.length === 0 || waypoints[waypoints.length - 1] < target - 1e-6) {
+      waypoints.push(target);
+    }
+
+    const animateTo = (from: number, to: number, dur: number) =>
+      new Promise<void>((resolve) => {
+        const t0 = performance.now();
+        const step = (now: number) => {
+          if (cancelled) return;
+          const t = dur <= 0 ? 1 : Math.min(1, (now - t0) / dur);
+          setShown(from + (to - from) * ease(t));
+          if (t < 1) raf = requestAnimationFrame(step);
+          else resolve();
+        };
+        raf = requestAnimationFrame(step);
+      });
+    const wait = (ms: number) =>
+      new Promise<void>((resolve) => {
+        timers.push(window.setTimeout(resolve, ms));
+      });
+
+    void (async () => {
+      let prev = start;
+      const span = target - start;
+      for (const w of waypoints) {
+        await animateTo(prev, w, Math.max(350, TWEEN_MS * ((w - prev) / span)));
+        if (cancelled) return;
+        const lm = landmarks.find((l) => Math.abs(l.atFraction - w) < 1e-6);
+        if (lm && stops.includes(w)) {
+          const at = pointAtFraction(geo, w);
+          setReward({ gold: lm.gold, x: at.x, y: at.y });
+          await wait(PAUSE_MS);
+          if (cancelled) return;
+          setReward(null);
+        }
+        prev = w;
+      }
+      if (!cancelled) onArrivedRef.current?.();
+    })();
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      timers.forEach((id) => window.clearTimeout(id));
     };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [start, target]);
+  }, [start, target, landmarks, geo]);
 
   // Camera: frame THIS leg's segment (zoomed in), with a little context and the
   // destination once we're near it. Static per leg; the character moves within.
@@ -160,6 +209,34 @@ export default function JourneyMap({
           <g data-testid="journey-traveler" data-x={traveler.x} data-y={traveler.y} transform={`translate(${traveler.x} ${traveler.y})`}>
             <circle r={1.7 * u} fill="var(--color-accent)" stroke="var(--map-paper)" strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
             <circle r={0.6 * u} fill="var(--map-paper)" />
+          </g>
+        )}
+
+        {/* Landmark reward — a rising "+gold" while the traveler pauses here. */}
+        {reward && (
+          <g
+            key={`${reward.x},${reward.y}`}
+            data-testid="landmark-reward"
+            transform={`translate(${reward.x} ${reward.y})`}
+            style={{ pointerEvents: "none" }}
+          >
+            <animateTransform attributeName="transform" type="translate" additive="sum" from="0 0" to="0 -7" dur="0.7s" fill="freeze" />
+            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.18;0.72;1" dur="0.7s" fill="freeze" />
+            <circle r={1.5 * u} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={0.5} vectorEffect="non-scaling-stroke" />
+            <text
+              y={-2.6 * u}
+              textAnchor="middle"
+              fontFamily="var(--font-serif)"
+              fontWeight={700}
+              fontSize={3.6 * u}
+              fill="var(--color-chrome-gold)"
+              style={{ paintOrder: "stroke" }}
+              stroke="var(--map-paper)"
+              strokeWidth={1 * u}
+              strokeOpacity={0.9}
+            >
+              +{reward.gold}
+            </text>
           </g>
         )}
       </svg>
