@@ -161,24 +161,25 @@ export default function DailyRecap({ result, percentile, progress = 0, answers, 
                       type="button"
                       onClick={() => list && setOpenPrompt(isOpen ? null : p.promptId)}
                       aria-expanded={isOpen}
-                      className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left tabular-nums transition ${list ? "hover:bg-white/10" : "cursor-default"}`}
+                      className={`flex w-full items-start justify-between gap-2 rounded-md px-2 py-1 text-left tabular-nums transition ${list ? "hover:bg-white/10" : "cursor-default"}`}
                     >
-                      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                      <span className="flex min-w-0 flex-1 items-start gap-1.5">
                         {list && (
-                          <span className="text-[10px] text-muted">{isOpen ? "▾" : "▸"}</span>
+                          <span className="mt-0.5 text-[10px] text-muted">{isOpen ? "▾" : "▸"}</span>
                         )}
-                        <span className="truncate text-muted">{label}</span>
+                        {/* Full prompt — wraps to the next line instead of truncating. */}
+                        <span className="min-w-0 break-words text-muted">{label}</span>
                       </span>
-                      <span className="shrink-0 text-xs text-muted">
+                      <span className="mt-0.5 shrink-0 text-xs text-muted">
                         {p.named}/{p.total}
                       </span>
                       <span
-                        className="w-14 shrink-0 text-right text-xs font-black uppercase"
+                        className="mt-0.5 w-14 shrink-0 text-right text-xs font-black uppercase"
                         style={{ color: tier.color }}
                       >
                         {tier.label}
                       </span>
-                      <span className="w-10 shrink-0 text-right font-semibold">
+                      <span className="mt-0.5 w-10 shrink-0 text-right font-semibold">
                         {p.points.toLocaleString()}
                       </span>
                     </button>
