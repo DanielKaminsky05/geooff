@@ -52,11 +52,20 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
             <g
               key={id}
               role="button"
-              aria-label={LABEL[id]}
+              tabIndex={0}
+              aria-label={`${LABEL[id]} — journey choice`}
               data-testid={`journey-card-${id}`}
               onClick={() => onSelect(id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  if (e.key === " ") e.preventDefault();
+                  onSelect(id);
+                }
+              }}
               onMouseEnter={() => setHover(id)}
               onMouseLeave={() => setHover((h) => (h === id ? null : h))}
+              onFocus={() => setHover(id)}
+              onBlur={() => setHover((h) => (h === id ? null : h))}
               style={{ cursor: "pointer", pointerEvents: "auto" }}
               opacity={hover && !on ? 0.5 : 1}
             >
