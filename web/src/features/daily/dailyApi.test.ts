@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchDailySet, postAnswer, postFinish, RateLimitedError } from "./dailyApi";
+import { fetchDailySet, postAnswer, postFinish, RateLimitedError, toHttpBase } from "./dailyApi";
 import { FIXTURE_DAILY_SET, todayIso } from "./contract";
 import type { DailyAnswerRes, DailyFinishRes } from "./contract";
 
@@ -10,6 +10,18 @@ function mockFetch(impl: (input: string, init?: RequestInit) => Partial<Response
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("toHttpBase", () => {
+  it("maps ws(s) schemes to http(s) so fetch accepts them", () => {
+    expect(toHttpBase("wss://geooff.fly.dev")).toBe("https://geooff.fly.dev");
+    expect(toHttpBase("ws://localhost:3001")).toBe("http://localhost:3001");
+  });
+
+  it("passes http(s) URLs through unchanged", () => {
+    expect(toHttpBase("http://localhost:3001")).toBe("http://localhost:3001");
+    expect(toHttpBase("https://geooff.fly.dev")).toBe("https://geooff.fly.dev");
+  });
 });
 
 describe("fetchDailySet", () => {

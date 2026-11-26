@@ -8,9 +8,11 @@
  */
 
 import { DAILY_PROMPT_COUNT } from "../daily/contract";
+import { toHttpBase } from "../daily/dailyApi";
 import type { DailySet, JourneyId, DailyLandmark, GeoPoint, DailyRoute } from "../daily/contract";
 
-const BASE_URL = import.meta.env.VITE_WS_URL ?? "http://localhost:3001";
+// REST on the socket host — map ws(s):// to http(s):// (fetch rejects ws URLs).
+const BASE_URL = toHttpBase(import.meta.env.VITE_WS_URL ?? "http://localhost:3001");
 
 export { DAILY_PROMPT_COUNT };
 
