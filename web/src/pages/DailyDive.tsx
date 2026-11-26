@@ -87,7 +87,7 @@ export default function DailyDive() {
   // Play sub-state: which prompt, and whether we're naming or travelling.
   const [subPhase, setSubPhase] = useState<SubPhase>("prompt");
   const [legIndex, setLegIndex] = useState(0);
-  const [progress, setProgress] = useState(0); // animated traveler position 0..1
+  const [legArrived, setLegArrived] = useState(false); // the leg's travel tween finished
 
   const perPromptRef = useRef<DailyPromptResult[]>([]);
   const cumPointsRef = useRef(0);
@@ -121,14 +121,6 @@ export default function DailyDive() {
     };
   }, []);
 
-  // When a leg begins, animate the traveler from the committed start to the new
-  // target (a frame later, so the CSS transition in JourneyMap plays).
-  useEffect(() => {
-    if (phase !== "play" || subPhase !== "leg") return;
-    const id = requestAnimationFrame(() => setProgress(legTargetRef.current));
-    return () => cancelAnimationFrame(id);
-  }, [phase, subPhase, legIndex]);
-
   const handleSelect = useCallback((id: JourneyId) => {
     perPromptRef.current = [];
     cumPointsRef.current = 0;
@@ -136,7 +128,6 @@ export default function DailyDive() {
     legTargetRef.current = 0;
     setJourneyId(id);
     setLegIndex(0);
-    setProgress(0);
     setSubPhase("prompt");
     setPhase("play");
   }, []);
@@ -183,7 +174,7 @@ export default function DailyDive() {
       const { journey } = pick(set, journeyId);
       legTargetRef.current =
         journey.distance > 0 ? Math.min(1, cumPointsRef.current / journey.distance) : 1;
-      setProgress(prevProgressRef.current); // start the leg where we left off
+      setLegArrived(false);
       setSubPhase("leg");
     },
     [set, journeyId],
@@ -229,13 +220,17 @@ export default function DailyDive() {
         (l) => l.atFraction > start && l.atFraction <= target,
       ).length;
       const isLast = legIndex + 1 >= set.prompts.length;
+      const gainedPts = justResult ? Math.round(justResult.points) : 0;
+      const travelling = !legArrived && phase !== "finish";
       return (
         <main className="relative h-dvh bg-surface">
           <JourneyMap
             route={route}
             destination={set.destination}
             landmarks={journey.landmarks}
-            progress={progress}
+            from={start}
+            progress={target}
+            onArrived={() => setLegArrived(true)}
             className="absolute inset-0"
           />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
@@ -243,25 +238,33 @@ export default function DailyDive() {
               <p className="text-xs uppercase tracking-wide opacity-70">
                 Leg {legIndex + 1} of {set.prompts.length}
               </p>
-              {justResult && (
-                <p className="text-sm">
-                  You named {justResult.named}
-                  {justResult.total ? ` of ${justResult.total}` : ""} this leg.
+              <p className="text-sm">
+                {justResult ? `Named ${justResult.named}${justResult.total ? ` of ${justResult.total}` : ""} · ` : ""}
+                <span className="font-semibold text-[var(--color-chrome-gold)]">+{gainedPts} distance</span>
+              </p>
+              {/* Overall progress toward the destination. */}
+              <div className="w-full">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-black/30">
+                  <div
+                    className="h-full rounded-full bg-[var(--color-chrome-gold)] transition-[width] duration-[1600ms] ease-out"
+                    style={{ width: `${Math.round((legArrived ? target : start) * 100)}%` }}
+                  />
+                </div>
+                <p className="mt-1 text-xs opacity-70">
+                  {Math.round(target * 100)}% of the way to {set.destination.name}
                 </p>
-              )}
-              {landmarksPassed > 0 && (
-                <p className="text-sm font-semibold text-[var(--color-chrome-gold)]">
-                  Landmark reached!
-                </p>
+              </div>
+              {landmarksPassed > 0 && legArrived && (
+                <p className="text-sm font-semibold text-[var(--color-chrome-gold)]">Landmark reached!</p>
               )}
               <button
                 type="button"
                 onClick={handleContinue}
-                disabled={phase === "finish"}
+                disabled={travelling || phase === "finish"}
                 data-testid="leg-continue"
                 className="mt-1 rounded-lg bg-[#f4efe3] px-6 py-2 font-semibold text-[var(--color-chrome)] transition hover:brightness-105 disabled:opacity-60"
               >
-                {phase === "finish" ? "Arriving…" : isLast ? "Reach the destination" : "Press on"}
+                {phase === "finish" ? "Arriving…" : travelling ? "Travelling…" : isLast ? "Reach the destination" : "Press on"}
               </button>
             </div>
           </div>

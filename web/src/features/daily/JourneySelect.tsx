@@ -65,19 +65,19 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
               {/* Stops (the locations along the way) reveal only on hover. */}
               {on &&
                 pts.map((p, i) => (
-                  <circle key={i} cx={p.x} cy={p.y} r={3} fill={stroke} stroke="var(--map-paper)" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+                  <circle key={i} cx={p.x} cy={p.y} r={2} fill={stroke} stroke="var(--map-paper)" strokeWidth={0.7} vectorEffect="non-scaling-stroke" />
                 ))}
               <text
                 x={origin.x}
-                y={origin.y - 7}
+                y={origin.y - 5}
                 textAnchor="middle"
                 fontFamily="var(--font-serif)"
-                fontSize={on ? 13 : 11}
+                fontSize={on ? 10 : 8}
                 fontWeight={on ? 700 : 400}
                 fill={on ? "var(--color-accent)" : "var(--map-ink)"}
                 style={{ paintOrder: "stroke" }}
                 stroke="var(--map-paper)"
-                strokeWidth={2.6}
+                strokeWidth={1.8}
                 strokeOpacity={0.9}
               >
                 {LABEL[id]}
@@ -88,9 +88,9 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
 
         {/* Destination. */}
         <g style={{ pointerEvents: "none" }}>
-          <circle cx={dest.x} cy={dest.y} r={5.5} fill="none" stroke="var(--color-accent)" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
-          <Star cx={dest.x} cy={dest.y} r={3.6} fill="var(--color-accent)" />
-          <text x={dest.x} y={dest.y - 9} textAnchor="middle" fontFamily="var(--font-serif)" fontSize={13} fill="var(--map-ink)" style={{ paintOrder: "stroke" }} stroke="var(--map-paper)" strokeWidth={2.8} strokeOpacity={0.85}>
+          <circle cx={dest.x} cy={dest.y} r={3} fill="none" stroke="var(--color-accent)" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+          <Star cx={dest.x} cy={dest.y} r={1.9} fill="var(--color-accent)" />
+          <text x={dest.x} y={dest.y - 5} textAnchor="middle" fontFamily="var(--font-serif)" fontSize={8} fill="var(--map-ink)" style={{ paintOrder: "stroke" }} stroke="var(--map-paper)" strokeWidth={1.6} strokeOpacity={0.85}>
             {set.destination.name}
           </text>
         </g>

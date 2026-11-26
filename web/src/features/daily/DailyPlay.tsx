@@ -132,16 +132,16 @@ export default function DailyPlay({
     const dest = project(destination.at);
     return (
       <g aria-hidden="true" style={{ pointerEvents: "none" }}>
-        <polyline points={line} fill="none" stroke="var(--map-terracotta)" strokeWidth={1.6} strokeOpacity={0.55} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+        <polyline points={line} fill="none" stroke="var(--map-terracotta)" strokeWidth={1.4} strokeOpacity={0.5} strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />
         {pts.map((s, i) => (
-          <circle key={i} cx={s.x} cy={s.y} r={2.2} fill="var(--map-terracotta)" stroke="var(--map-paper)" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+          <circle key={i} cx={s.x} cy={s.y} r={1.3} fill="var(--map-terracotta)" stroke="var(--map-paper)" strokeWidth={0.6} vectorEffect="non-scaling-stroke" />
         ))}
-        <circle cx={dest.x} cy={dest.y} r={5.5} fill="none" stroke="var(--color-accent)" strokeWidth={1.4} vectorEffect="non-scaling-stroke" />
-        <Star cx={dest.x} cy={dest.y} r={3.6} fill="var(--color-accent)" />
-        <text x={dest.x} y={dest.y - 8} textAnchor="middle" fontFamily="var(--font-serif)" fontSize={12} fill="var(--map-ink)" style={{ paintOrder: "stroke" }} stroke="var(--map-paper)" strokeWidth={2.4} strokeOpacity={0.85}>
+        <circle cx={dest.x} cy={dest.y} r={3} fill="none" stroke="var(--color-accent)" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
+        <Star cx={dest.x} cy={dest.y} r={1.9} fill="var(--color-accent)" />
+        <text x={dest.x} y={dest.y - 4.5} textAnchor="middle" fontFamily="var(--font-serif)" fontSize={7} fill="var(--map-ink)" style={{ paintOrder: "stroke" }} stroke="var(--map-paper)" strokeWidth={1.5} strokeOpacity={0.85}>
           {destination.name}
         </text>
-        <circle data-testid="you-are-here" cx={you.x} cy={you.y} r={4.5} fill="var(--color-chrome-gold)" stroke="var(--map-paper)" strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
+        <circle data-testid="you-are-here" cx={you.x} cy={you.y} r={2.6} fill="var(--color-chrome-gold)" stroke="var(--map-paper)" strokeWidth={1.3} vectorEffect="non-scaling-stroke" />
       </g>
     );
   }, [route.points, destination.at, progress]);
