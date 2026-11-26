@@ -42,6 +42,12 @@ export function setAuthoredSet(dailyDate: string, set: CompiledDailySet): void {
   overlay.set(dailyDate, set);
 }
 
+/** Remove an authored set from the overlay so `getDailySet` falls back to the
+ *  generator for that date. Returns true if a set was actually present. */
+export function unsetAuthoredSet(dailyDate: string): boolean {
+  return overlay.delete(dailyDate);
+}
+
 /** The dates that currently have an authored set (for diagnostics/tests). */
 export function authoredDates(): string[] {
   return [...overlay.keys()];

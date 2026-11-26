@@ -16,7 +16,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { buildPromptPool, validIdsFor, labelAnswers } from "../prompts.js";
 import { compileAuthoredSet } from "./authoredBuild.js";
-import { setAuthoredSet, type AuthoredDailySet } from "./authoredSets.js";
+import { setAuthoredSet, unsetAuthoredSet, authoredDates, getAuthoredSet, type AuthoredDailySet } from "./authoredSets.js";
 import { toPublicDailySet } from "./types.js";
 import type { AuthoredSetsRepo } from "./authoredSetsRepo.js";
 
@@ -114,5 +114,35 @@ export function registerDailyAdminRoutes(app: Express, options: DailyAdminOption
     // Serve it immediately regardless of persistence.
     setAuthoredSet(authored.dailyDate, compiled.set);
     res.json({ ok: true, persisted, set: toPublicDailySet(compiled.set) });
+  });
+
+  // The currently-published (overlay-served) authored days — the honest view of
+  // what overrides the generator right now, for the builder's manage list.
+  app.get("/daily/admin/sets", requireToken, (_req: Request, res: Response) => {
+    const sets = authoredDates()
+      .map((dailyDate) => ({ dailyDate, destinationName: getAuthoredSet(dailyDate)!.destination.name }))
+      .sort((a, b) => a.dailyDate.localeCompare(b.dailyDate));
+    res.json({ sets });
+  });
+
+  // Unpublish a day: remove it from BOTH the DB and the live overlay, so
+  // getDailySet reverts to the generator immediately (no restart needed).
+  app.delete("/daily/admin/sets/:date", requireToken, async (req: Request, res: Response) => {
+    const date = String(req.params.date);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: "bad date" } as never);
+      return;
+    }
+    let removed = false;
+    if (repo) {
+      try {
+        await repo.delete(date);
+        removed = true;
+      } catch (err) {
+        console.warn("[daily/admin] delete failed — overlay cleared only.", err);
+      }
+    }
+    const wasLive = unsetAuthoredSet(date);
+    res.json({ ok: true, removed, wasLive });
   });
 }

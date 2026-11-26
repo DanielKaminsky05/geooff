@@ -16,6 +16,8 @@ export interface AuthoredSetsRepo {
   upsert(authored: AuthoredDailySet): Promise<void>;
   /** Every authored trek, for boot hydration and the builder's usage map. */
   list(): Promise<AuthoredDailySet[]>;
+  /** Delete the authored trek for a date (no-op if none). */
+  delete(dailyDate: string): Promise<void>;
 }
 
 /** Row shape in `public.daily_sets`. */
@@ -61,6 +63,11 @@ export function makeSupabaseAuthoredSetsRepo(
         promptIds: row.prompt_ids,
         landmarks: row.landmarks ?? undefined,
       }));
+    },
+
+    async delete(dailyDate: string): Promise<void> {
+      const { error } = await client.from("daily_sets").delete().eq("daily_date", dailyDate);
+      if (error) throw new Error(`daily_sets delete failed: ${error.message}`);
     },
   };
 }
