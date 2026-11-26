@@ -228,8 +228,10 @@ export default function DailyDive() {
           ? localDailyStore.getWallet() + Math.max(0, Math.round(finalResult.gold))
           : localDailyStore.addGold(finalResult.gold);
         if (!ALLOW_REPLAY) {
-          localDailyStore.saveResult(finalResult);
-          localDailyStore.markPlayed(finalResult.dailyDate);
+          // One call: saves the result, then marks played only once the result
+          // is stored (the store's documented order), so the lock can't read as
+          // set without a result behind it.
+          localDailyStore.recordFinished(finalResult);
         }
         setRecapResult(finalResult);
         setRecapAnswers(answers);
