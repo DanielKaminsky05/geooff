@@ -160,6 +160,28 @@ body {
   }
 }
 
+/* Landmark gold reward: a coin + "+N" that rises and fades over the landmark.
+ * CSS (not SMIL) so it reliably plays when the element mounts mid-journey. */
+.daily-gold-pop {
+  animation: daily-gold-pop 700ms ease-out forwards;
+}
+@keyframes daily-gold-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  20% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-7px);
+  }
+}
+
 /*
  * Glitch wordmark: "GEOFIGHT" in the pixel font with a chunky embossed RED
  * treatment — a bold red core printed over a warm gold highlight nudged up-left

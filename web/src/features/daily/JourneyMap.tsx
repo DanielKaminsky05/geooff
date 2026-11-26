@@ -220,23 +220,23 @@ export default function JourneyMap({
             transform={`translate(${reward.x} ${reward.y})`}
             style={{ pointerEvents: "none" }}
           >
-            <animateTransform attributeName="transform" type="translate" additive="sum" from="0 0" to="0 -7" dur="0.7s" fill="freeze" />
-            <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.18;0.72;1" dur="0.7s" fill="freeze" />
-            <circle r={1.5 * u} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={0.5} vectorEffect="non-scaling-stroke" />
-            <text
-              y={-2.6 * u}
-              textAnchor="middle"
-              fontFamily="var(--font-serif)"
-              fontWeight={700}
-              fontSize={3.6 * u}
-              fill="var(--color-chrome-gold)"
-              style={{ paintOrder: "stroke" }}
-              stroke="var(--map-paper)"
-              strokeWidth={1 * u}
-              strokeOpacity={0.9}
-            >
-              +{reward.gold}
-            </text>
+            <g className="daily-gold-pop">
+              <circle r={1.5 * u} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={0.5} vectorEffect="non-scaling-stroke" />
+              <text
+                y={-2.6 * u}
+                textAnchor="middle"
+                fontFamily="var(--font-serif)"
+                fontWeight={700}
+                fontSize={3.6 * u}
+                fill="var(--color-chrome-gold)"
+                style={{ paintOrder: "stroke" }}
+                stroke="var(--map-paper)"
+                strokeWidth={1 * u}
+                strokeOpacity={0.9}
+              >
+                +{reward.gold}
+              </text>
+            </g>
           </g>
         )}
       </svg>
