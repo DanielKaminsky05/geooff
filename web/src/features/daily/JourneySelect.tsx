@@ -8,7 +8,7 @@
  * hidden; the only choice is the road.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import WorldMap from "../../components/WorldMap";
 import { project } from "./geo";
 import { smoothPath } from "./smoothPath";
@@ -33,6 +33,12 @@ export interface JourneySelectProps {
 export default function JourneySelect({ set, onSelect, className }: JourneySelectProps) {
   const [hover, setHover] = useState<JourneyId | null>(null);
 
+  // Keep a ref to the latest onSelect so the memo below does not need it in
+  // its dependency array. Without this, an un-memoized parent would give
+  // onSelect a new identity every render, busting the memo on every keystroke.
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => { onSelectRef.current = onSelect; });
+
   // The roads + destination, drawn inside the map's svg (world coords) so they
   // pan/zoom with the board. Memoized on hover so the map repaints only then.
   const roads = useMemo(() => {
@@ -55,11 +61,11 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
               tabIndex={0}
               aria-label={`${LABEL[id]} — journey choice`}
               data-testid={`journey-card-${id}`}
-              onClick={() => onSelect(id)}
+              onClick={() => onSelectRef.current(id)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   if (e.key === " ") e.preventDefault();
-                  onSelect(id);
+                  onSelectRef.current(id);
                 }
               }}
               onMouseEnter={() => setHover(id)}
@@ -106,7 +112,11 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
         </g>
       </g>
     );
-  }, [set.routes, set.destination.at, set.destination.name, hover, onSelect]);
+  // set.routes / set.destination.at / set.destination.name are fixed for the
+  // lifetime of this screen (they come from today's immutable DailySet), so
+  // listing them is safe even though they are object references — they will
+  // never change identity while JourneySelect is mounted.
+  }, [set.routes, set.destination.at, set.destination.name, hover]);
 
   return (
     <div className={`relative h-dvh w-full ${className ?? ""}`} data-testid="journey-select">
