@@ -70,6 +70,8 @@ import {
 import { buildPromptPool } from "./prompts.js";
 import { registerDailyRoutes } from "./daily/routes.js";
 import { makeSupabaseRunsRepo } from "./daily/supabaseRunsRepo.js";
+import { registerDailyAdminRoutes, hydrateAuthoredSets } from "./daily/adminRoutes.js";
+import { makeSupabaseAuthoredSetsRepo } from "./daily/authoredSetsRepo.js";
 import { REVEAL_MS_DEFAULT, voteSkipReveal } from "./reveal.js";
 import {
   MAX_ANSWER_LENGTH,
@@ -187,6 +189,18 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
   // Phase 2: a Supabase repo persists finished runs for a real percentile; it's
   // `null` when Supabase is unconfigured, degrading to the synthetic percentile.
   registerDailyRoutes(app, { runsRepo: makeSupabaseRunsRepo() });
+
+  // Phase 3: the Trek Builder admin surface. Mounts ONLY when DAILY_ADMIN_TOKEN
+  // is set (dev authoring); hydrates any persisted authored days into the overlay
+  // so curated treks survive a restart. No token in prod → no admin routes.
+  const adminToken = process.env.DAILY_ADMIN_TOKEN?.trim();
+  if (adminToken) {
+    const authoredRepo = makeSupabaseAuthoredSetsRepo();
+    registerDailyAdminRoutes(app, { token: adminToken, repo: authoredRepo });
+    void hydrateAuthoredSets(authoredRepo)
+      .then((n) => n > 0 && console.log(`[daily/admin] hydrated ${n} authored set(s).`))
+      .catch((err) => console.warn("[daily/admin] hydrate failed.", err));
+  }
 
   const httpServer = createHttpServer(app);
 
