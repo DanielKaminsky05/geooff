@@ -184,6 +184,21 @@ interface ReconciledFinish {
 }
 
 /**
+ * The name bonus count to trust for one prompt. Defensive against a malformed
+ * client value, and the authority on how many names can earn the bonus:
+ *  - unknown / wrong-day prompt (`known === false`): no pool to clamp against,
+ *    so a client `named` could grant an unbounded bonus — force 0.
+ *  - known prompt: clamp to the real (secret) pool size. Clamped unconditionally,
+ *    so an empty pool (`total === 0`, zero valid answers) yields 0 — the earlier
+ *    `total > 0` guard let a client inflate the bonus in that corrupt-data case.
+ */
+export function clampNamedBonus(rawNamed: unknown, total: number, known: boolean): number {
+  if (!known) return 0;
+  const named = Math.max(0, Number.isFinite(rawNamed) ? (rawNamed as number) : 0);
+  return Math.min(named, Math.max(0, total));
+}
+
+/**
  * Reconcile a client-reported run into the authoritative finish response. Each
  * prompt scores a CAPTURE base (0..DAILY_PROMPT_MAX = your captured share of its
  * rarity-weighted pool, which the client computes) PLUS a flat DAILY_NAME_BONUS
@@ -238,17 +253,7 @@ function reconcileFinish(raw: DailyRunResult | undefined): ReconciledFinish {
       0,
       Math.min(DAILY_PROMPT_MAX, Number.isFinite(pp.points) ? pp.points : 0),
     );
-    let named = Math.max(0, Number.isFinite(pp.named) ? pp.named : 0);
-    if (prompt) {
-      // Known prompt: clamp `named` to the real (secret) pool size so the bonus
-      // can't exceed what the prompt actually allows.
-      if (total > 0) named = Math.min(named, total);
-    } else {
-      // Unknown/wrong-day prompt: we have no pool to clamp against, so a
-      // client-supplied `named` would grant an unbounded name bonus. Force it
-      // to 0 — no name bonus for prompts not in today's set.
-      named = 0;
-    }
+    const named = clampNamedBonus(pp.named, total, Boolean(prompt));
     const score = base + DAILY_NAME_BONUS * named;
     const rounded = Math.round(score);
     const namedIsos = Array.isArray(pp.namedIsos)
