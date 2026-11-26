@@ -13,15 +13,20 @@ import { registerDailyRoutes } from "../src/daily/routes.js";
 import { registerDailyAdminRoutes, hydrateAuthoredSets } from "../src/daily/adminRoutes.js";
 import { clearAuthoredSets } from "../src/daily/authoredSets.js";
 import { buildPromptPool } from "../src/prompts.js";
-import { destinations } from "../src/daily/destinations.js";
 import { DAILY_PROMPT_COUNT } from "../src/protocol.js";
 import type { DailySet } from "../src/protocol.js";
+import type { AuthoredDailySet } from "../src/daily/authoredSets.js";
 import { makeFakeAuthoredSetsRepo } from "./fakeAuthoredSetsRepo.js";
 
 const TOKEN = "s3cret";
 const DATE = "2026-03-10";
 const FIVE = buildPromptPool("countries").slice(0, DAILY_PROMPT_COUNT).map((p) => p.id);
-const DEST = destinations[0].destination.name;
+const DEST = { name: "Testville", at: { lat: 41, lon: 29 } };
+const ROUTES = [
+  { journeyId: "short" as const, points: [{ lat: 25, lon: 55 }, { lat: 41, lon: 29 }] },
+  { journeyId: "medium" as const, points: [{ lat: 22, lon: 88 }, { lat: 41, lon: 29 }] },
+  { journeyId: "long" as const, points: [{ lat: 1, lon: 103 }, { lat: 41, lon: 29 }] },
+];
 
 function makeApp(repo = makeFakeAuthoredSetsRepo()) {
   const app = express();
@@ -32,8 +37,8 @@ function makeApp(repo = makeFakeAuthoredSetsRepo()) {
   return { app, repo };
 }
 
-function body(over = {}) {
-  return { dailyDate: DATE, destinationName: DEST, promptIds: FIVE, ...over };
+function body(over: Partial<AuthoredDailySet> = {}): AuthoredDailySet {
+  return { dailyDate: DATE, destination: DEST, routes: ROUTES, promptIds: FIVE, ...over };
 }
 
 beforeEach(() => clearAuthoredSets());
@@ -68,8 +73,9 @@ describe("POST /daily/admin/sets", () => {
     // The curated set now overrides the generator for that date.
     const daily = await request(app).get("/daily");
     const set = daily.body as DailySet;
-    expect(set.destination.name).toBe(DEST);
+    expect(set.destination.name).toBe(DEST.name);
     expect(set.prompts.map((p) => p.id)).toEqual(FIVE);
+    expect(set.routes.map((r) => r.journeyId).sort()).toEqual(["long", "medium", "short"]);
   });
 
   it("rejects an invalid trek with 400 and persists nothing", async () => {
@@ -99,12 +105,14 @@ describe("GET /daily/admin/catalog", () => {
     expect((await request(app).get("/daily/admin/catalog")).status).toBe(401);
   });
 
-  it("returns prompts and destinations, with usage flags after a save", async () => {
+  it("returns prompts with answers, and usage flags after a save", async () => {
     const { app } = makeApp();
     const before = await request(app).get("/daily/admin/catalog").set("x-admin-token", TOKEN);
-    expect(before.body.destinations).toContain(DEST);
-    const used0 = before.body.prompts.find((p: { id: string }) => p.id === FIVE[0]);
-    expect(used0.usedOn).toEqual([]);
+    const p0 = before.body.prompts.find((p: { id: string }) => p.id === FIVE[0]);
+    expect(p0.usedOn).toEqual([]);
+    // Admin catalog reveals each prompt's correct answers for the builder sidebar.
+    expect(Array.isArray(p0.answers)).toBe(true);
+    expect(p0.answers.length).toBeGreaterThan(0);
 
     await request(app).post("/daily/admin/sets").set("x-admin-token", TOKEN).send(body());
 
@@ -117,7 +125,7 @@ describe("GET /daily/admin/catalog", () => {
 describe("hydrateAuthoredSets", () => {
   it("loads persisted sets into the overlay at boot", async () => {
     const repo = makeFakeAuthoredSetsRepo();
-    await repo.upsert({ dailyDate: DATE, destinationName: DEST, promptIds: FIVE });
+    await repo.upsert({ dailyDate: DATE, destination: DEST, routes: ROUTES, promptIds: FIVE });
     const n = await hydrateAuthoredSets(repo);
     expect(n).toBe(1);
 
@@ -125,7 +133,7 @@ describe("hydrateAuthoredSets", () => {
     app.use(express.json());
     registerDailyRoutes(app, { today: () => DATE });
     const daily = await request(app).get("/daily");
-    expect((daily.body as DailySet).destination.name).toBe(DEST);
+    expect((daily.body as DailySet).destination.name).toBe(DEST.name);
   });
 
   it("is a no-op with a null repo", async () => {
