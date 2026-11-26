@@ -116,7 +116,10 @@ export default function DailyDive() {
   const [percentile, setPercentile] = useState(0);
   const [walletBalance, setWalletBalance] = useState(() => localDailyStore.getWallet());
   const [recapResult, setRecapResult] = useState<DailyRunResult | null>(null);
-  const [recapAnswers, setRecapAnswers] = useState<Record<string, string[]> | undefined>(undefined);
+  const [recapAnswers, setRecapAnswers] = useState<
+    Record<string, { iso: string; name: string }[]> | undefined
+  >(undefined);
+  const [recapGoldLost, setRecapGoldLost] = useState(0);
 
   // Persistent HUD: total points (updated only when a leg's walk ends, never
   // during the naming challenge — so the per-prompt score stays a surprise) and
@@ -180,12 +183,14 @@ export default function DailyDive() {
       void (async () => {
         let finalResult = result;
         let pct = fallbackPercentile(result);
-        let answers: Record<string, string[]> | undefined;
+        let answers: Record<string, { iso: string; name: string }[]> | undefined;
+        let goldLost = 0;
         try {
           const res = await postFinish({ result });
           finalResult = res.result;
           pct = res.percentile;
           answers = res.answers;
+          goldLost = res.goldLost ?? 0;
         } catch (err) {
           console.warn("[DailyDive] finish failed — using client fallback.", err);
         }
@@ -199,6 +204,7 @@ export default function DailyDive() {
         }
         setRecapResult(finalResult);
         setRecapAnswers(answers);
+        setRecapGoldLost(goldLost);
         setPercentile(pct);
         setWalletBalance(newBalance);
         setPhase("recap");
@@ -402,6 +408,7 @@ export default function DailyDive() {
           percentile={percentile}
           progress={endProgress}
           answers={recapAnswers}
+          goldLost={recapGoldLost}
           prompts={set.prompts}
           walletBalance={walletBalance}
           onClose={goHome}

@@ -21,8 +21,10 @@ export interface DailyRecapProps {
   percentile: number;
   /** How far along the road the run got (0..1) — drives the result category. */
   progress?: number;
-  /** promptId → the valid answers, revealed by tapping a prompt in the breakdown. */
-  answers?: Record<string, string[]>;
+  /** promptId → valid answers ({iso, name}), revealed by tapping a breakdown row. */
+  answers?: Record<string, { iso: string; name: string }[]>;
+  /** gold collected en route but forfeited by dying (0 if arrived). */
+  goldLost?: number;
   /** The day's prompts (id + label), so the breakdown can name each prompt. */
   prompts?: { id: string; label: string }[];
   /** Gold balance AFTER this run was banked. */
@@ -63,7 +65,7 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export default function DailyRecap({ result, percentile, progress = 0, answers, prompts, walletBalance, onClose }: DailyRecapProps) {
+export default function DailyRecap({ result, percentile, progress = 0, answers, goldLost = 0, prompts, walletBalance, onClose }: DailyRecapProps) {
   const [copied, setCopied] = useState(false);
   const [openPrompt, setOpenPrompt] = useState<string | null>(null);
   const labelById: Record<string, string> = {};
@@ -146,17 +148,16 @@ export default function DailyRecap({ result, percentile, progress = 0, answers, 
 
         {/* Three stats, hairline-separated, no boxes */}
         <div className="flex w-full items-stretch justify-center">
-          <Stat testid="daily-recap-gold" label="Gold banked" value={`+${result.gold.toLocaleString()}`} color="var(--color-chrome-gold)" />
+          {arrived ? (
+            <Stat testid="daily-recap-gold" label="Gold banked" value={`+${result.gold.toLocaleString()}`} color="var(--color-chrome-gold)" />
+          ) : (
+            <Stat testid="daily-recap-gold" label="Gold lost" value={goldLost.toLocaleString()} color="var(--color-accent)" />
+          )}
           <div className="w-px self-stretch bg-white/15" />
           <Stat testid="daily-recap-wallet" label="Wallet" value={walletBalance.toLocaleString()} color="var(--color-chrome-gold)" />
           <div className="w-px self-stretch bg-white/15" />
           <Stat testid="daily-recap-percentile" label="Players beaten" value={`${pct}%`} />
         </div>
-        {!arrived && (
-          <p className="-mt-3 text-[11px] opacity-60">
-            Kept what you collected — missed the reward at the destination.
-          </p>
-        )}
 
         {/* Breakdown — borderless, hairline-divided, tap to reveal answers */}
         <div className="w-full">
@@ -193,11 +194,24 @@ export default function DailyRecap({ result, percentile, progress = 0, answers, 
                   </button>
                   {isOpen && list && (
                     <div className="flex flex-wrap gap-1 pb-2 pl-4">
-                      {list.map((name) => (
-                        <span key={name} className="rounded bg-white/10 px-1.5 py-0.5 text-xs">
-                          {name}
-                        </span>
-                      ))}
+                      {(() => {
+                        const got = new Set((p.namedIsos ?? []).map((x) => x.toLowerCase()));
+                        return list.map((a) => {
+                          const mine = got.has(a.iso.toLowerCase());
+                          return (
+                            <span
+                              key={a.iso}
+                              className="rounded px-1.5 py-0.5 text-xs font-medium"
+                              style={{
+                                color: mine ? "#86efac" : "#fca5a5",
+                                background: mine ? "rgba(74,222,128,0.16)" : "rgba(239,68,68,0.16)",
+                              }}
+                            >
+                              {a.name}
+                            </span>
+                          );
+                        });
+                      })()}
                     </div>
                   )}
                 </li>

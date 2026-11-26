@@ -80,6 +80,7 @@ export default function DailyPlay({
       named: namedRef.current.size,
       total: totalRef.current,
       points: captureBase(),
+      namedIsos: [...namedRef.current],
     });
   }, [onComplete, prompt.id]);
 
