@@ -221,9 +221,11 @@ export default function DailyDive() {
           finalResult = { ...result, outcome: reached ? "arrived" : "died" };
         }
         setFinishOffline(offline);
-        // Replay/testing: don't persist anything (no gold banked, no lock).
+        // Replay/testing: don't persist anything (no gold banked, no lock). Clamp
+        // the display balance the same way addGold does (non-negative, rounded)
+        // so a malformed gold value can't show a negative replay wallet.
         const newBalance = ALLOW_REPLAY
-          ? localDailyStore.getWallet() + finalResult.gold
+          ? localDailyStore.getWallet() + Math.max(0, Math.round(finalResult.gold))
           : localDailyStore.addGold(finalResult.gold);
         if (!ALLOW_REPLAY) {
           localDailyStore.saveResult(finalResult);
