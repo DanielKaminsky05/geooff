@@ -169,7 +169,11 @@ export function registerDailyRoutes(app: Express, options: DailyRoutesOptions = 
         console.warn("[daily] finish persistence failed — synthetic percentile.", err);
       }
       res.json(response);
-    })();
+    })().catch((err) => {
+      // res.json (outside the try) is the only thing that can still throw here;
+      // handle it at the site so it can't surface as an unhandled rejection.
+      console.warn("[daily] finish response failed to send.", err);
+    });
   });
 }
 
