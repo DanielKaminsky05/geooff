@@ -29,6 +29,7 @@ function group(n: number): string {
 }
 
 export function GET(req: Request): Response {
+  try {
   const url = new URL(req.url);
   const data = decodeDailyShare(url.searchParams.get("d") ?? "");
 
@@ -54,7 +55,6 @@ export function GET(req: Request): Response {
           padding: 40,
           backgroundColor: PAPER,
           color: INK,
-          fontFamily: "sans-serif",
         }}
       >
         <div
@@ -100,11 +100,9 @@ export function GET(req: Request): Response {
               <div
                 style={{
                   display: "flex",
-                  flex: 1,
-                  height: 0,
-                  borderTopWidth: 4,
-                  borderTopStyle: "dashed",
-                  borderTopColor: SEPIA,
+                  flexGrow: 1,
+                  height: 4,
+                  backgroundColor: SEPIA,
                   marginLeft: 12,
                   marginRight: 12,
                 }}
@@ -148,4 +146,12 @@ export function GET(req: Request): Response {
     ),
     { width: 1200, height: 630 },
   );
+  } catch (err) {
+    // Surface Satori/render errors as readable text instead of an opaque 500.
+    const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    return new Response(`OG_RENDER_ERROR\n${msg}`, {
+      status: 500,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
 }

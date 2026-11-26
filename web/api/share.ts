@@ -1,15 +1,15 @@
 /**
- * Share landing page for a Daily Trek score: /s/<payload>.
+ * Share landing page for a Daily Trek score.
  *
- * Crawlers (iMessage, Discord, X, Slack, Facebook…) don't run JS, so this
- * function returns a tiny HTML doc carrying Open Graph + Twitter tags whose
- * image points at /api/og. A real visitor is bounced to the homepage, where
- * they can play today's trek.
+ * Reached via a vercel.json rewrite: /s/:payload -> /api/share?p=:payload
+ * (a plain query param, not a [dynamic] route — those don't deploy reliably
+ * for a non-Next project). Crawlers (iMessage, Discord, X, Slack, Facebook…)
+ * don't run JS, so this returns a tiny HTML doc carrying Open Graph + Twitter
+ * tags whose image points at /api/og. A real visitor is bounced to the homepage.
  *
- * Reached via a vercel.json rewrite: /s/:payload -> /api/s/:payload.
- * Node.js runtime (Web-handler) to match the og function's bundling.
+ * Node.js runtime, Web-handler GET.
  */
-import { decodeDailyShare, journeyLabel, outcomeLabel } from "../../src/features/daily/shareLink";
+import { decodeDailyShare, journeyLabel, outcomeLabel } from "../src/features/daily/shareLink";
 
 /** Where a human who clicks the link ends up. */
 const LANDING = "/";
@@ -22,16 +22,18 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Thousands separators without Intl. */
+function group(n: number): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 export function GET(req: Request): Response {
   const url = new URL(req.url);
-  // The payload is the last path segment, whether the function sees the
-  // original (/s/<payload>) or rewritten (/api/s/<payload>) path.
-  const segs = url.pathname.split("/").filter(Boolean);
-  const payload = decodeURIComponent(segs[segs.length - 1] ?? "");
+  const payload = url.searchParams.get("p") ?? "";
   const data = decodeDailyShare(payload);
 
   const title = data
-    ? `${data.category ? data.category + " — " : ""}${data.points.toLocaleString()} pts on GEOFIGHT Daily`
+    ? `${data.category ? data.category + " — " : ""}${group(data.points)} pts on GEOFIGHT Daily`
     : "GEOFIGHT — Daily Trek";
   const description = data
     ? `${journeyLabel(data.journey)} journey · ${outcomeLabel(data.outcome)}. Can you beat it? Play today's trek.`
@@ -73,7 +75,6 @@ export function GET(req: Request): Response {
   return new Response(html, {
     headers: {
       "content-type": "text/html; charset=utf-8",
-      // Let crawlers/CDN cache the unfurl briefly; the score is immutable.
       "cache-control": "public, max-age=0, s-maxage=86400",
     },
   });
