@@ -14,7 +14,7 @@
  * sync with the client encoder in src/features/daily/shareLink.ts, v1 format).
  */
 import satori from "satori";
-import { Resvg, initWasm } from "@resvg/resvg-wasm";
+import sharp from "sharp";
 
 // Journal/atlas palette (mirrors index.css map + chrome tokens).
 const PAPER = "#e6d7b4";
@@ -116,19 +116,6 @@ function loadFonts(): Promise<SatoriFont[]> {
       });
   }
   return fontsPromise;
-}
-
-// resvg wasm must be initialised once before use.
-const RESVG_WASM = "https://cdn.jsdelivr.net/npm/@resvg/resvg-wasm@2.6.2/index_bg.wasm";
-let wasmPromise: Promise<void> | null = null;
-function ensureWasm(): Promise<void> {
-  if (!wasmPromise) {
-    wasmPromise = initWasm(fetch(RESVG_WASM)).catch((e) => {
-      wasmPromise = null;
-      throw e;
-    });
-  }
-  return wasmPromise;
 }
 
 export async function GET(req: Request): Promise<Response> {
@@ -249,9 +236,10 @@ export async function GET(req: Request): Promise<Response> {
       { width: 1200, height: 630, fonts },
     );
 
-    await ensureWasm();
-    const png = new Resvg(svg).render().asPng();
-    return new Response(png.buffer as ArrayBuffer, {
+    // satori rendered text as vector paths, so sharp can rasterise the SVG
+    // without needing any system fonts.
+    const png = await sharp(Buffer.from(svg)).png().toBuffer();
+    return new Response(png as unknown as ArrayBuffer, {
       headers: {
         "content-type": "image/png",
         "cache-control": "public, max-age=0, s-maxage=86400, immutable",
