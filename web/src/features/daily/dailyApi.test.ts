@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchDailySet, postAnswer, postFinish, RateLimitedError } from "./dailyApi";
-import { FIXTURE_DAILY_SET } from "./contract";
+import { FIXTURE_DAILY_SET, todayIso } from "./contract";
 import type { DailyAnswerRes, DailyFinishRes } from "./contract";
 
 function mockFetch(impl: (input: string, init?: RequestInit) => Partial<Response> | Promise<Partial<Response>>) {
@@ -24,7 +24,8 @@ describe("fetchDailySet", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     mockFetch(() => ({ ok: false, status: 500, json: async () => ({}) }));
     const set = await fetchDailySet();
-    expect(set).toBe(FIXTURE_DAILY_SET);
+    // Fixture content, re-stamped with today so the one-and-done lock stays correct.
+    expect(set).toEqual({ ...FIXTURE_DAILY_SET, dailyDate: todayIso() });
     expect(warn).toHaveBeenCalled();
   });
 
@@ -32,7 +33,7 @@ describe("fetchDailySet", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }));
     const set = await fetchDailySet();
-    expect(set).toBe(FIXTURE_DAILY_SET);
+    expect(set).toEqual({ ...FIXTURE_DAILY_SET, dailyDate: todayIso() });
   });
 });
 

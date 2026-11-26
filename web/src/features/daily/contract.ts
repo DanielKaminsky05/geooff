@@ -37,7 +37,7 @@ export {
 } from "../../lib/protocol";
 
 /** Today's date in YYYY-MM-DD local time, used to stamp the fixture. */
-function todayIso(): string {
+export function todayIso(): string {
   const d = new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");

@@ -19,7 +19,7 @@ import type {
   DailyFinishReq,
   DailyFinishRes,
 } from "./contract";
-import { FIXTURE_DAILY_SET } from "./contract";
+import { FIXTURE_DAILY_SET, todayIso } from "./contract";
 
 /** Same origin as the socket client (socket.tsx). Daily Trek is REST on it. */
 const BASE_URL = import.meta.env.VITE_WS_URL ?? "http://localhost:3001";
@@ -87,7 +87,10 @@ export async function fetchDailySet(): Promise<DailySet> {
       "[dailyApi] GET /daily failed — falling back to FIXTURE_DAILY_SET.",
       err,
     );
-    return FIXTURE_DAILY_SET;
+    // Re-stamp with today: FIXTURE_DAILY_SET.dailyDate is frozen at module load,
+    // so a long-lived tab that crosses midnight before this fallback fires would
+    // otherwise carry yesterday's date and misfire the one-and-done lock.
+    return { ...FIXTURE_DAILY_SET, dailyDate: todayIso() };
   }
 }
 
