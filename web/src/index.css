@@ -210,38 +210,55 @@ body {
   }
 }
 
-/* Trekker walk cycle: legs swing from the hip, body gives a subtle bob. */
-.daily-walk-leg {
+/* The trekker's walk cycle (leg swing + body bob) is driven in SVG from the
+ * travelled distance (see JourneyMap's Walker), not a CSS clock, so the gait
+ * stays locked to the movement and stops when the movement stops. */
+
+/* Journey's end — the trekker reacts to the outcome. Arrival: a looping victory
+ * hop (the raised arm is set in the SVG). Death: topple over and fade, settling
+ * on the ground. Both pivot at the feet and end on a resting pose, so reduced
+ * motion shows a still celebrating figure / a fallen one. */
+.daily-cheer,
+.daily-faint {
   transform-box: fill-box;
-  transform-origin: 50% 0%;
-  animation: daily-walk 0.9s ease-in-out infinite;
+  transform-origin: 41% 100%;
 }
-.daily-walk-leg-b {
-  animation-delay: -0.45s;
+.daily-cheer {
+  animation: daily-cheer 1100ms ease-in-out infinite both;
 }
-.daily-walk-body {
-  transform-box: fill-box;
-  transform-origin: 50% 100%;
-  animation: daily-bob 0.9s ease-in-out infinite;
-}
-@keyframes daily-walk {
+@keyframes daily-cheer {
   0% {
-    transform: rotate(24deg);
+    transform: translateY(0) scale(1);
   }
-  50% {
-    transform: rotate(-24deg);
+  20% {
+    transform: translateY(-3.4px) scale(1.05);
   }
+  40% {
+    transform: translateY(0) scale(1);
+  }
+  55% {
+    transform: translateY(-1.8px) scale(1.02);
+  }
+  70%,
   100% {
-    transform: rotate(24deg);
+    transform: translateY(0) scale(1);
   }
 }
-@keyframes daily-bob {
-  0%,
-  100% {
-    transform: translateY(0);
+.daily-faint {
+  animation: daily-faint 950ms cubic-bezier(0.45, 0, 0.5, 1) both;
+}
+@keyframes daily-faint {
+  0% {
+    transform: rotate(0deg) translateY(0);
+    opacity: 1;
   }
-  50% {
-    transform: translateY(-0.5px);
+  55% {
+    transform: rotate(-13deg) translateY(0);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(84deg) translateY(0.4px);
+    opacity: 0.5;
   }
 }
 

@@ -19,6 +19,7 @@ import { project, fitViewBox } from "./geo";
 import { sampleSmooth } from "./smoothPath";
 import { buildRouteGeometry, pointAtFraction } from "./routeGeometry";
 import { Star } from "./Star";
+import { Walker, WALK_SWING_DEG, WALK_LEG_LEN } from "./Walker";
 
 export interface JourneyMapProps {
   route: DailyRoute;
@@ -32,11 +33,25 @@ export interface JourneyMapProps {
   onArrived?: () => void;
   /** Fired when the traveler reaches a landmark (with its gold), for the HUD. */
   onLandmark?: (gold: number) => void;
+  /** When the run is over, the trekker reacts: cheers on "arrived", topples on
+   *  "died". Omit while still travelling (the figure keeps walking). */
+  outcome?: "arrived" | "died";
   className?: string;
 }
 
 const JUST_PASSED_WINDOW = 0.06;
-const TWEEN_MS = 2800;
+/** Travel pace: ms per full route-fraction covered. This gives the trekker a
+ *  CONSTANT speed — a far leg takes proportionally longer instead of every leg
+ *  sharing one fixed time slot (which made long legs zip past faster than the
+ *  walker could believably stride). Clamped so tiny hops aren't instant and a
+ *  huge leg isn't endless. */
+const TRAVEL_MS_PER_FRACTION = 14000;
+const TRAVEL_MIN_MS = 500;
+const TRAVEL_MAX_MS = 7000;
+/** Stride length multiplier over strict zero-slip: each full leg cycle covers
+ *  this much more ground, so the legs swing SLOWER (fewer, longer strides) and
+ *  read as a walk instead of a blur. Higher = slower swing. */
+const WALK_STRIDE_SCALE = 3;
 /** How long the traveler pauses on a landmark to show its gold reward. */
 const PAUSE_MS = 700;
 
@@ -54,6 +69,7 @@ export default function JourneyMap({
   from = progress,
   onArrived,
   onLandmark,
+  outcome,
   className,
 }: JourneyMapProps) {
   const target = Math.max(0, Math.min(1, progress));
@@ -74,6 +90,9 @@ export default function JourneyMap({
   // gold reward — so reaching a temple is a felt beat, not a blur.
   const [shown, setShown] = useState(start);
   const [reward, setReward] = useState<{ gold: number; x: number; y: number } | null>(null);
+  // True only while the trekker is actively sliding along the path; false while
+  // paused at a temple or once the leg ends, so the legs stand instead of pumping.
+  const [moving, setMoving] = useState(false);
   const reduceMotion = useMemo(() => prefersReducedMotion(), []);
   const onArrivedRef = useRef(onArrived);
   onArrivedRef.current = onArrived;
@@ -98,7 +117,9 @@ export default function JourneyMap({
     let cancelled = false;
     let raf = 0;
     const timers: number[] = [];
-    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+    // Linear: a steady, constant pace between stops (the "stop" beat comes from
+    // standing still at each temple), so the gait tempo stays even.
+    const ease = (t: number) => t;
 
     // Landmark fractions crossed on this leg, in order — the pause points.
     const stops = landmarks
@@ -129,26 +150,34 @@ export default function JourneyMap({
 
     void (async () => {
       let prev = start;
-      const span = target - start;
+      setMoving(true);
       for (const w of waypoints) {
-        await animateTo(prev, w, Math.max(350, TWEEN_MS * ((w - prev) / span)));
+        // Constant speed: duration scales with the distance (route fraction)
+        // actually covered on this segment, clamped at both ends.
+        const dur = Math.min(TRAVEL_MAX_MS, Math.max(TRAVEL_MIN_MS, (w - prev) * TRAVEL_MS_PER_FRACTION));
+        await animateTo(prev, w, dur);
         if (cancelled) return;
         const lm = landmarks.find((l) => Math.abs(l.atFraction - w) < 1e-6);
         if (lm && stops.includes(w)) {
+          // Stand still while the gold pops at the temple, then walk on.
+          setMoving(false);
           const at = pointAtFraction(geo, w);
           setReward({ gold: lm.gold, x: at.x, y: at.y });
           onLandmarkRef.current?.(lm.gold);
           await wait(PAUSE_MS);
           if (cancelled) return;
           setReward(null);
+          setMoving(true);
         }
         prev = w;
       }
+      setMoving(false);
       if (!cancelled) onArrivedRef.current?.();
     })();
 
     return () => {
       cancelled = true;
+      setMoving(false);
       cancelAnimationFrame(raf);
       timers.forEach((id) => window.clearTimeout(id));
     };
@@ -196,6 +225,13 @@ export default function JourneyMap({
 
   // Marker scale relative to the (zoomed) view, so icons stay a steady size.
   const u = Math.max(1, span.w || 170) / 100;
+
+  // Stride phase locked to ground covered: one full two-step cycle per the
+  // distance the feet actually reach (so planted feet don't slide), advanced by
+  // the travelled distance. When `shown` stops changing, the phase freezes.
+  const footTravel = 2 * Math.sin((WALK_SWING_DEG * Math.PI) / 180) * WALK_LEG_LEN;
+  const groundPerCycle = footTravel * 2 * (u * 0.7) * WALK_STRIDE_SCALE;
+  const stridePhase = groundPerCycle > 0 ? ((geo.length * shown) / groundPerCycle) * Math.PI * 2 : 0;
 
   // Landmark positions depend only on the (static) geometry + landmark fractions,
   // never on `shown` — so resolve them once instead of per frame. The lit/justPassed
@@ -259,9 +295,9 @@ export default function JourneyMap({
 
         {/* Trekker — a little walking figure facing the way it travels. */}
         {geo.length > 0 && (
-          <g data-testid="journey-traveler" data-x={traveler.x} data-y={traveler.y} transform={`translate(${traveler.x} ${traveler.y}) scale(${u})`}>
+          <g data-testid="journey-traveler" data-x={traveler.x} data-y={traveler.y} data-outcome={outcome ?? ""} transform={`translate(${traveler.x} ${traveler.y}) scale(${u * 0.7})`}>
             <g transform={`scale(${facing} 1)`}>
-              <Walker />
+              <Walker outcome={outcome} phase={stridePhase} moving={moving} />
             </g>
           </g>
         )}
@@ -317,34 +353,3 @@ function Temple() {
   );
 }
 
-/**
- * A walking trekker (hat + pack + trekking pole), drawn in unit space with feet
- * at the origin. Legs swing and the body bobs via CSS (see index.css).
- */
-function Walker() {
-  const skin = "#f4e6cf";
-  const body = "var(--color-accent)";
-  const ink = "var(--map-ink)";
-  return (
-    <g>
-      {/* trekking pole */}
-      <line x1={1.5} y1={-2} x2={2.4} y2={0.2} stroke={ink} strokeWidth={0.26} strokeLinecap="round" />
-      {/* legs (swing from the hip) */}
-      <rect className="daily-walk-leg daily-walk-leg-b" x={-0.36} y={-2.2} width={0.72} height={2.2} rx={0.32} fill={body} stroke={ink} strokeWidth={0.1} />
-      <rect className="daily-walk-leg" x={-0.36} y={-2.2} width={0.72} height={2.2} rx={0.32} fill={body} stroke={ink} strokeWidth={0.1} />
-      <g className="daily-walk-body">
-        {/* backpack */}
-        <rect x={-1.65} y={-4.2} width={1.25} height={2} rx={0.38} fill="var(--color-chrome-gold)" stroke={ink} strokeWidth={0.12} />
-        {/* torso */}
-        <rect x={-0.72} y={-4.3} width={1.44} height={2.3} rx={0.55} fill={body} stroke="var(--map-paper)" strokeWidth={0.2} />
-        {/* forward arm */}
-        <rect x={0.35} y={-4} width={0.52} height={2} rx={0.26} fill={body} stroke={ink} strokeWidth={0.08} transform="rotate(14 0.6 -4)" />
-        {/* head */}
-        <circle cx={0} cy={-5} r={0.98} fill={skin} stroke={ink} strokeWidth={0.12} />
-        {/* hat */}
-        <rect x={-1.15} y={-5.65} width={2.3} height={0.4} rx={0.2} fill={body} stroke={ink} strokeWidth={0.08} />
-        <rect x={-0.62} y={-6.25} width={1.24} height={0.75} rx={0.3} fill={body} stroke={ink} strokeWidth={0.08} />
-      </g>
-    </g>
-  );
-}
