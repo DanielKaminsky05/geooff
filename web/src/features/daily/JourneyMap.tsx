@@ -2,11 +2,13 @@
  * Daily Dive — journey map (owned by Track D).
  *
  * The travel beat between prompts: a regional atlas that ZOOMS to the segment
- * just earned and animates the character + gold trail forward across it, so the
+ * just earned and animates the trekker + gold trail forward across it, so the
  * points you scored read as ground covered. `from`→`progress` is tweened
- * internally (easeOut) and the camera frames that segment.
+ * internally (easeOut), pausing on each landmark (a temple) to pop its gold.
  *
- * Positions are world-SVG coords (geo.project), aligned with the land paths.
+ * The drawn route and everything placed ON it (the trekker, the temples) share a
+ * SINGLE geometry: the smooth curve sampled into a dense polyline. So the gold
+ * "travelled" line, the red road, and the walker always coincide exactly.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -14,7 +16,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { maps } from "../../lib/maps";
 import type { DailyDestination, DailyLandmark, DailyRoute } from "../../lib/protocol";
 import { project, fitViewBox } from "./geo";
-import { smoothPath } from "./smoothPath";
+import { sampleSmooth } from "./smoothPath";
 import { buildRouteGeometry, pointAtFraction } from "./routeGeometry";
 
 export interface JourneyMapProps {
@@ -50,14 +52,14 @@ export default function JourneyMap({
   const target = Math.max(0, Math.min(1, progress));
   const start = Math.max(0, Math.min(1, from));
 
+  // One geometry for everything: the smooth curve sampled into dense points.
   const { geo, dest } = useMemo(() => {
-    const pts = route.points.map(project);
+    const pts = sampleSmooth(route.points.map(project));
     return { geo: buildRouteGeometry(pts), dest: project(destination.at) };
   }, [route.points, destination.at]);
 
   // Tween `shown` from start → target, PAUSING on each landmark crossed to pop a
-  // gold reward — so reaching a landmark is a felt beat, not a blur. The traveler
-  // and gold trail grow with `shown`; the camera frames this leg's segment.
+  // gold reward — so reaching a temple is a felt beat, not a blur.
   const [shown, setShown] = useState(start);
   const [reward, setReward] = useState<{ gold: number; x: number; y: number } | null>(null);
   const onArrivedRef = useRef(onArrived);
@@ -85,13 +87,13 @@ export default function JourneyMap({
       waypoints.push(target);
     }
 
-    const animateTo = (from: number, to: number, dur: number) =>
+    const animateTo = (fromF: number, to: number, dur: number) =>
       new Promise<void>((resolve) => {
         const t0 = performance.now();
         const step = (now: number) => {
           if (cancelled) return;
           const t = dur <= 0 ? 1 : Math.min(1, (now - t0) / dur);
-          setShown(from + (to - from) * ease(t));
+          setShown(fromF + (to - fromF) * ease(t));
           if (t < 1) raf = requestAnimationFrame(step);
           else resolve();
         };
@@ -129,12 +131,9 @@ export default function JourneyMap({
     };
   }, [start, target, landmarks, geo]);
 
-  // Camera: frame THIS leg's segment (zoomed in), with a little context and the
-  // destination once we're near it. Static per leg; the character moves within.
+  // Camera: frame THIS leg's segment (zoomed in), with the destination once near.
   const viewBox = useMemo(() => {
     const a = Math.min(start, target);
-    // Always frame some road ahead so the leg reads as travel even when the
-    // segment is short, plus a little margin behind.
     const b = Math.min(1, Math.max(Math.max(start, target), a + 0.2) + 0.05);
     const lo = Math.max(0, a - 0.05);
     const seg: { x: number; y: number }[] = [];
@@ -145,18 +144,22 @@ export default function JourneyMap({
   }, [geo, start, target, dest]);
 
   const traveler = pointAtFraction(geo, shown);
-  const travelledPath = (() => {
+  // Facing = sign of the tangent so the trekker walks forwards, not backwards.
+  const ahead = pointAtFraction(geo, Math.min(1, shown + 0.01));
+  const facing = ahead.x >= traveler.x ? 1 : -1;
+
+  // Travelled gold line: the SAME sampled points up to the traveler — exact overlay.
+  const fullLine = geo.points.map((p) => `${p.x},${p.y}`).join(" ");
+  const travelledLine = (() => {
     const targetLen = geo.length * shown;
     const pts = geo.points.filter((_, i) => geo.cumulative[i] <= targetLen);
     pts.push(traveler);
-    return smoothPath(pts);
+    return pts.map((p) => `${p.x},${p.y}`).join(" ");
   })();
-  const fullLine = smoothPath(geo.points);
 
-  // Marker/label scale relative to the (zoomed) view. Smaller than before.
+  // Marker scale relative to the (zoomed) view, so icons stay a steady size.
   const u = Math.max(1, Number(viewBox.split(" ")[2]) || 170) / 100;
 
-  // Land is static — memoize so per-frame tweening doesn't reconcile ~250 paths.
   const landEls = useMemo(
     () =>
       (maps.countries?.locations ?? []).map((loc) => (
@@ -175,8 +178,8 @@ export default function JourneyMap({
 
         {geo.points.length >= 2 && (
           <>
-            <path d={fullLine} fill="none" stroke="var(--map-terracotta)" strokeWidth={3} strokeOpacity={0.55} strokeDasharray="5 6" strokeLinecap="butt" vectorEffect="non-scaling-stroke" />
-            <path d={travelledPath} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={4} strokeOpacity={0.95} strokeLinecap="round" vectorEffect="non-scaling-stroke" data-testid="journey-route" />
+            <polyline points={fullLine} fill="none" stroke="var(--map-terracotta)" strokeWidth={3} strokeOpacity={0.5} strokeDasharray="5 6" strokeLinecap="butt" vectorEffect="non-scaling-stroke" />
+            <polyline points={travelledLine} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={4} strokeOpacity={0.95} strokeLinecap="round" vectorEffect="non-scaling-stroke" data-testid="journey-route" />
           </>
         )}
 
@@ -187,21 +190,21 @@ export default function JourneyMap({
           return (
             <g key={`lm-${i}-${lm.atFraction}`} data-testid="journey-landmark" data-lit={lit ? "true" : "false"} data-fraction={lm.atFraction}>
               {lit && (
-                <>
+                <g transform={`translate(${at.x} ${at.y}) scale(${u})`}>
                   {justPassed && (
-                    <circle cx={at.x} cy={at.y} r={2 * u} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={1.2} strokeOpacity={0.6} vectorEffect="non-scaling-stroke">
-                      <animate attributeName="r" values={`${u};${3.5 * u}`} dur="1.3s" repeatCount="indefinite" />
-                      <animate attributeName="stroke-opacity" values="0.8;0" dur="1.3s" repeatCount="indefinite" />
+                    <circle r={1} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={0.4}>
+                      <animate attributeName="r" values="1;6" dur="1.3s" repeatCount="indefinite" />
+                      <animate attributeName="stroke-opacity" values="0.9;0" dur="1.3s" repeatCount="indefinite" />
                     </circle>
                   )}
-                  <circle cx={at.x} cy={at.y} r={1.1 * u} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
-                </>
+                  <Temple />
+                </g>
               )}
             </g>
           );
         })}
 
-        {/* Destination — small ringed star + label. */}
+        {/* Destination — ringed star + label. */}
         <g data-testid="journey-destination">
           <circle cx={dest.x} cy={dest.y} r={1.9 * u} fill="none" stroke="var(--color-accent)" strokeWidth={1.3} vectorEffect="non-scaling-stroke" />
           <Star cx={dest.x} cy={dest.y} r={1.2 * u} fill="var(--color-accent)" />
@@ -210,11 +213,12 @@ export default function JourneyMap({
           </text>
         </g>
 
-        {/* Traveler. */}
+        {/* Trekker — a little walking figure facing the way it travels. */}
         {geo.length > 0 && (
-          <g data-testid="journey-traveler" data-x={traveler.x} data-y={traveler.y} transform={`translate(${traveler.x} ${traveler.y})`}>
-            <circle r={1.7 * u} fill="var(--color-accent)" stroke="var(--map-paper)" strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
-            <circle r={0.6 * u} fill="var(--map-paper)" />
+          <g data-testid="journey-traveler" data-x={traveler.x} data-y={traveler.y} transform={`translate(${traveler.x} ${traveler.y}) scale(${u})`}>
+            <g transform={`scale(${facing} 1)`}>
+              <Walker />
+            </g>
           </g>
         )}
 
@@ -223,23 +227,12 @@ export default function JourneyMap({
           <g
             key={`${reward.x},${reward.y}`}
             data-testid="landmark-reward"
-            transform={`translate(${reward.x} ${reward.y})`}
+            transform={`translate(${reward.x} ${reward.y}) scale(${u})`}
             style={{ pointerEvents: "none" }}
           >
             <g className="daily-gold-pop">
-              <circle r={1.5 * u} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={0.5} vectorEffect="non-scaling-stroke" />
-              <text
-                y={-2.6 * u}
-                textAnchor="middle"
-                fontFamily="var(--font-serif)"
-                fontWeight={700}
-                fontSize={3.6 * u}
-                fill="var(--color-chrome-gold)"
-                style={{ paintOrder: "stroke" }}
-                stroke="var(--map-paper)"
-                strokeWidth={1 * u}
-                strokeOpacity={0.9}
-              >
+              <circle cy={-7} r={1.7} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={0.25} />
+              <text y={-9.6} textAnchor="middle" fontFamily="var(--font-serif)" fontWeight={700} fontSize={3.6} fill="var(--color-chrome-gold)" style={{ paintOrder: "stroke" }} stroke="var(--map-paper)" strokeWidth={1} strokeOpacity={0.9}>
                 +{reward.gold}
               </text>
             </g>
@@ -247,6 +240,66 @@ export default function JourneyMap({
         )}
       </svg>
     </div>
+  );
+}
+
+/**
+ * A small classical temple (gold) for a landmark — steps, four columns, an
+ * entablature and a pediment roof, drawn in unit space (base at the origin).
+ */
+function Temple() {
+  const gold = "var(--color-chrome-gold)";
+  const shade = "#b8862b";
+  const ink = "var(--map-ink)";
+  return (
+    <g stroke={ink} strokeWidth={0.14} strokeLinejoin="round">
+      {/* steps */}
+      <rect x={-3.1} y={-0.95} width={6.2} height={0.95} rx={0.12} fill={shade} />
+      <rect x={-2.6} y={-1.55} width={5.2} height={0.65} fill={gold} />
+      {/* columns */}
+      {[-2.15, -0.9, 0.35, 1.6].map((cx, i) => (
+        <g key={i}>
+          <rect x={cx} y={-3.75} width={0.6} height={2.25} fill={gold} />
+          <rect x={cx + 0.38} y={-3.75} width={0.22} height={2.25} fill={shade} stroke="none" />
+        </g>
+      ))}
+      {/* entablature */}
+      <rect x={-2.85} y={-4.3} width={5.7} height={0.62} fill={shade} />
+      {/* pediment roof */}
+      <polygon points="-3.2,-4.3 3.2,-4.3 0,-6.1" fill={gold} />
+    </g>
+  );
+}
+
+/**
+ * A walking trekker (hat + pack + trekking pole), drawn in unit space with feet
+ * at the origin. Legs swing and the body bobs via CSS (see index.css).
+ */
+function Walker() {
+  const skin = "#f4e6cf";
+  const body = "var(--color-accent)";
+  const ink = "var(--map-ink)";
+  return (
+    <g>
+      {/* trekking pole */}
+      <line x1={1.5} y1={-2} x2={2.4} y2={0.2} stroke={ink} strokeWidth={0.26} strokeLinecap="round" />
+      {/* legs (swing from the hip) */}
+      <rect className="daily-walk-leg daily-walk-leg-b" x={-0.36} y={-2.2} width={0.72} height={2.2} rx={0.32} fill={body} stroke={ink} strokeWidth={0.1} />
+      <rect className="daily-walk-leg" x={-0.36} y={-2.2} width={0.72} height={2.2} rx={0.32} fill={body} stroke={ink} strokeWidth={0.1} />
+      <g className="daily-walk-body">
+        {/* backpack */}
+        <rect x={-1.65} y={-4.2} width={1.25} height={2} rx={0.38} fill="var(--color-chrome-gold)" stroke={ink} strokeWidth={0.12} />
+        {/* torso */}
+        <rect x={-0.72} y={-4.3} width={1.44} height={2.3} rx={0.55} fill={body} stroke="var(--map-paper)" strokeWidth={0.2} />
+        {/* forward arm */}
+        <rect x={0.35} y={-4} width={0.52} height={2} rx={0.26} fill={body} stroke={ink} strokeWidth={0.08} transform="rotate(14 0.6 -4)" />
+        {/* head */}
+        <circle cx={0} cy={-5} r={0.98} fill={skin} stroke={ink} strokeWidth={0.12} />
+        {/* hat */}
+        <rect x={-1.15} y={-5.65} width={2.3} height={0.4} rx={0.2} fill={body} stroke={ink} strokeWidth={0.08} />
+        <rect x={-0.62} y={-6.25} width={1.24} height={0.75} rx={0.3} fill={body} stroke={ink} strokeWidth={0.08} />
+      </g>
+    </g>
   );
 }
 
