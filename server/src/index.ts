@@ -5,6 +5,9 @@
  * round timer (via `endsAt`), and never sends the answer list to clients.
  */
 
+// Load server/.env (Supabase creds, Phase 2) before anything reads process.env.
+// No-ops when the file is absent, so CI/offline need no credentials.
+import "dotenv/config";
 import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import express, { type Express } from "express";
@@ -66,6 +69,7 @@ import {
 } from "./sets.js";
 import { buildPromptPool } from "./prompts.js";
 import { registerDailyRoutes } from "./daily/routes.js";
+import { makeSupabaseRunsRepo } from "./daily/supabaseRunsRepo.js";
 import { REVEAL_MS_DEFAULT, voteSkipReveal } from "./reveal.js";
 import {
   MAX_ANSWER_LENGTH,
@@ -180,7 +184,9 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
   });
 
   // Daily Trek — stateless REST (GET /daily, POST /daily/answer, /daily/finish).
-  registerDailyRoutes(app);
+  // Phase 2: a Supabase repo persists finished runs for a real percentile; it's
+  // `null` when Supabase is unconfigured, degrading to the synthetic percentile.
+  registerDailyRoutes(app, { runsRepo: makeSupabaseRunsRepo() });
 
   const httpServer = createHttpServer(app);
 
