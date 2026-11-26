@@ -190,18 +190,23 @@ export function createServer(options: CreateServerOptions = {}): GeofightServer 
   // `null` when Supabase is unconfigured, degrading to the synthetic percentile.
   registerDailyRoutes(app, { runsRepo: makeSupabaseRunsRepo() });
 
-  // Phase 3: the Trek Builder admin surface. LOCAL-ONLY by design — it mounts
-  // only when BOTH hold: DAILY_ADMIN_TOKEN is set AND we're not in production.
-  // The NODE_ENV guard means even if the token ever leaks into a prod
-  // environment, the /daily/admin/* routes still never exist there.
+  // Published authored treks override the generator and must be SERVED in EVERY
+  // environment — that's the whole point of authoring a day — so hydrate them
+  // from Supabase at boot regardless of NODE_ENV. The repo is null when Supabase
+  // is unconfigured, and hydrate is then a no-op.
+  const authoredRepo = makeSupabaseAuthoredSetsRepo();
+  void hydrateAuthoredSets(authoredRepo)
+    .then((n) => console.log(`[daily/admin] hydrated ${n} authored set(s).`))
+    .catch((err) => console.warn("[daily/admin] hydrate failed.", err));
+
+  // The Trek Builder admin WRITE surface, by contrast, is LOCAL-ONLY: it mounts
+  // only when BOTH hold — DAILY_ADMIN_TOKEN is set AND we're not in production —
+  // so even if the token ever leaked into a prod environment, the
+  // /daily/admin/* routes still never exist there.
   const adminToken = process.env.DAILY_ADMIN_TOKEN?.trim();
   const isProduction = process.env.NODE_ENV === "production";
   if (adminToken && !isProduction) {
-    const authoredRepo = makeSupabaseAuthoredSetsRepo();
     registerDailyAdminRoutes(app, { token: adminToken, repo: authoredRepo });
-    void hydrateAuthoredSets(authoredRepo)
-      .then((n) => n > 0 && console.log(`[daily/admin] hydrated ${n} authored set(s).`))
-      .catch((err) => console.warn("[daily/admin] hydrate failed.", err));
   }
 
   const httpServer = createHttpServer(app);
