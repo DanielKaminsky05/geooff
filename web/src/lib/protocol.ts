@@ -312,9 +312,13 @@ export const DAILY_COMPLETION_BONUS = 0.5;
  *  country") and a tiny-pool one ("ends in -stan") have the SAME skill ceiling. */
 export const DAILY_PROMPT_MAX = 150;
 /** Flat points for EACH correct country named, added ON TOP of the capture score.
- *  Makes naming always pay off; it also makes a run's max depend on the day's
- *  pool sizes, so journey distances are resolved as a fraction of that max. */
-export const DAILY_NAME_BONUS = 5;
+ *  Makes naming always pay off. This is what PLAYERS earn per name. */
+export const DAILY_NAME_BONUS = 10;
+/** The per-name bonus COUNTED when resolving journey distances (see
+ *  scoring.distanceScoreMax) — lower than DAILY_NAME_BONUS, so a tier's fraction
+ *  is measured against a smaller max than players can actually earn. Net effect:
+ *  the roads are more lenient to reach even though naming still pays full value. */
+export const DAILY_DISTANCE_NAME_BONUS = 5;
 
 export type JourneyId = "short" | "medium" | "long";
 export type DailyOutcome = "arrived" | "died";

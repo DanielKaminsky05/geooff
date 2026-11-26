@@ -14,7 +14,7 @@
 import type { DailyJourney, JourneyId, DailyLandmark } from "../protocol.js";
 import { DAILY_PROMPT_COUNT } from "../protocol.js";
 import { buildPromptPool, validIdsFor, type Prompt } from "../prompts.js";
-import { dailyScoreMax } from "./scoring.js";
+import { distanceScoreMax } from "./scoring.js";
 import { destinations } from "./destinations.js";
 import type { CompiledDailySet } from "./types.js";
 
@@ -106,7 +106,7 @@ const JOURNEY_LANDMARKS: Record<JourneyId, DailyLandmark[]> = {
  * even though the per-name bonus makes the raw max depend on pool sizes.
  */
 export function buildJourneys(prompts: Prompt[]): DailyJourney[] {
-  const max = dailyScoreMax(prompts);
+  const max = distanceScoreMax(prompts);
   return JOURNEY_ORDER.map((id) => ({
     id,
     distance: Math.round(DAILY_JOURNEY_FRACTIONS[id] * max),

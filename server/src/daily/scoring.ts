@@ -11,7 +11,12 @@
  * §Scoring). Routes.ts reconciles this at /daily/finish, not per-answer.
  */
 
-import { DAILY_COMPLETION_BONUS, DAILY_PROMPT_MAX, DAILY_NAME_BONUS } from "../protocol.js";
+import {
+  DAILY_COMPLETION_BONUS,
+  DAILY_PROMPT_MAX,
+  DAILY_NAME_BONUS,
+  DAILY_DISTANCE_NAME_BONUS,
+} from "../protocol.js";
 import { countryAttributes } from "../data/countryAttributes.js";
 import { validIdsFor, type Prompt } from "../prompts.js";
 
@@ -106,5 +111,17 @@ export function promptFullPoints(prompt: Prompt): number {
 export function dailyScoreMax(prompts: Prompt[]): number {
   let sum = 0;
   for (const p of prompts) sum += DAILY_PROMPT_MAX + DAILY_NAME_BONUS * promptTotal(p);
+  return sum;
+}
+
+/**
+ * The max used to RESOLVE journey distances — like dailyScoreMax but with a
+ * discounted per-name bonus (DAILY_DISTANCE_NAME_BONUS < DAILY_NAME_BONUS). A
+ * tier's fraction is measured against this smaller total than players actually
+ * earn, so arriving is more lenient while naming still pays full value.
+ */
+export function distanceScoreMax(prompts: Prompt[]): number {
+  let sum = 0;
+  for (const p of prompts) sum += DAILY_PROMPT_MAX + DAILY_DISTANCE_NAME_BONUS * promptTotal(p);
   return sum;
 }
