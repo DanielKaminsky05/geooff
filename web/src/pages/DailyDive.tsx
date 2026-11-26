@@ -120,6 +120,9 @@ export default function DailyDive() {
     Record<string, { iso: string; name: string }[]> | undefined
   >(undefined);
   const [recapGoldLost, setRecapGoldLost] = useState(0);
+  // Set when /daily/finish was unreachable and the recap is a local, unofficial
+  // result (no server reconciliation / no banked gold).
+  const [finishOffline, setFinishOffline] = useState(false);
 
   // Persistent HUD: total points (updated only when a leg's walk ends, never
   // during the naming challenge — so the per-prompt score stays a surprise) and
@@ -185,6 +188,7 @@ export default function DailyDive() {
         let pct = fallbackPercentile(result);
         let answers: Record<string, { iso: string; name: string }[]> | undefined;
         let goldLost = 0;
+        let offline = false;
         try {
           const res = await postFinish({ result });
           finalResult = res.result;
@@ -193,7 +197,17 @@ export default function DailyDive() {
           goldLost = res.goldLost ?? 0;
         } catch (err) {
           console.warn("[DailyDive] finish failed — using client fallback.", err);
+          offline = true;
+          // Honest fallback: derive the outcome from the local progress the
+          // player actually achieved (the same cumulative points vs. journey
+          // distance the live leg animation used). We can't bank gold without
+          // the server, so keep it at 0 — but don't mislabel a reached run.
+          const { journey } = pick(set, journeyId);
+          const reached =
+            journey.distance > 0 ? cumPointsRef.current >= journey.distance : true;
+          finalResult = { ...result, outcome: reached ? "arrived" : "died" };
         }
+        setFinishOffline(offline);
         // Replay/testing: don't persist anything (no gold banked, no lock).
         const newBalance = ALLOW_REPLAY
           ? localDailyStore.getWallet() + finalResult.gold
@@ -413,6 +427,17 @@ export default function DailyDive() {
           walletBalance={walletBalance}
           onClose={goHome}
         />
+        {finishOffline && (
+          <div
+            role="alert"
+            data-testid="daily-recap-offline"
+            className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center px-4"
+          >
+            <p className="rounded-lg bg-[var(--color-chrome)]/90 px-3 py-1 text-center text-xs text-[var(--color-chrome-ink)] backdrop-blur">
+              Couldn&apos;t reach the server — showing an unofficial result.
+            </p>
+          </div>
+        )}
       </main>
     );
   }
