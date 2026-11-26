@@ -49,6 +49,31 @@ import {
   flagThreeVerticalStripes,
   flagHasSun,
   flagHasAnimal,
+  lionRange,
+  tigerRange,
+  elephantRange,
+  giraffeRange,
+  gorillaRange,
+  hippoRange,
+  rhinoRange,
+  cheetahRange,
+  zebraRange,
+  chimpanzeeRange,
+  jaguarRange,
+  brownBearRange,
+  wolfRange,
+  snowLeopardRange,
+  pumaRange,
+  capybaraRange,
+  armadilloRange,
+  slothRange,
+  peafowlRange,
+  gibbonRange,
+  lynxRange,
+  mooseRange,
+  bisonRange,
+  reindeerRange,
+  penguinRange,
 } from "./data/countryGroups.js";
 import { capitals, capitalNotLargest } from "./data/capitals.js";
 import { allIdsFor } from "./sets.js";
@@ -426,6 +451,41 @@ function buildPrompts(): Prompt[] {
   ];
   for (const g of groupPrompts) {
     prompts.push({ id: g.id, label: g.label, validIds: new Set(g.ids) });
+  }
+
+  // Wildlife-range prompts: "Name a country where <animal> live in the wild."
+  // Same shape as the group prompts — each only surfaces for a set where at
+  // least MIN_VALID of the animal's range states fall inside it, so lions land
+  // in Africa, jaguars in the Americas, snow leopards in Asia, and so on.
+  const animalPrompts: { id: string; label: string; ids: readonly string[] }[] = [
+    { id: "animal-lions", label: "Name a country where lions live in the wild", ids: lionRange },
+    { id: "animal-tigers", label: "Name a country where tigers live in the wild", ids: tigerRange },
+    { id: "animal-elephants", label: "Name a country where elephants live in the wild", ids: elephantRange },
+    { id: "animal-giraffes", label: "Name a country where giraffes live in the wild", ids: giraffeRange },
+    { id: "animal-gorillas", label: "Name a country where gorillas live in the wild", ids: gorillaRange },
+    { id: "animal-hippos", label: "Name a country where hippos live in the wild", ids: hippoRange },
+    { id: "animal-rhinos", label: "Name a country where rhinos live in the wild", ids: rhinoRange },
+    { id: "animal-cheetahs", label: "Name a country where cheetahs live in the wild", ids: cheetahRange },
+    { id: "animal-zebras", label: "Name a country where zebras live in the wild", ids: zebraRange },
+    { id: "animal-chimpanzees", label: "Name a country where chimpanzees live in the wild", ids: chimpanzeeRange },
+    { id: "animal-jaguars", label: "Name a country where jaguars live in the wild", ids: jaguarRange },
+    { id: "animal-brown-bears", label: "Name a country where brown bears live in the wild", ids: brownBearRange },
+    { id: "animal-wolves", label: "Name a country where wolves live in the wild", ids: wolfRange },
+    { id: "animal-snow-leopards", label: "Name a country where snow leopards live in the wild", ids: snowLeopardRange },
+    { id: "animal-pumas", label: "Name a country where pumas (cougars) live in the wild", ids: pumaRange },
+    { id: "animal-capybaras", label: "Name a country where capybaras live in the wild", ids: capybaraRange },
+    { id: "animal-armadillos", label: "Name a country where armadillos live in the wild", ids: armadilloRange },
+    { id: "animal-sloths", label: "Name a country where sloths live in the wild", ids: slothRange },
+    { id: "animal-peafowl", label: "Name a country where peacocks live in the wild", ids: peafowlRange },
+    { id: "animal-gibbons", label: "Name a country where gibbons live in the wild", ids: gibbonRange },
+    { id: "animal-lynx", label: "Name a country where lynx live in the wild", ids: lynxRange },
+    { id: "animal-moose", label: "Name a country where moose live in the wild", ids: mooseRange },
+    { id: "animal-bison", label: "Name a country where bison live in the wild", ids: bisonRange },
+    { id: "animal-reindeer", label: "Name a country where reindeer live in the wild", ids: reindeerRange },
+    { id: "animal-penguins", label: "Name a country where penguins live in the wild", ids: penguinRange },
+  ];
+  for (const a of animalPrompts) {
+    prompts.push({ id: a.id, label: a.label, validIds: new Set(a.ids) });
   }
 
   return prompts;

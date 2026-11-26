@@ -294,6 +294,87 @@ describe("categorical group prompts (within 'countries')", () => {
   });
 });
 
+describe("wildlife-range prompts", () => {
+  const within = (id: string) => validIdsFor(get(id), "countries");
+
+  it("lions: Kenya/India in, landlocked-away France out", () => {
+    const ids = within("animal-lions");
+    expect(ids.has("ke")).toBe(true);
+    expect(ids.has("in")).toBe(true); // Asiatic lion
+    expect(ids.has("za")).toBe(true);
+    expect(ids.has("fr")).toBe(false);
+  });
+
+  it("tigers are an Asia-only cat (no African range states)", () => {
+    const ids = within("animal-tigers");
+    expect(ids.has("in")).toBe(true);
+    expect(ids.has("ru")).toBe(true); // Amur tiger
+    expect(ids.has("ke")).toBe(false); // no African tigers
+    expect(ids.has("bn")).toBe(false); // Brunei has no tigers (guard a past data slip)
+  });
+
+  it("elephants include the famous range states (South Africa, Thailand)", () => {
+    const ids = within("animal-elephants");
+    expect(ids.has("za")).toBe(true); // Kruger
+    expect(ids.has("th")).toBe(true); // Asian elephant
+    expect(ids.has("in")).toBe(true);
+    expect(ids.has("cg")).toBe(true); // forest elephants, Republic of the Congo
+    expect(ids.has("fr")).toBe(false);
+  });
+
+  it("cheetahs: South Africa in, Saudi Arabia out (extinct), Iran in (Asiatic)", () => {
+    const ids = within("animal-cheetahs");
+    expect(ids.has("za")).toBe(true);
+    expect(ids.has("ir")).toBe(true);
+    expect(ids.has("sa")).toBe(false); // extinct in Saudi Arabia
+  });
+
+  it("jaguars span the Americas incl. Guatemala, exclude the US (no breeding pop)", () => {
+    const ids = within("animal-jaguars");
+    expect(ids.has("br")).toBe(true);
+    expect(ids.has("mx")).toBe(true);
+    expect(ids.has("gt")).toBe(true);
+    expect(ids.has("us")).toBe(false);
+  });
+
+  it("pumas run from Canada to Chile", () => {
+    const ids = within("animal-pumas");
+    expect(ids.has("ca")).toBe(true);
+    expect(ids.has("us")).toBe(true);
+    expect(ids.has("cl")).toBe(true);
+    expect(ids.has("ao")).toBe(false); // not in the Old World
+  });
+
+  it("bison include Belarus (Białowieża wisent) and the US", () => {
+    const ids = within("animal-bison");
+    expect(ids.has("by")).toBe(true);
+    expect(ids.has("us")).toBe(true);
+    expect(ids.has("pl")).toBe(true);
+  });
+
+  it("penguins: southern-hemisphere coasts only, never landlocked/Europe", () => {
+    const ids = within("animal-penguins");
+    expect(ids.has("za")).toBe(true);
+    expect(ids.has("ar")).toBe(true);
+    expect(ids.has("nz")).toBe(true);
+    expect(ids.has("de")).toBe(false);
+  });
+
+  it("every animal prompt clears MIN_VALID within 'countries' (none is a dead prompt)", () => {
+    const animalIds = prompts.map((p) => p.id).filter((id) => id.startsWith("animal-"));
+    expect(animalIds.length).toBe(25);
+    for (const id of animalIds) {
+      expect(within(id).size, `${id} should clear MIN_VALID`).toBeGreaterThanOrEqual(MIN_VALID);
+    }
+  });
+
+  it("spread across regions: lions→Africa, snow leopards→Asia, jaguars→Americas", () => {
+    expect(validIdsFor(get("animal-lions"), "africa").size).toBeGreaterThanOrEqual(MIN_VALID);
+    expect(validIdsFor(get("animal-snow-leopards"), "asia").size).toBeGreaterThanOrEqual(MIN_VALID);
+    expect(validIdsFor(get("animal-jaguars"), "americas").size).toBeGreaterThanOrEqual(MIN_VALID);
+  });
+});
+
 describe("capital-based prompts (within 'countries')", () => {
   const within = (id: string) => validIdsFor(get(id), "countries");
 

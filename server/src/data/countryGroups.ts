@@ -196,3 +196,129 @@ export const flagHasAnimal = [
   "lk", "me", "al", "eg", "mx", "zm", "ec", "bo", "ug", "pg",
   "bt", "gt", "dm", "zw", "rs", "md", "fj", "es", "ad", "kz",
 ];
+
+// --- "An animal lives here" (wildlife range) ---
+// Each set is the countries (in the game's list) that hold an ESTABLISHED,
+// RESIDENT, EXTANT WILD population of the animal — the answer key for
+// "Name a country where <animal> live in the wild". Seeded from IUCN Red List
+// range data and species specialist-group assessments (verified 2026), then
+// hand-trimmed to established populations: regionally-extinct, vagrant-only and
+// captive/feral-only ranges are excluded (e.g. no Colombia for hippos). Reintroduced
+// but now self-sustaining free-ranging populations ARE counted. Deliberately
+// inclusive on commonly-named range states (a missing country penalises a player),
+// conservative on dead/disputed ones. Hand-edit freely.
+
+/** Lions (African lion + Asiatic lion in India's Gir Forest). */
+export const lionRange = [
+  "ao", "bj", "bw", "cd", "cm", "et", "in", "ke", "mz", "na",
+  "sd", "sn", "ss", "tz", "ug", "za", "zm", "zw",
+];
+/** Tigers (resident wild populations; excludes functionally-extinct range states). */
+export const tigerRange = ["bd", "bt", "cn", "id", "in", "mm", "my", "np", "ru", "th"];
+/** Elephants (African savanna + forest elephants and the Asian elephant). */
+export const elephantRange = [
+  "ao", "bd", "bf", "bj", "bt", "bw", "cd", "cf", "cg", "ci",
+  "cm", "cn", "er", "et", "ga", "gh", "gn", "gq", "id", "in",
+  "ke", "kh", "la", "lk", "lr", "ml", "mm", "mw", "mz", "na",
+  "ne", "ng", "np", "rw", "ss", "td", "tg", "th", "ug", "vn",
+  "za", "zm", "zw",
+];
+/** Giraffes (incl. now-established reintroductions, e.g. Rwanda/Malawi/Eswatini). */
+export const giraffeRange = [
+  "ao", "bw", "cd", "cf", "cm", "et", "ke", "mw", "mz", "na",
+  "ne", "rw", "ss", "sz", "td", "tz", "ug", "za", "zm", "zw",
+];
+/** Gorillas (western + eastern gorillas, central/west Africa). */
+export const gorillaRange = ["ao", "cd", "cf", "cg", "cm", "ga", "gq", "ng", "rw", "ug"];
+/** Common hippopotamus (sub-Saharan Africa; Colombia's feral herd excluded). */
+export const hippoRange = [
+  "ao", "bf", "bi", "bj", "bw", "cd", "cf", "cg", "ci", "cm",
+  "et", "ga", "gh", "gm", "gn", "gq", "gw", "ke", "lr", "ml",
+  "mw", "mz", "na", "ne", "ng", "rw", "sd", "sl", "sn", "so",
+  "ss", "sz", "td", "tg", "tz", "ug", "za", "zm", "zw",
+];
+/** Rhinoceroses (African white/black + Asian one-horned, Javan, Sumatran). */
+export const rhinoRange = [
+  "bw", "id", "in", "ke", "mw", "na", "np", "sz", "tz", "ug",
+  "za", "zm", "zw",
+];
+/** Cheetahs (southern/eastern Africa, the Sahel, and the Asiatic cheetah in Iran). */
+export const cheetahRange = [
+  "ao", "bf", "bj", "bw", "dz", "et", "ir", "ke", "ml", "mz",
+  "na", "ne", "ss", "tz", "ug", "za", "zm", "zw",
+];
+/** Zebras (plains, mountain and Grevy's zebra). */
+export const zebraRange = [
+  "ao", "bw", "et", "ke", "mw", "mz", "na", "rw", "ss", "sz",
+  "tz", "ug", "za", "zm", "zw",
+];
+/** Chimpanzees (west/central/east Africa). */
+export const chimpanzeeRange = [
+  "ao", "bi", "cd", "cf", "cg", "ci", "cm", "ga", "gn", "gq",
+  "gw", "lr", "ml", "ng", "rw", "sl", "sn", "ss", "tz", "ug",
+];
+/** Jaguars (the Americas; USA excluded — transient males only, no breeding population). */
+export const jaguarRange = [
+  "ar", "bo", "br", "bz", "co", "cr", "ec", "gt", "gy", "hn",
+  "mx", "ni", "pa", "pe", "py", "sr", "ve",
+];
+/** Brown bears (grizzly in North America; brown bears across Europe and Asia). */
+export const brownBearRange = [
+  "af", "al", "am", "az", "ba", "bg", "by", "ca", "cn", "ee",
+  "es", "fi", "fr", "ge", "gr", "hr", "in", "ir", "iq", "it",
+  "jp", "kg", "kz", "lv", "me", "mk", "mn", "no", "np", "pk",
+  "pl", "ro", "rs", "ru", "se", "si", "sk", "tj", "tr", "ua",
+  "us", "uz",
+];
+/** Gray wolves (North America, Europe, the Middle East and Asia; recolonisers included). */
+export const wolfRange = [
+  "af", "al", "am", "at", "az", "ba", "be", "bg", "bt", "by",
+  "ca", "cn", "cz", "de", "dk", "ee", "es", "fi", "fr", "ge",
+  "gr", "hr", "hu", "in", "iq", "ir", "it", "jo", "kg", "kz",
+  "lt", "lv", "md", "me", "mk", "mn", "mx", "nl", "no", "om",
+  "pk", "pl", "pt", "ro", "rs", "ru", "sa", "se", "si", "sk",
+  "sy", "tj", "tm", "tr", "ua", "us", "uz", "ye",
+];
+/** Snow leopards (the 12 high-mountain range states of Central/South Asia). */
+export const snowLeopardRange = ["af", "bt", "cn", "in", "kg", "kz", "mn", "np", "pk", "ru", "tj", "uz"];
+/** Pumas (cougar / mountain lion — Canada down to Patagonia). */
+export const pumaRange = [
+  "ar", "bo", "br", "bz", "ca", "cl", "co", "cr", "ec", "gt",
+  "gy", "hn", "mx", "ni", "pa", "pe", "py", "sr", "us", "uy",
+  "ve",
+];
+/** Capybaras (South America + far-southern Central America). */
+export const capybaraRange = [
+  "ar", "bo", "br", "co", "ec", "gy", "pa", "pe", "py", "sr",
+  "uy", "ve",
+];
+/** Armadillos (southern USA through the Americas to central Argentina/Chile). */
+export const armadilloRange = [
+  "ar", "bo", "br", "bz", "cl", "co", "cr", "ec", "gt", "gy",
+  "hn", "mx", "ni", "pa", "pe", "py", "sr", "sv", "tt", "us",
+  "uy", "ve",
+];
+/** Sloths (southern Central America + northern/central South America). */
+export const slothRange = ["bo", "br", "co", "cr", "ec", "gy", "hn", "ni", "pa", "pe", "sr", "ve"];
+/** Peafowl (native Indian + green peafowl; feral/introduced birds excluded). */
+export const peafowlRange = ["bt", "cn", "id", "in", "kh", "lk", "mm", "np", "pk", "th", "vn"];
+/** Gibbons (south, southeast and east Asia). */
+export const gibbonRange = ["bd", "bn", "cn", "id", "in", "kh", "la", "mm", "my", "th", "vn"];
+/** Lynx (Eurasian lynx across Eurasia, Iberian lynx, and Canada lynx). */
+export const lynxRange = [
+  "af", "al", "at", "ba", "bg", "by", "ca", "ch", "cn", "cz",
+  "de", "es", "fi", "fr", "ge", "hr", "hu", "in", "ir", "iq",
+  "kg", "kz", "lt", "lv", "mn", "np", "pl", "pt", "ro", "ru",
+  "se", "si", "sk", "tj", "tr", "ua", "us", "uz",
+];
+/** Moose (North America + northern/eastern Europe + northern Asia; "elk" in Europe). */
+export const mooseRange = [
+  "by", "ca", "cn", "cz", "ee", "fi", "kz", "lt", "lv", "mn",
+  "no", "pl", "ru", "se", "ua", "us",
+];
+/** Bison (American bison + free-ranging European bison / wisent). */
+export const bisonRange = ["by", "ca", "de", "lt", "mx", "pl", "ro", "ru", "sk", "ua", "us"];
+/** Reindeer / caribou (Arctic & subarctic; free-ranging herds counted). */
+export const reindeerRange = ["ca", "fi", "is", "mn", "no", "ru", "se", "us"];
+/** Penguins (mainland/national-territory breeders; Antarctica & overseas isles excluded). */
+export const penguinRange = ["ar", "au", "cl", "ec", "na", "nz", "pe", "za"];
