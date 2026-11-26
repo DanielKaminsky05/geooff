@@ -82,6 +82,8 @@ export default function DailyPlay({
   // Full-clear auto-advance: once every answer is named, move on after a short
   // buffer so the player sees they cleared it. Holds the pending timer id.
   const fullClearTimerRef = useRef<number | null>(null);
+  // Pending finish() settle-poll timer, so it can be cancelled on unmount.
+  const pollTimerRef = useRef<number | null>(null);
 
   // False once this prompt unmounts (the parent re-keys per leg): lets the async
   // answer handler bail instead of touching state on a gone component.
@@ -120,10 +122,10 @@ export default function DailyPlay({
       if (inFlightRef.current <= 0 || Date.now() - start >= FINISH_SETTLE_CAP_MS) {
         report();
       } else {
-        setTimeout(poll, 50);
+        pollTimerRef.current = window.setTimeout(poll, 50);
       }
     };
-    setTimeout(poll, 50);
+    pollTimerRef.current = window.setTimeout(poll, 50);
   }, [onComplete, prompt.id]);
 
   const clock = useFeedClock(finish);
@@ -137,6 +139,7 @@ export default function DailyPlay({
     () => () => {
       mountedRef.current = false;
       if (fullClearTimerRef.current != null) window.clearTimeout(fullClearTimerRef.current);
+      if (pollTimerRef.current != null) window.clearTimeout(pollTimerRef.current);
     },
     [],
   );
