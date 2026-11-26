@@ -7,10 +7,9 @@
  * they can play today's trek.
  *
  * Reached via a vercel.json rewrite: /s/:payload -> /api/s/:payload.
+ * Node.js runtime (Web-handler) to match the og function's bundling.
  */
 import { decodeDailyShare, journeyLabel, outcomeLabel } from "../../src/features/daily/shareLink";
-
-export const config = { runtime: "edge" };
 
 /** Where a human who clicks the link ends up. */
 const LANDING = "/";
@@ -23,7 +22,7 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-export default function handler(req: Request): Response {
+export function GET(req: Request): Response {
   const url = new URL(req.url);
   // The payload is the last path segment, whether the function sees the
   // original (/s/<payload>) or rewritten (/api/s/<payload>) path.

@@ -6,12 +6,14 @@
  * bundled — the default sans is used — so the brand comes from the kraft-paper
  * palette, the drawn route line, and the capture grid. Drop TTFs in and pass
  * `fonts` later to get the Press Start 2P wordmark.
+ *
+ * Runs on the Node.js runtime (not Edge): @vercel/og's edge build doesn't
+ * bundle cleanly in a non-Next project, so Vercel rejects it as an
+ * "unsupported module". A Web-handler (GET) on Node bundles fine.
  */
 import { ImageResponse } from "@vercel/og";
 import { decodeDailyShare, journeyLabel, outcomeLabel, tierColor } from "../src/features/daily/shareLink";
 import { trekNumber } from "../src/features/daily/trekNumber";
-
-export const config = { runtime: "edge" };
 
 // Journal/atlas palette (mirrors index.css map + chrome tokens).
 const PAPER = "#e6d7b4";
@@ -26,7 +28,7 @@ function group(n: number): string {
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-export default function handler(req: Request): Response {
+export function GET(req: Request): Response {
   const url = new URL(req.url);
   const data = decodeDailyShare(url.searchParams.get("d") ?? "");
 
