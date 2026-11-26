@@ -23,7 +23,10 @@ import type {
  */
 export function promptScore(r: DailyPromptResult): number {
   const base = Math.max(0, Math.min(DAILY_PROMPT_MAX, r.points));
-  const named = r.total > 0 ? Math.min(Math.max(0, r.named), r.total) : Math.max(0, r.named);
+  // Clamp named to the pool, forcing 0 when the pool is empty (total === 0) —
+  // matches the server's clampNamedBonus so a corrupt zero-pool prompt can't
+  // show a bonus locally that /daily/finish won't honour.
+  const named = r.total > 0 ? Math.min(Math.max(0, r.named), r.total) : 0;
   return Math.round(base + DAILY_NAME_BONUS * named);
 }
 

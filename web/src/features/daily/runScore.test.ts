@@ -11,7 +11,8 @@ import type { DailyPromptResult, JourneyId } from "./contract";
  */
 function serverPerPrompt(r: DailyPromptResult): number {
   const base = Math.max(0, Math.min(DAILY_PROMPT_MAX, r.points));
-  const named = r.total > 0 ? Math.min(Math.max(0, r.named), r.total) : Math.max(0, r.named);
+  // Mirrors clampNamedBonus: an empty pool (total === 0) forces named to 0.
+  const named = r.total > 0 ? Math.min(Math.max(0, r.named), r.total) : 0;
   return Math.round(base + DAILY_NAME_BONUS * named);
 }
 
@@ -47,6 +48,13 @@ describe("promptScore", () => {
     expect(promptScore(mk(999))).toBe(DAILY_PROMPT_MAX);
     expect(promptScore(mk(0, 50, 3))).toBe(DAILY_NAME_BONUS * 3); // named clamped to total
     expect(promptScore(mk(-5, -5, 10))).toBe(0);
+  });
+
+  it("grants no name bonus for a zero-pool prompt (matches clampNamedBonus)", () => {
+    // Empty pool (total === 0, only reachable via corruption): named must be 0,
+    // not trusted from the stored result, so the client agrees with the server.
+    expect(promptScore(mk(40, 5, 0))).toBe(40);
+    expect(promptScore(mk(40, 5, 0))).toBe(serverPerPrompt(mk(40, 5, 0)));
   });
 });
 
