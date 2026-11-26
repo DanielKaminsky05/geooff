@@ -24,5 +24,9 @@ export function makeFakeAuthoredSetsRepo(opts: { failWith?: Error } = {}): FakeA
       if (opts.failWith) throw opts.failWith;
       return [...byDate.values()];
     },
+    async delete(dailyDate: string): Promise<void> {
+      if (opts.failWith) throw opts.failWith;
+      byDate.delete(dailyDate);
+    },
   };
 }

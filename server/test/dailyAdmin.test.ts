@@ -99,6 +99,51 @@ describe("POST /daily/admin/sets", () => {
   });
 });
 
+describe("DELETE /daily/admin/sets/:date — unpublish", () => {
+  it("requires the token", async () => {
+    const { app } = makeApp();
+    expect((await request(app).delete(`/daily/admin/sets/${DATE}`)).status).toBe(401);
+  });
+
+  it("removes the day from the DB and reverts GET /daily to the generator", async () => {
+    const { app, repo } = makeApp();
+    await request(app).post("/daily/admin/sets").set("x-admin-token", TOKEN).send(body());
+    // Authored day is live.
+    expect(((await request(app).get("/daily")).body as DailySet).destination.name).toBe(DEST.name);
+
+    const del = await request(app).delete(`/daily/admin/sets/${DATE}`).set("x-admin-token", TOKEN);
+    expect(del.status).toBe(200);
+    expect(del.body).toMatchObject({ ok: true, removed: true, wasLive: true });
+    expect(repo.rows).toHaveLength(0);
+
+    // No restart needed: the overlay dropped it, so the generator serves again.
+    expect(((await request(app).get("/daily")).body as DailySet).destination.name).not.toBe(DEST.name);
+  });
+
+  it("rejects a malformed date", async () => {
+    const { app } = makeApp();
+    const res = await request(app).delete("/daily/admin/sets/nope").set("x-admin-token", TOKEN);
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("GET /daily/admin/sets — published days", () => {
+  it("lists the currently-published authored days", async () => {
+    const { app } = makeApp();
+    const before = await request(app).get("/daily/admin/sets").set("x-admin-token", TOKEN);
+    expect(before.body.sets).toEqual([]);
+
+    await request(app).post("/daily/admin/sets").set("x-admin-token", TOKEN).send(body());
+    const after = await request(app).get("/daily/admin/sets").set("x-admin-token", TOKEN);
+    expect(after.body.sets).toEqual([{ dailyDate: DATE, destinationName: DEST.name }]);
+  });
+
+  it("requires the token", async () => {
+    const { app } = makeApp();
+    expect((await request(app).get("/daily/admin/sets")).status).toBe(401);
+  });
+});
+
 describe("GET /daily/admin/catalog", () => {
   it("requires the token", async () => {
     const { app } = makeApp();
