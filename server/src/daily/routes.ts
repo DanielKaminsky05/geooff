@@ -38,6 +38,8 @@ import { BucketStore, DEFAULT_ANSWER_LIMIT, DEFAULT_FINISH_LIMIT, type BucketCon
 import { getDailySet, todayUtc } from "./window.js";
 import { answerPoints, promptBasePoints, dailyScoreMax } from "./scoring.js";
 import { capturePercentile } from "./percentile.js";
+import { selectPercentile } from "./percentileSelect.js";
+import type { RunsRepo, RunRecord } from "./runsRepo.js";
 import { toPublicDailySet } from "./types.js";
 
 /** Options for wiring the daily routes — overridable so tests drive them
@@ -51,6 +53,12 @@ export interface DailyRoutesOptions {
   finishLimit?: BucketConfig;
   /** Override "today"'s date string (tests pin a specific day's set). */
   today?: () => string;
+  /**
+   * Phase 2 persistence for finished runs (real percentile). When omitted/`null`
+   * the finish path records nothing and returns the synthetic percentile — the
+   * Phase-1 behaviour — so CI and offline play need no Supabase credentials.
+   */
+  runsRepo?: RunsRepo | null;
 }
 
 export function registerDailyRoutes(app: Express, options: DailyRoutesOptions = {}): void {
@@ -58,6 +66,7 @@ export function registerDailyRoutes(app: Express, options: DailyRoutesOptions = 
   const answerLimit = options.answerLimit ?? DEFAULT_ANSWER_LIMIT;
   const finishLimit = options.finishLimit ?? DEFAULT_FINISH_LIMIT;
   const today = options.today ?? (() => todayUtc(now));
+  const runsRepo = options.runsRepo ?? null;
 
   // Per-IP token buckets. BucketStore caps memory (stale-TTL prune + LRU hard
   // cap) so the map can't grow one entry per distinct IP forever. The answer
@@ -140,9 +149,38 @@ export function registerDailyRoutes(app: Express, options: DailyRoutesOptions = 
       return;
     }
     const body = (req.body ?? {}) as Partial<DailyFinishReq>;
-    const result = reconcileFinish(body.result);
-    res.json(result);
+    const { response, record, ratio } = reconcileFinish(body.result);
+
+    // No repo (CI/offline) → Phase-1 synthetic percentile, respond immediately.
+    if (!runsRepo || !record) {
+      res.json(response);
+      return;
+    }
+
+    // Phase 2: record the run (best-effort) and return a REAL percentile from the
+    // day's distribution. A DB hiccup must NEVER fail the finish — on any error
+    // we fall through to the synthetic percentile already in `response`.
+    void (async () => {
+      try {
+        await runsRepo.recordRun(record);
+        const { fieldSize, realPct } = await runsRepo.fieldStats(record.dailyDate, record.points);
+        response.percentile = selectPercentile({ fieldSize, realPct, ratio });
+      } catch (err) {
+        console.warn("[daily] finish persistence failed — synthetic percentile.", err);
+      }
+      res.json(response);
+    })();
   });
+}
+
+/** reconcileFinish's internal output: the wire response plus the data the route
+ *  needs to persist the run and pick a real percentile. */
+interface ReconciledFinish {
+  response: DailyFinishRes;
+  /** The run to persist, or `null` when there's no valid day / localId to key on. */
+  record: RunRecord | null;
+  /** Capture ratio (0..1) for the synthetic fallback curve. */
+  ratio: number;
 }
 
 /**
@@ -161,7 +199,7 @@ export function registerDailyRoutes(app: Express, options: DailyRoutesOptions = 
  * The response shape mirrors the request (same DailyRunResult), with corrected
  * values. Defensive against a malformed/partial body.
  */
-function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
+function reconcileFinish(raw: DailyRunResult | undefined): ReconciledFinish {
   const result: DailyRunResult = {
     runId: raw?.runId ?? "",
     dailyDate: raw?.dailyDate ?? "",
@@ -242,7 +280,8 @@ function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
   result.gold = arrived ? totalGold : 0;
   const goldLost = arrived ? 0 : reachedGold;
 
-  // Capture ratio vs the day's achievable max drives the synthetic percentile.
+  // Capture ratio vs the day's achievable max drives the synthetic percentile
+  // (and the Phase-2 small-field fallback).
   const theoreticalMax = set ? dailyScoreMax(set.prompts) : 0;
   const ratio = theoreticalMax > 0 ? result.points / theoreticalMax : 0;
   const percentile = capturePercentile(ratio);
@@ -256,5 +295,22 @@ function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
     }
   }
 
-  return { percentile, result, answers, goldLost };
+  // The run to persist (Phase 2). Only when we have a real day AND a localId to
+  // key on — an unknown day or a missing/blank playerId yields no row (and so
+  // keeps the synthetic percentile). `playerId` is the anonymous device UUID.
+  const localId = typeof raw?.playerId === "string" ? raw.playerId.trim() : "";
+  const record: RunRecord | null =
+    set && localId
+      ? {
+          localId,
+          dailyDate: result.dailyDate,
+          journey: result.journey,
+          points: result.points,
+          outcome: result.outcome,
+          gold: result.gold,
+          perPrompt: result.perPrompt,
+        }
+      : null;
+
+  return { response: { percentile, result, answers, goldLost }, record, ratio };
 }
