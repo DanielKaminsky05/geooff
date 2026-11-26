@@ -1,111 +1,97 @@
 # Phase 2 — API & server changes
 
-Phase 2 keeps the existing endpoints and shapes; it adds auth, server-side
-persistence, and a real percentile. The client's `DailyStore` seam is re-pointed
-from `localStorage` to the server.
+Phase 2 keeps the existing endpoints and shapes. The only behavioural change:
+`POST /daily/finish` records the run (keyed by the anonymous `localId`) and
+returns a **real** percentile. No auth, no server wallet — the wallet and
+one-and-done stay in `localStorage`.
 
 ## Server setup
 
-- Env: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (already scaffolded in
+- Env: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (scaffolded in
   `server/.env.example`). `tsx` doesn't auto-load `.env`, so load it with
   `node --env-file=.env` on the dev script or the `dotenv` package.
-- A single **service-role** Supabase client module (`server/src/supabase.ts`)
-  used for all authoritative reads/writes. A helper `userFromRequest(req)`
-  validates the bearer token (`auth.getUser`) and returns the `user_id` or null.
+- A single **service-role** Supabase client (`server/src/supabase.ts`) for the
+  run insert and the percentile RPC. If Supabase is unset/unreachable, the server
+  degrades gracefully (below) — it never hard-fails the game.
 
 ## Endpoint changes
 
-### `GET /daily` — unchanged set, plus personal state
-Still returns the public `DailySet`. If a valid bearer token is present, also
-return the player's state so one-and-done and the wallet come from server truth:
-
-```jsonc
-{
-  "set": { /* DailySet, as today */ },
-  "me": {                       // present only when authed
-    "playedToday": true,
-    "myResult": { /* DailyRunResult */ },   // if already finished today
-    "wallet": 420
-  }
-}
-```
+### `GET /daily` — unchanged
+Returns the public `DailySet` exactly as today. One-and-done is still enforced
+client-side from `localStorage`; there's no per-player block to return.
 
 ### `POST /daily/answer` — unchanged
-Still the only route that touches the secret valid set; still stateless. May tie
-its rate-limit bucket to the `user_id` when present (otherwise IP, as today).
+Still the only route touching the secret valid set; still stateless.
 
-### `POST /daily/finish` — now authoritative & persisted
-Requires auth. Flow:
+### `POST /daily/finish` — records the run, returns a real percentile
+No auth header. The request includes the anonymous `localId`:
 
-1. `user_id = userFromRequest(req)` → 401 if missing/invalid.
-2. Recompute the authoritative result exactly as today (`reconcileFinish`):
-   clamp per-prompt scores, resolve gold (all-or-nothing on arrival), etc.
-3. **Insert** into `daily_runs` with `ON CONFLICT (user_id, daily_date) DO
-   NOTHING`:
-   - New row → it's their official run.
-   - Conflict (already played) → **idempotent**: read the stored run and return
-     that (a replay attempt gets the original result, never a second bank).
-4. **Percentile**: call `daily_percentile(date, points)`; if the field is below
+```jsonc
+// request
+{ "result": { /* DailyRunResult, as today */ }, "localId": "a1b2-…" }
+```
+
+Flow:
+1. Recompute the authoritative result as today (`reconcileFinish`) — never trust
+   the client's point/gold totals.
+2. Insert into `daily_runs` with `ON CONFLICT (local_id, daily_date) DO NOTHING`
+   (a resubmit from the same device doesn't double-count the distribution).
+3. `percentile = daily_percentile(date, points)`; if the field is below
    `MIN_FIELD`, fall back to the synthetic curve.
-5. **Wallet**: read `wallet_balances` for the user.
-6. Respond with the existing `DailyFinishRes`, plus `wallet`:
+4. Respond with the existing `DailyFinishRes` (no new required fields):
 
 ```jsonc
 { "percentile": 82, "result": { /* DailyRunResult */ },
-  "answers": { /* promptId -> [{iso,name}] */ },
-  "goldLost": 0, "wallet": 420 }
+  "answers": { /* promptId -> [{iso,name}] */ }, "goldLost": 0 }
 ```
 
-### `GET /daily/leaderboard?date=` — new, optional
-Returns `daily_leaderboard(date, limit)` (display names + points) and, when
-authed, the caller's rank. Omit until there's a UI for it.
+Gold is still banked **locally** by the client at finish (as in Phase 1); the
+server stores `gold` on the row only to future-proof the accounts wallet.
 
-## Client: the `DailyStore` swap
+## Client changes (minimal)
 
-Phase 1's `localDailyStore` (localStorage) is replaced by a **remote-backed**
-implementation behind the *same interface* — callers in `DailyDive.tsx` don't
-change:
-
-| `DailyStore` method | Phase 1 | Phase 2 |
-|---|---|---|
-| `getPlayerId()` | random device id | guest `localId`, or Supabase `user.id` once promoted |
-| `isPlayedToday()` / `getResult()` | localStorage | guest: localStorage; account: `GET /daily`'s `me` block |
-| `getWallet()` | localStorage | guest: localStorage; account: `me.wallet` / finish response |
-| `recordFinished()` | localStorage write | guest: localStorage; account: `POST /daily/finish` (server persists) |
-| `addGold()` | local increment | guest: local; account: banked server-side at finish |
-
-`localStorage` is kept only as an **offline cache / fallback** (the Phase-1
-"couldn't reach the server — unofficial result" path already exists and stays).
+- `getPlayerId()` already returns the local UUID — send it as `localId` on finish.
+- Use the returned `percentile` (now real) in the recap. No other `DailyStore`
+  changes: wallet and one-and-done stay on `localStorage`.
+- The existing offline path (finish failed → unofficial local result) is
+  unchanged and still covers Supabase outages.
 
 ## Percentile implementation
 
-Replace the synthetic-only `percentile.ts` with:
+Replace the synthetic-only `percentile.ts` call with:
 
 ```
-realPct      = daily_percentile(date, points)      -- from data
-fieldSize    = count(daily_runs for date)
-percentile   = fieldSize >= MIN_FIELD ? realPct : syntheticCurve(points, dayMax)
+realPct    = daily_percentile(date, points)        -- from the day's rows
+fieldSize  = count(daily_runs for date)
+percentile = fieldSize >= MIN_FIELD ? realPct : syntheticCurve(points, dayMax)
 ```
 
-Keep `syntheticCurve` (today's logic) as the small-sample fallback so early days
-and brand-new content still feel social.
+Keep `syntheticCurve` (today's logic) as the small-sample fallback.
 
 ## Idempotency, concurrency, failure
 
-- **Double finish / refresh:** the unique constraint + `ON CONFLICT DO NOTHING`
-  makes finishing idempotent; the stored run is the single source of truth.
-- **Supabase unreachable:** `GET /daily` still serves the set from the generator
-  + cache; `POST /daily/finish` returns the existing client-side **offline**
-  result (unofficial, no bank) — already implemented. Nothing hard-fails.
-- **Clock/anti-cheat (stretch):** issue a signed run token at `GET /daily` with
-  an expiry; require it on `answer`/`finish` to bound how long a run can take.
-  Deferred — document, don't build yet.
+- **Resubmit / refresh:** `unique (local_id, daily_date)` + `ON CONFLICT DO
+  NOTHING` keeps the distribution clean; one-and-done itself is still the local
+  lock.
+- **Supabase unreachable:** `GET /daily` serves the set from the generator +
+  cache; `POST /daily/finish` falls back to the client-side offline result and/or
+  the synthetic percentile. Nothing hard-fails.
 
 ## Tests
 
-- Unit: percentile selection (real vs synthetic fallback at the `MIN_FIELD`
-  boundary); `userFromRequest` accept/reject.
-- Integration: finish inserts a run; a second finish is idempotent and re-banks
-  nothing; wallet reflects summed gold; one-and-done surfaces in `GET /daily`.
-  Run against a disposable Supabase schema (or a thin fake of the service client)
-  so CI doesn't need live credentials.
+- Unit: percentile selection at the `MIN_FIELD` boundary (real vs synthetic);
+  `reconcileFinish` unchanged.
+- Integration: a finish inserts one row; a resubmit from the same `localId` is a
+  no-op; the returned percentile reflects the inserted distribution. Run against
+  a disposable Supabase schema or a thin fake of the service client so CI needs
+  no live credentials.
+
+---
+
+## Later: when accounts land (deferred)
+
+`POST /daily/finish` gains an optional `Authorization: Bearer` — when present the
+run is also stamped with `user_id` (claiming the device's guest rows), the wallet
+moves server-side (`wallet_balances`), `GET /daily` returns a `me` block
+(played-today, wallet), and a trusted `GET /daily/leaderboard` appears. See
+[`auth.md`](./auth.md) and the "Later" section of [`data-model.md`](./data-model.md).

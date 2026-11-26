@@ -1,105 +1,59 @@
 # Phase 2 — Data model
 
-All tables live in the Supabase (Postgres) project under `public`. Phase 2 adds
-**player** tables; Phase 3's **content** tables (`daily_sets`, `prompt_usage`)
-live alongside them in the same database.
+Phase 2 adds **one** table to the Supabase project: `daily_runs`, keyed by an
+anonymous local id, used to compute a real percentile. (Phase 3's content tables
+`daily_sets` / `prompt_usage` live alongside it.)
 
 Design principles:
 
-- **The server is the only writer of scores.** Finished runs are inserted by the
-  game server using the `service_role` key (which bypasses RLS). There is
-  deliberately **no insert policy** for players, so points/gold can't be forged
-  from the browser.
-- **Derive money, don't mutate it.** The wallet is the *sum of banked gold across
-  a user's runs*, not a counter that gets `+=`'d — so it can't drift and is fully
-  auditable. (A cached column can be added later if the sum ever gets expensive.)
-- **One-and-done is a constraint**, not application logic: `unique (user_id,
-  daily_date)`.
+- **The server is the only writer.** Finished runs are inserted by the game
+  server with the `service_role` key after it **recomputes the score
+  authoritatively** — the browser never writes `daily_runs`, so point totals
+  can't be forged.
+- **The id is anonymous and local.** `local_id` is a UUID the client keeps in
+  `localStorage`. It's spoofable by design; the percentile it feeds is a
+  statistical aggregate, not a trusted ranking (see README).
+- **Wallet and one-and-done stay local** this phase — they are *not* in the DB
+  yet.
 
-## Tables
-
-### `profiles`
-One row per account, created automatically on signup. Holds the public-facing
-display name used on leaderboards.
-
-```sql
-create table if not exists public.profiles (
-  id          uuid primary key references auth.users(id) on delete cascade,
-  display_name text,
-  created_at  timestamptz not null default now(),
-  updated_at  timestamptz not null default now()
-);
-
-alter table public.profiles enable row level security;
-
-create policy "profiles: self read"   on public.profiles
-  for select using (auth.uid() = id);
-create policy "profiles: self update" on public.profiles
-  for update using (auth.uid() = id);
-
--- Auto-create a profile row whenever an auth user is created (incl. anonymous).
-create or replace function public.handle_new_user()
-returns trigger language plpgsql security definer set search_path = public as $$
-begin
-  insert into public.profiles (id) values (new.id) on conflict do nothing;
-  return new;
-end; $$;
-
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
-```
-
-### `daily_runs`
-One finished run per user per day. The `unique (user_id, daily_date)` constraint
-is the server-side one-and-done lock. `per_prompt` stores the same shape the
-recap already uses (`DailyPromptResult[]`).
+## Table: `daily_runs`
 
 ```sql
 create table if not exists public.daily_runs (
   id          uuid primary key default gen_random_uuid(),
-  user_id     uuid not null references auth.users(id) on delete cascade,
+  local_id    text not null,            -- anonymous UUID from the client's localStorage
   daily_date  date not null,
   journey     text not null check (journey in ('short','medium','long')),
   points      int  not null default 0,
   outcome     text not null check (outcome in ('arrived','died')),
-  gold        int  not null default 0,
+  gold        int  not null default 0,  -- stored for the future accounts wallet; not authoritative yet
   per_prompt  jsonb not null default '[]',
   created_at  timestamptz not null default now(),
-  unique (user_id, daily_date)
+  unique (local_id, daily_date)         -- one row per device per day in the stats
 );
 
--- Ranking/percentile scans by date, ordered by points.
+-- Percentile/leaderboard scans by date, ordered by points.
 create index if not exists daily_runs_date_points_idx
   on public.daily_runs (daily_date, points desc);
 
+-- No accounts yet, so no per-user RLS. Enable RLS with NO policies so direct
+-- client access is denied; all reads/writes go through the server's
+-- service-role client (which bypasses RLS).
 alter table public.daily_runs enable row level security;
-
--- Players read ONLY their own runs. No insert/update/delete policy: writes go
--- through the server's service-role client, so scores can't be forged.
-create policy "daily_runs: self read" on public.daily_runs
-  for select using (auth.uid() = user_id);
 ```
 
-## Wallet (derived)
-
-```sql
--- Balance = sum of all gold a user has banked. Read-only, always consistent.
-create or replace view public.wallet_balances as
-  select user_id, coalesce(sum(gold), 0)::int as gold
-  from public.daily_runs
-  group by user_id;
-```
-
-The server reads `wallet_balances` for the signed-in user when returning the
-recap/HUD wallet. (If summation ever becomes hot, add `profiles.gold_wallet` as a
-cache updated in the same transaction as the run insert — but start derived.)
+Notes:
+- `unique (local_id, daily_date)` de-dupes a device so one player can't inflate
+  the day's distribution by resubmitting. (It is *not* the one-and-done lock —
+  that stays in `localStorage`; clearing the local id just yields a new,
+  unweighted guest.)
+- `gold` is recorded now so the later accounts wallet can be derived without a
+  backfill, but in this phase the authoritative wallet is still local.
 
 ## Percentile (real)
 
-Computed from the day's actual scores, replacing the synthetic curve. Call it
-**after** inserting the run so the player is counted.
+Computed from the day's actual scores. Call it **after** inserting the run so the
+player is included.
 
 ```sql
 create or replace function public.daily_percentile(p_date date, p_points int)
@@ -113,36 +67,37 @@ returns int language sql stable as $$
 $$;
 ```
 
-**Small-sample fallback.** With only a handful of runs on a date, a real
-percentile is noisy ("you beat 0%"). The server blends: use the real value only
-once `count(*) >= MIN_FIELD` (e.g. 30), otherwise fall back to the existing
-synthetic curve from `percentile.ts`. This keeps the social hit from day one.
-
-## Leaderboard (optional)
-
-A public top-N board exposes display names, so make it opt-in and expose it
-through a function that returns only `display_name` + `points` (never `user_id`).
-
-```sql
-create or replace function public.daily_leaderboard(p_date date, p_limit int default 20)
-returns table (display_name text, points int, journey text)
-language sql stable security definer set search_path = public as $$
-  select coalesce(p.display_name, 'Anonymous') as display_name, r.points, r.journey
-  from public.daily_runs r
-  join public.profiles p on p.id = r.user_id
-  order by r.points desc
-  limit p_limit;
-$$;
-```
-
-## Indexes & constraints summary
-
-- `profiles.id` PK → `auth.users`.
-- `daily_runs unique (user_id, daily_date)` — one-and-done.
-- `daily_runs (daily_date, points desc)` — percentile & leaderboard.
-- RLS on both tables; the server uses `service_role` (bypasses RLS) for writes.
+**Small-sample fallback.** With few runs on a date the real percentile is noisy.
+The server uses the real value only once `count(*) >= MIN_FIELD` (e.g. 30),
+otherwise it falls back to the existing synthetic curve in `percentile.ts` — so
+new days and brand-new content still feel social.
 
 ## Migration SQL location
 
-Keep these statements as a versioned file (e.g. `supabase/migrations/0002_phase2_player_tables.sql`)
-so the schema is reproducible, rather than only pasted into the dashboard once.
+Keep this as a versioned file, e.g.
+`supabase/migrations/0002_phase2_daily_runs.sql`, so the schema is reproducible
+rather than only pasted into the dashboard once.
+
+---
+
+## Later: accounts (deferred — designed, not built)
+
+When you want cross-device wallets and a **trusted** leaderboard, add real
+identity. This is a separate future phase; the sketch below shows it drops in
+next to `daily_runs` without a rewrite.
+
+- **`profiles`** — one row per `auth.users` id (display name, created_at),
+  auto-created by a signup trigger; RLS: self read/update.
+- **`daily_runs` gains a nullable `user_id uuid references auth.users`** — guest
+  runs keep `user_id = null` and are keyed by `local_id`; account runs set
+  `user_id`. On promotion, the server back-fills `user_id` onto the device's past
+  rows (the "claim").
+- **Wallet becomes a derived view** `wallet_balances` = `sum(gold)` per
+  `user_id`, read server-side (replacing the local wallet for logged-in players).
+- **Trusted leaderboard** via a `security definer` function returning
+  `display_name` + `points` for a date (never `user_id`), gated on opted-in
+  accounts.
+- **RLS** tightens so authenticated players can read their own rows; writes still
+  go only through the service role.
+
+See [`auth.md`](./auth.md) for the identity tiers that drive this.
