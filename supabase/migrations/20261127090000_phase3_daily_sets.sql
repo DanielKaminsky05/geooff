@@ -1,17 +1,18 @@
 -- Phase 3 — authored daily treks (Trek Builder).
--- One hand-authored trek per day, stored as IDS the server re-resolves against
--- its destination/prompt catalogs (no secret valid-sets persisted). A curated
--- row for a date overrides the procedural generator. The local builder writes
--- here only through the server's service_role client (admin route); the browser
--- never touches this table.
+-- One hand-authored trek per day. Prompts are catalog IDS the server re-resolves
+-- for their valid answers; the destination and the three routes are DRAWN
+-- geometry (lat/lon) stored as jsonb. A curated row for a date overrides the
+-- procedural generator. The local builder writes here only through the server's
+-- service_role client (admin route); the browser never touches this table.
 
 create table if not exists public.daily_sets (
-  daily_date       date primary key,
-  destination_name text  not null,
-  prompt_ids       text[] not null,
-  landmarks        jsonb,
-  created_at       timestamptz not null default now(),
-  updated_at       timestamptz not null default now()
+  daily_date   date primary key,
+  destination  jsonb  not null,   -- { name, at: { lat, lon } }
+  routes       jsonb  not null,   -- [ { journeyId, points: [ { lat, lon } ] } ]  (short|medium|long)
+  prompt_ids   text[] not null,   -- exactly 5 ids from the prompt catalog
+  landmarks    jsonb,             -- optional per-journey temple-gold overrides; null = defaults
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
 );
 
 -- Prompt usage / de-dup: "which days used prompt X?" via array-containment

@@ -21,7 +21,8 @@ export interface AuthoredSetsRepo {
 /** Row shape in `public.daily_sets`. */
 interface DailySetRow {
   daily_date: string;
-  destination_name: string;
+  destination: AuthoredDailySet["destination"];
+  routes: AuthoredDailySet["routes"];
   prompt_ids: string[];
   landmarks: AuthoredDailySet["landmarks"] | null;
 }
@@ -37,7 +38,8 @@ export function makeSupabaseAuthoredSetsRepo(
       const { error } = await client.from("daily_sets").upsert(
         {
           daily_date: authored.dailyDate,
-          destination_name: authored.destinationName,
+          destination: authored.destination,
+          routes: authored.routes,
           prompt_ids: authored.promptIds,
           landmarks: authored.landmarks ?? null,
           updated_at: new Date().toISOString(),
@@ -50,11 +52,12 @@ export function makeSupabaseAuthoredSetsRepo(
     async list(): Promise<AuthoredDailySet[]> {
       const { data, error } = await client
         .from("daily_sets")
-        .select("daily_date, destination_name, prompt_ids, landmarks");
+        .select("daily_date, destination, routes, prompt_ids, landmarks");
       if (error) throw new Error(`daily_sets list failed: ${error.message}`);
       return (data ?? []).map((row: DailySetRow) => ({
         dailyDate: row.daily_date,
-        destinationName: row.destination_name,
+        destination: row.destination,
+        routes: row.routes,
         promptIds: row.prompt_ids,
         landmarks: row.landmarks ?? undefined,
       }));

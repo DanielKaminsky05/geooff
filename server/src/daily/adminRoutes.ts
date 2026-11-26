@@ -14,8 +14,7 @@
  */
 
 import type { Express, Request, Response, NextFunction } from "express";
-import { buildPromptPool } from "../prompts.js";
-import { destinations } from "./destinations.js";
+import { buildPromptPool, validIdsFor, labelAnswers } from "../prompts.js";
 import { compileAuthoredSet } from "./authoredBuild.js";
 import { setAuthoredSet, type AuthoredDailySet } from "./authoredSets.js";
 import { toPublicDailySet } from "./types.js";
@@ -79,13 +78,19 @@ export function registerDailyAdminRoutes(app: Express, options: DailyAdminOption
     } catch (err) {
       console.warn("[daily/admin] usage lookup failed — returning empty usage.", err);
     }
+    // Admin-only, so revealing each prompt's valid answers (country names) is
+    // fine — the builder shows them while picking. `usedOn` powers de-dup.
     const prompts = buildPromptPool("countries")
-      .map((p) => ({ id: p.id, label: p.label, usedOn: usage.get(p.id) ?? [] }))
+      .map((p) => ({
+        id: p.id,
+        label: p.label,
+        usedOn: usage.get(p.id) ?? [],
+        answers: labelAnswers(validIdsFor(p, "countries"))
+          .map((a) => a.name)
+          .sort((a, b) => a.localeCompare(b)),
+      }))
       .sort((a, b) => a.label.localeCompare(b.label));
-    res.json({
-      prompts,
-      destinations: destinations.map((d) => d.destination.name),
-    });
+    res.json({ prompts });
   });
 
   app.post("/daily/admin/sets", requireToken, async (req: Request, res: Response) => {

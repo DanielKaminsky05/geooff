@@ -11,13 +11,18 @@
  * authored payload into a `CompiledDailySet` lives in `authoredBuild.ts`.
  */
 
-import type { JourneyId, DailyLandmark } from "../protocol.js";
+import type { JourneyId, DailyLandmark, GeoPoint, DailyRoute } from "../protocol.js";
 import type { CompiledDailySet } from "./types.js";
 
-/** An authored day as stored/sent: ids the server re-resolves against catalogs. */
+/** An authored day as stored/sent. Prompts are catalog ids (re-resolved
+ *  server-side for their valid answers); the destination and the three routes
+ *  are drawn geometry (lat/lon) from the map builder. */
 export interface AuthoredDailySet {
   dailyDate: string;
-  destinationName: string;
+  /** Drawn destination: a label + its geographic point. */
+  destination: { name: string; at: GeoPoint };
+  /** The three drawn routes (one per journey), ordered waypoints to the destination. */
+  routes: DailyRoute[];
   /** Exactly DAILY_PROMPT_COUNT prompt ids from the catalog. */
   promptIds: string[];
   /** Optional per-journey temple-gold overrides; omit a journey to use defaults. */
