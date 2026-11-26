@@ -116,6 +116,7 @@ export default function DailyDive() {
   const [percentile, setPercentile] = useState(0);
   const [walletBalance, setWalletBalance] = useState(() => localDailyStore.getWallet());
   const [recapResult, setRecapResult] = useState<DailyRunResult | null>(null);
+  const [recapAnswers, setRecapAnswers] = useState<Record<string, string[]> | undefined>(undefined);
 
   // Persistent HUD: total points (updated only when a leg's walk ends, never
   // during the naming challenge — so the per-prompt score stays a surprise) and
@@ -179,10 +180,12 @@ export default function DailyDive() {
       void (async () => {
         let finalResult = result;
         let pct = fallbackPercentile(result);
+        let answers: Record<string, string[]> | undefined;
         try {
           const res = await postFinish({ result });
           finalResult = res.result;
           pct = res.percentile;
+          answers = res.answers;
         } catch (err) {
           console.warn("[DailyDive] finish failed — using client fallback.", err);
         }
@@ -195,6 +198,7 @@ export default function DailyDive() {
           localDailyStore.markPlayed(finalResult.dailyDate);
         }
         setRecapResult(finalResult);
+        setRecapAnswers(answers);
         setPercentile(pct);
         setWalletBalance(newBalance);
         setPhase("recap");
@@ -301,11 +305,11 @@ export default function DailyDive() {
           {legArrived && justResult && tier && (
             <div
               key={legIndex}
-              className="pointer-events-none absolute inset-x-0 top-14 z-20 flex flex-col items-center gap-2 px-4 text-center"
+              className="pointer-events-none absolute inset-x-0 top-14 z-20 flex flex-col items-center gap-2 px-8 text-center"
             >
               <div
-                className="daily-tier-pop font-display text-6xl font-black uppercase leading-none sm:text-7xl"
-                style={{ color: tier.color }}
+                className="daily-tier-pop max-w-full font-display font-black uppercase leading-none"
+                style={{ color: tier.color, fontSize: "clamp(1.4rem, 8vw, 3.5rem)" }}
               >
                 {tier.label}
               </div>
@@ -397,6 +401,8 @@ export default function DailyDive() {
           result={recapResult}
           percentile={percentile}
           progress={endProgress}
+          answers={recapAnswers}
+          prompts={set.prompts}
           walletBalance={walletBalance}
           onClose={goHome}
         />

@@ -21,6 +21,10 @@ export interface DailyRecapProps {
   percentile: number;
   /** How far along the road the run got (0..1) — drives the result category. */
   progress?: number;
+  /** promptId → the valid answers, revealed by tapping a prompt in the breakdown. */
+  answers?: Record<string, string[]>;
+  /** The day's prompts (id + label), so the breakdown can name each prompt. */
+  prompts?: { id: string; label: string }[];
   /** Gold balance AFTER this run was banked. */
   walletBalance: number;
   /** Optional: go back to Home / close the recap. */
@@ -59,8 +63,11 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export default function DailyRecap({ result, percentile, progress = 0, walletBalance, onClose }: DailyRecapProps) {
+export default function DailyRecap({ result, percentile, progress = 0, answers, prompts, walletBalance, onClose }: DailyRecapProps) {
   const [copied, setCopied] = useState(false);
+  const [openPrompt, setOpenPrompt] = useState<string | null>(null);
+  const labelById: Record<string, string> = {};
+  for (const p of prompts ?? []) labelById[p.id] = p.label;
   const arrived = result.outcome === "arrived";
   const journey = JOURNEY_LABEL[result.journey] ?? result.journey;
   const pct = Math.max(0, Math.min(100, Math.round(percentile)));
@@ -110,8 +117,11 @@ export default function DailyRecap({ result, percentile, progress = 0, walletBal
       <header className="chrome-bar chrome-ink shrink-0 border-b border-[var(--color-chrome-gold)]/40 px-4 py-5 text-center">
         <h2
           data-testid="daily-recap-headline"
-          className="daily-tier-pop font-display text-5xl font-black uppercase tracking-wide sm:text-6xl"
-          style={{ color: arrived ? "var(--color-chrome-gold)" : "var(--color-accent)" }}
+          className="daily-tier-pop max-w-full px-2 font-display font-black uppercase"
+          style={{
+            color: arrived ? "var(--color-chrome-gold)" : "var(--color-accent)",
+            fontSize: "clamp(1.4rem, 7.5vw, 3rem)",
+          }}
         >
           {category}
         </h2>
@@ -138,30 +148,58 @@ export default function DailyRecap({ result, percentile, progress = 0, walletBal
 
             <ol
               data-testid="daily-recap-breakdown"
-              className="chrome-bar chrome-ink mt-3 flex flex-col gap-0.5 rounded-lg border border-[var(--color-chrome-gold)]/30 p-3 text-left text-sm"
+              className="chrome-bar chrome-ink mt-3 flex flex-col gap-0.5 rounded-lg border border-[var(--color-chrome-gold)]/30 p-2 text-left text-sm"
             >
               {result.perPrompt.map((p, i) => {
                 const tier = promptTier(p.named, p.total);
+                const label = labelById[p.promptId] ?? `Prompt ${i + 1}`;
+                const list = answers?.[p.promptId];
+                const isOpen = openPrompt === p.promptId;
                 return (
-                  <li
-                    key={p.promptId}
-                    className="flex items-center justify-between gap-3 tabular-nums"
-                  >
-                    <span className="text-muted">Prompt {i + 1}</span>
-                    <span className="flex-1 text-center text-muted">
-                      {p.named} / {p.total}
-                    </span>
-                    <span
-                      className="w-16 text-right text-xs font-black uppercase tracking-wide"
-                      style={{ color: tier.color }}
+                  <li key={p.promptId}>
+                    <button
+                      type="button"
+                      onClick={() => list && setOpenPrompt(isOpen ? null : p.promptId)}
+                      aria-expanded={isOpen}
+                      className={`flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left tabular-nums transition ${list ? "hover:bg-white/10" : "cursor-default"}`}
                     >
-                      {tier.label}
-                    </span>
-                    <span className="w-12 text-right font-semibold">{p.points.toLocaleString()}</span>
+                      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                        {list && (
+                          <span className="text-[10px] text-muted">{isOpen ? "▾" : "▸"}</span>
+                        )}
+                        <span className="truncate text-muted">{label}</span>
+                      </span>
+                      <span className="shrink-0 text-xs text-muted">
+                        {p.named}/{p.total}
+                      </span>
+                      <span
+                        className="w-14 shrink-0 text-right text-xs font-black uppercase"
+                        style={{ color: tier.color }}
+                      >
+                        {tier.label}
+                      </span>
+                      <span className="w-10 shrink-0 text-right font-semibold">
+                        {p.points.toLocaleString()}
+                      </span>
+                    </button>
+                    {isOpen && list && (
+                      <div className="flex flex-wrap gap-1 px-3 pb-2 pt-1">
+                        {list.map((name) => (
+                          <span key={name} className="rounded bg-white/10 px-1.5 py-0.5 text-xs">
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </li>
                 );
               })}
             </ol>
+            {answers && (
+              <p className="mt-1 text-center text-[10px] text-muted">
+                Tap a prompt to reveal its answers
+              </p>
+            )}
           </section>
 
           {/* Gold */}
@@ -170,18 +208,16 @@ export default function DailyRecap({ result, percentile, progress = 0, walletBal
             className="chrome-bar chrome-ink flex items-center justify-between gap-3 rounded-lg border border-[var(--color-chrome-gold)]/30 p-3"
           >
             <div>
-              <div className="text-xs uppercase tracking-widest text-muted">
-                {arrived ? "Gold banked" : "Gold lost"}
-              </div>
+              <div className="text-xs uppercase tracking-widest text-muted">Gold banked</div>
               <div
                 className="font-display text-2xl font-black tabular-nums"
-                style={{ color: arrived ? "var(--color-chrome-gold)" : "var(--color-accent)" }}
+                style={{ color: "var(--color-chrome-gold)" }}
               >
-                {arrived ? `+${result.gold.toLocaleString()}` : "0"}
+                +{result.gold.toLocaleString()}
               </div>
               {!arrived && (
                 <div className="text-[11px] text-muted">
-                  Fell short — this run banked nothing.
+                  Kept what you collected — missed the reward at the destination.
                 </div>
               )}
             </div>
