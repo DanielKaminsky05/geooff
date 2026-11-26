@@ -98,12 +98,17 @@ export default function DailyRecap({ result, percentile, progress = 0, answers, 
     return () => cancelAnimationFrame(raf);
   }, [result.points]);
 
+  // Reset the "Copied" label 2s after a successful copy, with cleanup so the
+  // timer can't fire (or leak) if the recap unmounts first.
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(t);
+  }, [copied]);
+
   async function onShare() {
     const ok = await copyText(buildShareGrid(result));
-    if (ok) {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    }
+    if (ok) setCopied(true);
   }
 
   return (

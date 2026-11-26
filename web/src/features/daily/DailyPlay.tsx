@@ -97,6 +97,9 @@ export default function DailyPlay({
     // a Next click still report exactly one result.
     doneRef.current = true;
     const report = () => {
+      // If we unmounted while polling for in-flight answers (e.g. the player
+      // navigated away), don't report a stale result into the parent.
+      if (!mountedRef.current) return;
       // Report the capture base (0..150); the server adds the per-name bonus.
       // Snapshot namedRef/pointsRef AFTER waiting, so a late answer is included.
       onComplete({
