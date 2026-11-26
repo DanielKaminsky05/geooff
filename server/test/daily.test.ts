@@ -3,7 +3,7 @@ import express from "express";
 import request from "supertest";
 
 import { getDailySet, todayUtc } from "../src/daily/window.js";
-import { answerPoints, promptFullPoints, completionBonus, promptBasePoints, dailyScoreMax } from "../src/daily/scoring.js";
+import { answerPoints, promptBasePoints, dailyScoreMax } from "../src/daily/scoring.js";
 import { capturePercentile } from "../src/daily/percentile.js";
 import { registerDailyRoutes } from "../src/daily/routes.js";
 import { validIdsFor } from "../src/prompts.js";
@@ -85,14 +85,6 @@ describe("daily/scoring — rarity weighting", () => {
     const mean = ids.reduce((s, iso) => s + answerPoints(iso), 0) / ids.length;
     expect(mean).toBeGreaterThan(4);
     expect(mean).toBeLessThan(25);
-  });
-
-  it("completion bonus is 50% of the prompt's base pool and adds to full points", () => {
-    const set = getDailySet(DATE)!;
-    const p = set.prompts[0];
-    const base = [...validIdsFor(p, "countries")].reduce((s, iso) => s + answerPoints(iso), 0);
-    expect(completionBonus(p)).toBe(Math.round(0.5 * base));
-    expect(promptFullPoints(p)).toBe(base + completionBonus(p));
   });
 
   it("unknown iso scores an average answer (~base 10)", () => {

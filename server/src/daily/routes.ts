@@ -38,6 +38,7 @@ import { BucketStore, DEFAULT_ANSWER_LIMIT, DEFAULT_FINISH_LIMIT, type BucketCon
 import { getDailySet, todayUtc } from "./window.js";
 import { answerPoints, promptBasePoints, dailyScoreMax } from "./scoring.js";
 import { capturePercentile } from "./percentile.js";
+import { toPublicDailySet } from "./types.js";
 
 /** Options for wiring the daily routes — overridable so tests drive them
  *  deterministically (fake clock, tiny rate limit). Production uses defaults. */
@@ -76,13 +77,7 @@ export function registerDailyRoutes(app: Express, options: DailyRoutesOptions = 
       return;
     }
     // toPublicDailySet strips validIds -> {id,label}. NEVER include validIds.
-    res.json({
-      dailyDate: set.dailyDate,
-      prompts: set.prompts.map((p) => ({ id: p.id, label: p.label })),
-      journeys: set.journeys,
-      destination: set.destination,
-      routes: set.routes,
-    });
+    res.json(toPublicDailySet(set));
   });
 
   app.post("/daily/answer", (req: Request, res: Response<DailyAnswerRes>) => {

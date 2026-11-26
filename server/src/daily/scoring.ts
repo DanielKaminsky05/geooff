@@ -5,14 +5,9 @@
  * derived from population: obscure, small-population countries are worth more
  * than common giants. The weight is a log-population curve, NORMALIZED so the
  * MEAN weight across all countries is ~1 — hence the mean answer is ~10 points.
- *
- * Completion bonus: naming every valid answer for a prompt adds
- * DAILY_COMPLETION_BONUS (50%) of that prompt's full weighted pool (requirements
- * §Scoring). Routes.ts reconciles this at /daily/finish, not per-answer.
  */
 
 import {
-  DAILY_COMPLETION_BONUS,
   DAILY_PROMPT_MAX,
   DAILY_NAME_BONUS,
   DAILY_DISTANCE_NAME_BONUS,
@@ -84,22 +79,6 @@ export function promptBasePoints(prompt: Prompt): number {
   let sum = 0;
   for (const iso of validIdsFor(prompt, "countries")) sum += answerPoints(iso);
   return sum;
-}
-
-/**
- * The completion bonus for a prompt: DAILY_COMPLETION_BONUS × the prompt's full
- * weighted pool — awarded only when a player named ALL valid answers. Rounded.
- */
-export function completionBonus(prompt: Prompt): number {
-  return Math.round(DAILY_COMPLETION_BONUS * promptBasePoints(prompt));
-}
-
-/**
- * The most a prompt can yield: the full answer pool PLUS the completion bonus.
- * (Legacy pool helper; run scoring uses the normalized model below.)
- */
-export function promptFullPoints(prompt: Prompt): number {
-  return promptBasePoints(prompt) + completionBonus(prompt);
 }
 
 /**
