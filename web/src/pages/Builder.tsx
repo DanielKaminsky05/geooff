@@ -29,8 +29,6 @@ const JOURNEYS: { id: JourneyId; label: string; color: string }[] = [
   { id: "long", label: "Long", color: "#b83a3a" },
 ];
 const DEST_COLOR = "#2563eb";
-/** Click-to-connect radius around the destination, in world-viewBox units. */
-const SNAP_RADIUS = 6;
 
 /** What a click on the map does. */
 type Mode = "none" | "dest" | JourneyId;
@@ -93,22 +91,13 @@ export default function Builder() {
       pt.x = e.clientX;
       pt.y = e.clientY;
       const p = pt.matrixTransform(ctm.inverse());
-      if (mode === "dest") {
-        setDestAt({ lat: yToLat(p.y), lon: xToLon(p.x) });
-        return;
-      }
-      // Route mode: if the click lands on the destination, SNAP the point exactly
-      // to it so the route connects cleanly (no stray point beside the marker).
-      let geo: GeoPoint;
-      if (destAt) {
-        const d = project(destAt);
-        geo = Math.hypot(p.x - d.x, p.y - d.y) <= SNAP_RADIUS ? destAt : { lat: yToLat(p.y), lon: xToLon(p.x) };
-      } else {
-        geo = { lat: yToLat(p.y), lon: xToLon(p.x) };
-      }
-      setRoutes((prev) => ({ ...prev, [mode]: [...prev[mode], geo] }));
+      const geo: GeoPoint = { lat: yToLat(p.y), lon: xToLon(p.x) };
+      // The city is the fixed anchor; a route click adds a waypoint OUTWARD from
+      // it (the route auto-starts at the city — see the preview + save).
+      if (mode === "dest") setDestAt(geo);
+      else setRoutes((prev) => ({ ...prev, [mode]: [...prev[mode], geo] }));
     },
-    [mode, destAt],
+    [mode],
   );
 
   const undo = () => {
@@ -146,13 +135,13 @@ export default function Builder() {
     if (!destAt) return;
     setSaving(true);
     try {
-      // Each route ends at the destination: append it if the last drawn point isn't it.
-      const toRoute = (id: JourneyId) => {
-        const pts = [...routes[id]];
-        const last = pts[pts.length - 1];
-        if (!last || last.lat !== destAt.lat || last.lon !== destAt.lon) pts.push(destAt);
-        return { journeyId: id, points: pts };
-      };
+      // The editor draws city-first (city → waypoints outward). The game wants
+      // the destination as the LAST point (traveler walks origin → city), so
+      // reverse: the farthest waypoint you drew becomes the origin.
+      const toRoute = (id: JourneyId) => ({
+        journeyId: id,
+        points: [destAt, ...routes[id]].reverse(),
+      });
       const res = await saveSet(token, {
         dailyDate: date,
         destination: { name: destName.trim(), at: destAt },
@@ -196,11 +185,9 @@ export default function Builder() {
           {/* Routes */}
           {JOURNEYS.map((j) => {
             const drawn = routes[j.id];
-            const last = drawn[drawn.length - 1];
-            // Preview the connection to the destination, but don't double the
-            // endpoint if the last drawn point already snapped to it.
-            const endsAtDest = destAt && last && last.lat === destAt.lat && last.lon === destAt.lon;
-            const pts = destAt && !endsAtDest ? [...drawn, destAt] : drawn;
+            // The route auto-starts at the city, then runs through the drawn
+            // waypoints outward toward the origin.
+            const pts = destAt ? [destAt, ...drawn] : drawn;
             return (
               <g key={j.id}>
                 {pts.length >= 2 && (
@@ -211,10 +198,8 @@ export default function Builder() {
             );
           })}
           {/* Destination */}
-          {destAt && (() => { const s = project(destAt); const drawingRoute = mode !== "none" && mode !== "dest"; return (
+          {destAt && (() => { const s = project(destAt); return (
             <g>
-              {/* Snap-target ring while drawing a route — click inside to connect. */}
-              {drawingRoute && <circle cx={s.x} cy={s.y} r={SNAP_RADIUS} fill="none" stroke={DEST_COLOR} strokeWidth={0.5} strokeDasharray="1.5 1.5" opacity={0.7} />}
               <circle cx={s.x} cy={s.y} r={3.2} fill={DEST_COLOR} stroke="#fff" strokeWidth={0.8} />
               {destName.trim() && (
                 <text x={s.x + 5} y={s.y + 1.5} fontSize={9} fontWeight="bold" fill="#13233b" stroke="#fff" strokeWidth={0.6} paintOrder="stroke" style={{ userSelect: "none" }}>{destName.trim()}</text>
@@ -223,7 +208,7 @@ export default function Builder() {
           ); })()}
         </svg>
         <div className="pointer-events-none absolute left-3 top-3 rounded bg-slate-900/80 px-3 py-1.5 text-xs">
-          {mode === "none" ? "Pan mode" : mode === "dest" ? "Click the map to place the destination" : `Click to add points to the ${mode} route${destAt ? " — click the destination to connect" : ""}`}
+          {mode === "none" ? "Pan mode" : mode === "dest" ? "Click the map to place the city" : destAt ? `Drawing the ${mode} route outward from ${destName.trim() || "the city"}` : "Place the city first"}
         </div>
       </div>
 
@@ -248,9 +233,9 @@ export default function Builder() {
               <input type="date" className={ctrl} value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
 
-            {/* Destination */}
+            {/* Destination city */}
             <div>
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Destination</label>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Destination city</label>
               <div className="flex gap-2">
                 <input className={ctrl} value={destName} onChange={(e) => setDestName(e.target.value)} placeholder="City name" />
                 <button onClick={() => setMode("dest")} className={`shrink-0 rounded px-3 py-1.5 text-sm font-semibold ${mode === "dest" ? "bg-blue-600" : "bg-slate-700 hover:bg-slate-600"}`}>Place</button>
@@ -277,7 +262,7 @@ export default function Builder() {
                 <button onClick={clearActive} className="rounded bg-slate-700 px-2.5 py-1 text-xs hover:bg-slate-600">Clear {mode === "none" ? "" : mode}</button>
                 <button onClick={() => setMode("none")} className={`rounded px-2.5 py-1 text-xs ${mode === "none" ? "bg-sky-600" : "bg-slate-700 hover:bg-slate-600"}`}>Pan</button>
               </div>
-              <p className="mt-1 text-xs text-slate-500">Each route auto-ends at the destination.</p>
+              <p className="mt-1 text-xs text-slate-500">Each route starts at the city; draw outward to the origin.</p>
             </div>
 
             {/* Prompts */}
