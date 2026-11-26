@@ -11,9 +11,9 @@ import type { RoundResult } from "./matchState";
 
 /**
  * Showdown: simultaneous rounds on your own board. A floating HUD shows every
- * player's live count + hearts (the current fewest flagged as in danger), the
- * active prompt, and the round clock; between rounds a result card shows who
- * lost a heart.
+ * player's live count + hearts (the current fewest flagged as in danger) and the
+ * round clock; the active prompt floats on the map (as in gauntlet), and between
+ * rounds a result card shows who lost a heart.
  *
  * `children` are shared on-map extras (named button, away banner).
  */
@@ -58,7 +58,6 @@ export default function ShowdownView({
     <>
       <FloatingHud className="gap-1 pb-3">
         <LivesBar players={statusPlayers} showHearts />
-        {prompt && model.live && <PromptBanner bare label={prompt.label} />}
         {roundEndsAt != null && (
           <div className="flex items-center justify-center gap-2 text-xs text-muted">
             <span>Round {roundNum}</span>
@@ -70,6 +69,12 @@ export default function ShowdownView({
       <section className="relative min-h-0 flex-1">
         {/* Your own board: you race the prompt on your own map. */}
         <MapPane colorVar={model.myColor} filled={model.myFilled} categoryId={model.categoryId} hideTitle />
+        {/* Active prompt floats directly on the map, just under the bar — matches gauntlet. */}
+        {prompt && model.live && (
+          <div className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center px-4 [text-shadow:0_1px_3px_var(--map-paper)]">
+            <PromptBanner bare label={prompt.label} />
+          </div>
+        )}
         {children}
       </section>
 
