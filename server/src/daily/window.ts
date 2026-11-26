@@ -59,7 +59,7 @@ function randInt(rng: () => number, n: number): number {
  * landmark gold are game-design tunables (see requirements §Distance/journeys).
  * Gold is all-or-nothing on arrival (reach the end, bank every landmark's gold;
  * die and get nothing), so the landmarks are the checkpoints that light up along
- * the road. More landmarks on the longer roads: short 3, medium 4, long 5,
+ * the road. More landmarks on the longer roads: short 2, medium 5, long 7,
  * spaced evenly with the final (arrival) landmark as the biggest payoff. Totals
  * escalate with risk: short 50, medium 100, long 200.
  */
@@ -72,30 +72,32 @@ export const JOURNEYS: DailyJourney[] = [
     id: "short",
     distance: 110,
     landmarks: [
-      { atFraction: 0.33, gold: 10 },
-      { atFraction: 0.66, gold: 15 },
-      { atFraction: 1, gold: 25 },
+      { atFraction: 0.5, gold: 20 },
+      { atFraction: 1, gold: 30 },
     ],
   },
   {
     id: "medium",
     distance: 230,
     landmarks: [
-      { atFraction: 0.25, gold: 15 },
-      { atFraction: 0.5, gold: 20 },
-      { atFraction: 0.75, gold: 25 },
-      { atFraction: 1, gold: 40 },
+      { atFraction: 0.2, gold: 12 },
+      { atFraction: 0.4, gold: 15 },
+      { atFraction: 0.6, gold: 18 },
+      { atFraction: 0.8, gold: 20 },
+      { atFraction: 1, gold: 35 },
     ],
   },
   {
     id: "long",
     distance: 400,
     landmarks: [
-      { atFraction: 0.2, gold: 20 },
-      { atFraction: 0.4, gold: 30 },
-      { atFraction: 0.6, gold: 35 },
-      { atFraction: 0.8, gold: 45 },
-      { atFraction: 1, gold: 70 },
+      { atFraction: 0.14, gold: 18 },
+      { atFraction: 0.29, gold: 22 },
+      { atFraction: 0.43, gold: 25 },
+      { atFraction: 0.57, gold: 28 },
+      { atFraction: 0.71, gold: 32 },
+      { atFraction: 0.86, gold: 35 },
+      { atFraction: 1, gold: 40 },
     ],
   },
 ];
