@@ -131,22 +131,26 @@ export default function JourneyMap({
     };
   }, [start, target, landmarks, geo]);
 
-  // Camera: frame THIS leg's segment (zoomed in), with the destination once near.
-  const viewBox = useMemo(() => {
-    const a = Math.min(start, target);
-    const b = Math.min(1, Math.max(Math.max(start, target), a + 0.2) + 0.05);
-    const lo = Math.max(0, a - 0.05);
-    const seg: { x: number; y: number }[] = [];
-    const steps = 14;
-    for (let i = 0; i <= steps; i++) seg.push(pointAtFraction(geo, lo + ((b - lo) * i) / steps));
-    if (target > 0.82) seg.push(dest);
-    return fitViewBox(seg, { pad: 1.5, min: 150 });
-  }, [geo, start, target, dest]);
-
   const traveler = pointAtFraction(geo, shown);
   // Facing = sign of the tangent so the trekker walks forwards, not backwards.
   const ahead = pointAtFraction(geo, Math.min(1, shown + 0.01));
   const facing = ahead.x >= traveler.x ? 1 : -1;
+
+  // Camera: a steady zoom per leg that stays CENTERED on the trekker, panning the
+  // map as he walks. The span (zoom) is derived once from a window of road around
+  // the leg so it doesn't wobble; the centre tracks the traveler every frame.
+  const span = useMemo(() => {
+    const mid = (start + target) / 2;
+    const half = 0.11;
+    const lo = Math.max(0, mid - half);
+    const hi = Math.min(1, mid + half);
+    const seg: { x: number; y: number }[] = [];
+    for (let i = 0; i <= 14; i++) seg.push(pointAtFraction(geo, lo + ((hi - lo) * i) / 14));
+    const parts = fitViewBox(seg, { pad: 1.4, min: 150 }).split(" ").map(Number);
+    return { w: parts[2], h: parts[3] };
+  }, [geo, start, target]);
+
+  const viewBox = `${traveler.x - span.w / 2} ${traveler.y - span.h / 2} ${span.w} ${span.h}`;
 
   // Travelled gold line: the SAME sampled points up to the traveler — exact overlay.
   const fullLine = geo.points.map((p) => `${p.x},${p.y}`).join(" ");
