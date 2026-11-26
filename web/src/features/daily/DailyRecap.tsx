@@ -66,6 +66,9 @@ async function copyText(text: string): Promise<boolean> {
 
 export default function DailyRecap({ result, percentile, progress = 0, answers, goldLost = 0, prompts, walletBalance, onClose }: DailyRecapProps) {
   const [copied, setCopied] = useState(false);
+  // Bumped on every successful copy so the reset effect re-runs even when
+  // `copied` is already true (a second copy within the 2s window).
+  const [copyNonce, setCopyNonce] = useState(0);
   const [openPrompt, setOpenPrompt] = useState<string | null>(null);
   const labelById: Record<string, string> = {};
   for (const p of prompts ?? []) labelById[p.id] = p.label;
@@ -98,17 +101,19 @@ export default function DailyRecap({ result, percentile, progress = 0, answers, 
     return () => cancelAnimationFrame(raf);
   }, [result.points]);
 
-  // Reset the "Copied" label 2s after a successful copy, with cleanup so the
-  // timer can't fire (or leak) if the recap unmounts first.
+  // Show "Copied" for 2s after each successful copy. Keyed on copyNonce (not
+  // `copied`) so a repeat copy within the window restarts the timer, and with
+  // cleanup so it can't fire (or leak) if the recap unmounts first.
   useEffect(() => {
-    if (!copied) return;
+    if (copyNonce === 0) return;
+    setCopied(true);
     const t = window.setTimeout(() => setCopied(false), 2000);
     return () => window.clearTimeout(t);
-  }, [copied]);
+  }, [copyNonce]);
 
   async function onShare() {
     const ok = await copyText(buildShareGrid(result));
-    if (ok) setCopied(true);
+    if (ok) setCopyNonce((n) => n + 1);
   }
 
   return (
