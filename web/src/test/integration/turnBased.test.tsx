@@ -127,12 +127,15 @@ describe("gauntlet against the real server", () => {
     const toBob = nextEvent(bob, "turn_started", (p) => p.playerId === bobId);
     await guess(countryNamed(answer));
     await toBob;
-    // The mid-turn state as one consistent frame: our single claim on the board,
-    // the count at 1, Bob to act — all true together. A half-updated DOM (count
-    // ticked but paint pending) just retries instead of failing.
+    // The mid-turn state as one consistent frame: our claim on the board, the
+    // count at 1, Bob to act — all true together. gauntlet-count is the strict
+    // "exactly one claim" check; the board can show MORE isos than the answer
+    // because a sovereign fills its dependent territories too (cn → cn,hk,mo;
+    // au → au + its islands; see TERRITORY_PARENT in lib/maps), so assert the
+    // answer is present rather than that it's the only lit iso.
     await waitFor(() => {
       expect(screen.getByTestId("gauntlet-count")).toHaveTextContent(`1 / ${p1.total}`);
-      expect(filledIsos()).toEqual([answer]);
+      expect(filledIsos()).toContain(answer);
       expect(turnLabel()).toBe("Bob's turn");
     });
 
@@ -168,7 +171,7 @@ describe("gauntlet against the real server", () => {
     await toBob2;
     await waitFor(() => {
       expect(screen.getByTestId("gauntlet-count")).toHaveTextContent(`1 / ${p2.total}`);
-      expect(filledIsos()).toEqual([next]);
+      expect(filledIsos()).toContain(next); // may also light dependent territories
     });
   });
 });
