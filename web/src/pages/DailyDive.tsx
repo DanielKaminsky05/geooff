@@ -112,6 +112,11 @@ export default function DailyDive() {
   const prevProgressRef = useRef(0); // committed progress at the start of this leg
   const legTargetRef = useRef(0); // progress this leg animates to
   const finishingRef = useRef(false);
+  // Idempotency latch for "Continue": holds the legIndex we've already advanced
+  // from, so a fast double-click can't advance twice (and skip a prompt). Reset
+  // to -1 when the next prompt mounts. A matching legArrived guard lives below.
+  const advancedFromRef = useRef(-1);
+  const arrivedForLegRef = useRef(-1);
 
   const [percentile, setPercentile] = useState(0);
   const [walletBalance, setWalletBalance] = useState(() => localDailyStore.getWallet());
@@ -158,6 +163,8 @@ export default function DailyDive() {
     cumPointsRef.current = 0;
     prevProgressRef.current = 0;
     legTargetRef.current = 0;
+    advancedFromRef.current = -1;
+    arrivedForLegRef.current = -1;
     runGoldRef.current = 0;
     setHudPoints(0);
     setHudGold(0);
@@ -174,9 +181,14 @@ export default function DailyDive() {
     setHudGold(runGoldRef.current);
   }, []);
   const handleLegArrived = useCallback(() => {
+    // onArrived can fire more than once (a re-tween, StrictMode double-invoke).
+    // Run the arrival bookkeeping once per leg; reset in handlePromptComplete
+    // when the next leg begins.
+    if (arrivedForLegRef.current === legIndex) return;
+    arrivedForLegRef.current = legIndex;
     setLegArrived(true);
     setHudPoints(Math.round(cumPointsRef.current));
-  }, []);
+  }, [legIndex]);
 
   const runFinish = useCallback(
     (result: DailyRunResult) => {
@@ -245,6 +257,11 @@ export default function DailyDive() {
   // Continue past the leg: either the next prompt, or finish after the last.
   const handleContinue = useCallback(() => {
     if (!set || !journeyId) return;
+    // Idempotency: only advance once per leg. A fast double-click would
+    // otherwise bump legIndex twice and silently skip a prompt. (The last leg
+    // is additionally guarded by runFinish's finishingRef.)
+    if (advancedFromRef.current === legIndex) return;
+    advancedFromRef.current = legIndex;
     prevProgressRef.current = legTargetRef.current;
     if (legIndex + 1 >= set.prompts.length) {
       runFinish(assembleResult(set.dailyDate, journeyId, perPromptRef.current));

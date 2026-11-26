@@ -70,18 +70,45 @@ export default function DailyPlay({
   const [rejectSignal, setRejectSignal] = useState(0);
   const [acceptSignal, setAcceptSignal] = useState(0);
 
+  // Number of postAnswer requests still in flight. On finish we briefly wait for
+  // these to settle (capped) so a last optimistic answer isn't lost to the race
+  // between its late response and the onComplete snapshot.
+  const inFlightRef = useRef(0);
+
   const doneRef = useRef(false);
+  // Max time finish() will wait for in-flight answers to settle before
+  // snapshotting anyway — a hung request can't block the UI forever.
+  const FINISH_SETTLE_CAP_MS = 1500;
   const finish = useCallback(() => {
     if (doneRef.current) return;
+    // Fire-once latch taken synchronously, so repeated clicks / an expiry racing
+    // a Next click still report exactly one result.
     doneRef.current = true;
-    // Report the capture base (0..150); the server adds the per-name bonus.
-    onComplete({
-      promptId: prompt.id,
-      named: namedRef.current.size,
-      total: totalRef.current,
-      points: captureBase(),
-      namedIsos: [...namedRef.current],
-    });
+    const report = () => {
+      // Report the capture base (0..150); the server adds the per-name bonus.
+      // Snapshot namedRef/pointsRef AFTER waiting, so a late answer is included.
+      onComplete({
+        promptId: prompt.id,
+        named: namedRef.current.size,
+        total: totalRef.current,
+        points: captureBase(),
+        namedIsos: [...namedRef.current],
+      });
+    };
+    if (inFlightRef.current <= 0) {
+      report();
+      return;
+    }
+    // Wait for in-flight answers to drain, but no longer than the cap.
+    const start = Date.now();
+    const poll = () => {
+      if (inFlightRef.current <= 0 || Date.now() - start >= FINISH_SETTLE_CAP_MS) {
+        report();
+      } else {
+        setTimeout(poll, 50);
+      }
+    };
+    setTimeout(poll, 50);
   }, [onComplete, prompt.id]);
 
   const clock = useFeedClock(finish);
@@ -92,6 +119,8 @@ export default function DailyPlay({
       setRejectMsg(null);
       // Fire-and-track: the field clears optimistically and keeps focus; multiple
       // guesses can be in flight (the server is stateless, dedup is client-side).
+      // Count in-flight requests so finish() can wait for them to settle.
+      inFlightRef.current += 1;
       void (async () => {
         try {
           const res = await postAnswer({ dailyDate, promptId: prompt.id, answer: text });
@@ -121,6 +150,8 @@ export default function DailyPlay({
           );
           if (!(err instanceof RateLimitedError)) console.warn("[DailyPlay] answer failed", err);
           setRejectSignal((s) => s + 1);
+        } finally {
+          inFlightRef.current -= 1;
         }
       })();
       return true;
