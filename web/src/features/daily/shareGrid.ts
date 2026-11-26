@@ -8,7 +8,7 @@
  * glyphs so the grid stays plain-text and copy-pastes cleanly into any client.
  */
 
-import type { DailyRunResult, JourneyId } from "../../lib/protocol";
+import type { DailyRunResult, JourneyId } from "./contract";
 
 const TITLE = "GEOFIGHT Daily";
 

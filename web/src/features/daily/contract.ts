@@ -36,9 +36,22 @@ export {
   DAILY_COMPLETION_BONUS,
 } from "../../lib/protocol";
 
-/** One hand-authored day, shape-identical to what `GET /daily` returns. */
+/** Today's date in YYYY-MM-DD local time, used to stamp the fixture. */
+function todayIso(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/**
+ * One hand-authored day, shape-identical to what `GET /daily` returns.
+ * Used as a fallback when the server is unreachable (dev ergonomics only).
+ * `dailyDate` is derived from today so the fallback day reads as current.
+ */
 export const FIXTURE_DAILY_SET: DailySet = {
-  dailyDate: "2026-11-25",
+  dailyDate: todayIso(),
   prompts: [
     { id: "starts-with-b", label: "Name a country starting with B" },
     { id: "island", label: "Name an island nation" },
