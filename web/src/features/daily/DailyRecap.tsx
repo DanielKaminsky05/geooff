@@ -116,10 +116,12 @@ export default function DailyRecap({ result, percentile, progress = 0, answers, 
         <div className="max-w-full">
           <h2
             data-testid="daily-recap-headline"
-            className="daily-tier-pop max-w-full break-words font-display font-black uppercase leading-[1.05]"
+            className="daily-tier-pop max-w-full whitespace-nowrap font-display font-black uppercase leading-[1.05]"
             style={{
               color: arrived ? "var(--color-chrome-gold)" : "var(--color-accent)",
-              fontSize: "clamp(1.5rem, 9.5vw, 2.75rem)",
+              // Sized so the widest category word (e.g. STRAGGLER / LEGENDARY) in
+              // the wide pixel font stays on ONE line within the recap column.
+              fontSize: "clamp(1.3rem, 7.5vw, 2.4rem)",
             }}
           >
             {category}
