@@ -62,35 +62,42 @@ export default function Builder() {
 
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  const load = useCallback(async () => {
-    setError("");
-    setStatus("Loading catalog…");
-    try {
-      const [cat, sets] = await Promise.all([fetchCatalog(token), listSets(token)]);
-      setCatalog(cat);
-      setPublished(sets);
-      // Seed the gold editor from the defaults once (don't clobber edits on refresh).
-      setLandmarks((prev) =>
-        prev.short.length
-          ? prev
-          : {
-              short: cat.journeyDefaults.short.map((l) => ({ ...l })),
-              medium: cat.journeyDefaults.medium.map((l) => ({ ...l })),
-              long: cat.journeyDefaults.long.map((l) => ({ ...l })),
-            },
-      );
-      setStatus(
-        `Loaded ${cat.prompts.length} prompts.` +
-          (cat.usageAvailable
-            ? ""
-            : " Warning: usage data unavailable — prompt reuse across days is not shown."),
-      );
-    } catch (err) {
-      setCatalog(null);
-      setError(err instanceof Error ? err.message : String(err));
-      setStatus("");
-    }
-  }, [token]);
+  // `silent`: refresh the catalog/published list without touching the status line
+  // (used after a save so its success confirmation isn't instantly overwritten).
+  const load = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      const silent = opts?.silent ?? false;
+      setError("");
+      if (!silent) setStatus("Loading catalog…");
+      try {
+        const [cat, sets] = await Promise.all([fetchCatalog(token), listSets(token)]);
+        setCatalog(cat);
+        setPublished(sets);
+        // Seed the gold editor from the defaults once (don't clobber edits on refresh).
+        setLandmarks((prev) =>
+          prev.short.length
+            ? prev
+            : {
+                short: cat.journeyDefaults.short.map((l) => ({ ...l })),
+                medium: cat.journeyDefaults.medium.map((l) => ({ ...l })),
+                long: cat.journeyDefaults.long.map((l) => ({ ...l })),
+              },
+        );
+        if (!silent)
+          setStatus(
+            `Loaded ${cat.prompts.length} prompts.` +
+              (cat.usageAvailable
+                ? ""
+                : " Warning: usage data unavailable — prompt reuse across days is not shown."),
+          );
+      } catch (err) {
+        setCatalog(null);
+        setError(err instanceof Error ? err.message : String(err));
+        if (!silent) setStatus("");
+      }
+    },
+    [token],
+  );
 
   const loadDay = async (dd: string) => {
     setError("");
@@ -214,10 +221,12 @@ export default function Builder() {
         promptIds,
         landmarks,
       });
+      // Refresh silently first, then show the confirmation last so load()'s own
+      // status messages can't overwrite it.
+      await load({ silent: true });
       setStatus(
         `Saved ${date} → ${res.set.destination.name}. ${res.persisted ? "Persisted to Supabase." : "Saved to the running server only (not written to the database)."}`,
       );
-      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
