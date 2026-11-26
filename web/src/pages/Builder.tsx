@@ -17,6 +17,7 @@ import {
   fetchCatalog,
   saveSet,
   listSets,
+  getSet,
   deleteSet,
   DAILY_PROMPT_COUNT,
   type BuilderCatalog,
@@ -84,6 +85,33 @@ export default function Builder() {
       setStatus("");
     }
   }, [token]);
+
+  const loadDay = async (dd: string) => {
+    setError("");
+    try {
+      const day = await getSet(token, dd);
+      setDate(day.dailyDate);
+      setDestName(day.destination.name);
+      setDestAt(day.destination.at);
+      // Stored routes run origin → city; the editor keeps city-first OUTWARD
+      // waypoints (city excluded), so drop the final city point and reverse.
+      const waypoints = (id: JourneyId): GeoPoint[] => {
+        const r = day.routes.find((x) => x.journeyId === id);
+        return r ? r.points.slice(0, -1).reverse() : [];
+      };
+      setRoutes({ short: waypoints("short"), medium: waypoints("medium"), long: waypoints("long") });
+      setPromptIds([...day.promptIds, ...Array(DAILY_PROMPT_COUNT).fill("")].slice(0, DAILY_PROMPT_COUNT));
+      setLandmarks({
+        short: day.landmarks.short.map((l) => ({ ...l })),
+        medium: day.landmarks.medium.map((l) => ({ ...l })),
+        long: day.landmarks.long.map((l) => ({ ...l })),
+      });
+      setMode("none");
+      setStatus(`Loaded ${dd} for editing. Save to overwrite it.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const removeDay = async (d: string) => {
     if (!window.confirm(`Unpublish ${d}? It will revert to the generator.`)) return;
@@ -381,12 +409,19 @@ export default function Builder() {
               <div className="border-t border-slate-700 pt-3">
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Published days ({published.length})</label>
                 <ul className="divide-y divide-slate-800 border border-slate-700">
-                  {published.map((d) => (
-                    <li key={d.dailyDate} className="flex items-center justify-between gap-2 px-2 py-1 text-sm">
-                      <span className="truncate tabular-nums">{d.dailyDate} · {d.destinationName}</span>
-                      <button onClick={() => removeDay(d.dailyDate)} className="shrink-0 rounded bg-rose-700/80 px-2 py-0.5 text-xs hover:bg-rose-600">Remove</button>
-                    </li>
-                  ))}
+                  {published.map((d) => {
+                    const t = todayIso();
+                    const when = d.dailyDate < t ? "past" : d.dailyDate === t ? "today" : "upcoming";
+                    const tagCls = when === "today" ? "bg-emerald-700 text-emerald-100" : when === "past" ? "bg-slate-700 text-slate-300" : "bg-sky-800 text-sky-100";
+                    return (
+                      <li key={d.dailyDate} className="flex items-center gap-2 px-2 py-1 text-sm">
+                        <span className={`shrink-0 rounded px-1 text-[10px] uppercase ${tagCls}`}>{when}</span>
+                        <span className="truncate tabular-nums">{d.dailyDate} · {d.destinationName}</span>
+                        <button onClick={() => loadDay(d.dailyDate)} className="ml-auto shrink-0 rounded bg-sky-700/80 px-2 py-0.5 text-xs hover:bg-sky-600">Edit</button>
+                        <button onClick={() => removeDay(d.dailyDate)} className="shrink-0 rounded bg-rose-700/80 px-2 py-0.5 text-xs hover:bg-rose-600">Remove</button>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}

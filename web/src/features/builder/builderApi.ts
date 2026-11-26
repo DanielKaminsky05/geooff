@@ -54,6 +54,16 @@ export interface PublishedDay {
   destinationName: string;
 }
 
+/** A full authored day loaded back for editing. Routes are in game order
+ *  (origin → city); the builder re-derives its city-first editor waypoints. */
+export interface LoadedDay {
+  dailyDate: string;
+  destination: { name: string; at: GeoPoint };
+  routes: DailyRoute[];
+  promptIds: string[];
+  landmarks: Record<JourneyId, DailyLandmark[]>;
+}
+
 async function adminFetch(path: string, token: string, init?: RequestInit): Promise<Response> {
   return fetch(url(path), {
     ...init,
@@ -94,6 +104,15 @@ export async function listSets(token: string): Promise<PublishedDay[]> {
   if (res.status === 401) throw new Error("Unauthorized — check the admin token.");
   if (!res.ok) throw new Error(`GET /daily/admin/sets -> ${res.status}`);
   return ((await res.json()) as { sets: PublishedDay[] }).sets;
+}
+
+/** Load a full authored day for editing. */
+export async function getSet(token: string, dailyDate: string): Promise<LoadedDay> {
+  const res = await adminFetch(`/daily/admin/sets/${dailyDate}`, token);
+  if (res.status === 401) throw new Error("Unauthorized — check the admin token.");
+  if (res.status === 404) throw new Error(`No authored day for ${dailyDate}.`);
+  if (!res.ok) throw new Error(`GET /daily/admin/sets/${dailyDate} -> ${res.status}`);
+  return (await res.json()) as LoadedDay;
 }
 
 /** Unpublish a day: removes it from the DB and the live server overlay. */
