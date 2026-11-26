@@ -22,7 +22,35 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
+
+/**
+ * A Storage double backed by a Map, optionally throwing on getItem/setItem.
+ * We swap the whole `localStorage` global (via vi.stubGlobal) rather than
+ * spying a method, because jsdom's native Storage methods aren't reliably
+ * overridable with vi.spyOn across environments (CI vs. local) — a spy that
+ * silently no-ops lets writes succeed and makes the resilience tests flaky.
+ */
+function throwingStorage(opts: { getItem?: boolean; setItem?: boolean } = {}): Storage {
+  const store = new Map<string, string>();
+  return {
+    get length() {
+      return store.size;
+    },
+    clear: () => store.clear(),
+    getItem: (k: string) => {
+      if (opts.getItem) throw new Error("blocked");
+      return store.has(k) ? store.get(k)! : null;
+    },
+    key: (i: number) => Array.from(store.keys())[i] ?? null,
+    removeItem: (k: string) => void store.delete(k),
+    setItem: (k: string, v: string) => {
+      if (opts.setItem) throw new Error("quota");
+      store.set(k, String(v));
+    },
+  };
+}
 
 describe("one-and-done invariant", () => {
   it("recordFinished marks the date played AND stores the result", () => {
@@ -101,37 +129,27 @@ describe("getPlayerId", () => {
 
 describe("resilience when localStorage throws", () => {
   it("getWallet returns the fallback when getItem throws", () => {
-    vi.spyOn(localStorage, "getItem").mockImplementation(() => {
-      throw new Error("blocked");
-    });
+    vi.stubGlobal("localStorage", throwingStorage({ getItem: true }));
     expect(localDailyStore.getWallet()).toBe(0);
   });
 
   it("isPlayedToday returns false when getItem throws", () => {
-    vi.spyOn(localStorage, "getItem").mockImplementation(() => {
-      throw new Error("blocked");
-    });
+    vi.stubGlobal("localStorage", throwingStorage({ getItem: true }));
     expect(localDailyStore.isPlayedToday("2030-01-01")).toBe(false);
   });
 
   it("getResult returns null when getItem throws", () => {
-    vi.spyOn(localStorage, "getItem").mockImplementation(() => {
-      throw new Error("blocked");
-    });
+    vi.stubGlobal("localStorage", throwingStorage({ getItem: true }));
     expect(localDailyStore.getResult("2030-01-01")).toBeNull();
   });
 
   it("addGold does not throw when setItem throws", () => {
-    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
-      throw new Error("quota");
-    });
+    vi.stubGlobal("localStorage", throwingStorage({ setItem: true }));
     expect(() => localDailyStore.addGold(10)).not.toThrow();
   });
 
   it("recordFinished does not throw when setItem throws, and keeps the invariant (not locked without a stored result)", () => {
-    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
-      throw new Error("quota");
-    });
+    vi.stubGlobal("localStorage", throwingStorage({ setItem: true }));
     const result = makeResult({ dailyDate: "2030-08-08" });
     expect(() => localDailyStore.recordFinished(result)).not.toThrow();
     // The write silently failed, so the date must not read as locked.
@@ -139,12 +157,7 @@ describe("resilience when localStorage throws", () => {
   });
 
   it("getPlayerId returns a non-empty id even when localStorage throws", () => {
-    vi.spyOn(localStorage, "getItem").mockImplementation(() => {
-      throw new Error("blocked");
-    });
-    vi.spyOn(localStorage, "setItem").mockImplementation(() => {
-      throw new Error("blocked");
-    });
+    vi.stubGlobal("localStorage", throwingStorage({ getItem: true, setItem: true }));
     const id = localDailyStore.getPlayerId();
     expect(id).toBeTruthy();
     expect(typeof id).toBe("string");
