@@ -288,7 +288,7 @@ describe("POST /daily/finish — reconciliation", () => {
     expect(journeyLong.distance).toBeGreaterThan(50);
   });
 
-  it("keeps gold from landmarks reached even on a death (progressive)", async () => {
+  it("forfeits collected gold on a death: banks 0 and reports goldLost in red", async () => {
     const app = makeApp({ today: () => DATE });
     const longDist = journeyLong.distance;
     const target = Math.round(0.3 * longDist); // ~30% in → died, but past early landmarks
@@ -303,11 +303,12 @@ describe("POST /daily/finish — reconciliation", () => {
       .send({ result: baseResult({ journey: "long", perPrompt }) });
     const body = res.body as DailyFinishRes;
     const progress = body.result.points / longDist;
-    const expectedGold = journeyLong.landmarks
+    const reached = journeyLong.landmarks
       .filter((l) => l.atFraction <= progress + 1e-9)
       .reduce((s, l) => s + l.gold, 0);
     expect(body.result.outcome).toBe("died");
-    expect(body.result.gold).toBe(expectedGold);
-    expect(expectedGold).toBeGreaterThan(0); // actually collected some en route
+    expect(body.result.gold).toBe(0); // all-or-nothing: banked nothing
+    expect(body.goldLost).toBe(reached); // what was collected but forfeited
+    expect(reached).toBeGreaterThan(0);
   });
 });

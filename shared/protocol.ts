@@ -410,6 +410,9 @@ export interface DailyPromptResult {
    *  rarity-weighted pool captured. The server re-applies the sweep bonus at
    *  finish (×1.5 when named === total), so this is the pre-sweep base. */
   points: number;
+  /** lowercase ISO codes the player named for this prompt — lets the recap
+   *  highlight which valid answers were got (green) vs missed (red). */
+  namedIsos?: string[];
 }
 
 /**
@@ -439,7 +442,10 @@ export interface DailyFinishRes {
   /** 0..100, "you beat ~N% of players" — hardcoded curve in phase 1. */
   percentile: number;
   result: DailyRunResult;
-  /** promptId → every valid answer (country name), alphabetised — revealed only
-   *  AFTER the run so the player can review the correct answers per prompt. */
-  answers?: Record<string, string[]>;
+  /** promptId → every valid answer ({iso, name}), alphabetised — revealed only
+   *  AFTER the run so the player can review (and see got/missed) per prompt. */
+  answers?: Record<string, { iso: string; name: string }[]>;
+  /** gold the player collected en route but FORFEITED by dying (0 if arrived) —
+   *  shown as "Gold lost" in red. Banked gold is on result.gold. */
+  goldLost?: number;
 }

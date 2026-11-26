@@ -197,7 +197,10 @@ function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
     if (total > 0) named = Math.min(named, total);
     const score = base + DAILY_NAME_BONUS * named;
     points += score;
-    perPrompt.push({ promptId: pp.promptId, named, total, points: Math.round(score) });
+    const namedIsos = Array.isArray(pp.namedIsos)
+      ? pp.namedIsos.filter((x): x is string => typeof x === "string").map((x) => x.toLowerCase())
+      : [];
+    perPrompt.push({ promptId: pp.promptId, named, total, points: Math.round(score), namedIsos });
   }
   result.perPrompt = perPrompt;
   result.points = Math.round(points);
@@ -206,27 +209,30 @@ function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
   const distance = journey?.distance ?? Infinity;
   const arrived = result.points >= distance;
   result.outcome = arrived ? "arrived" : "died";
-  // Gold is collected at each landmark REACHED (progressive) — you keep what you
-  // picked up even if you die before the destination. Dying only forfeits the
-  // landmarks you never reached (including the big one AT the destination).
+  // Gold is ALL-OR-NOTHING on arrival: reach the destination and bank every
+  // landmark's gold; die and bank nothing. `goldLost` is what you collected en
+  // route but forfeited by dying (shown in red), so the stakes are clear.
   const progress = Number.isFinite(distance) && distance > 0 ? Math.min(1, result.points / distance) : 0;
-  result.gold = journey
+  const reachedGold = journey
     ? journey.landmarks.filter((l) => l.atFraction <= progress + 1e-9).reduce((sum, l) => sum + l.gold, 0)
     : 0;
+  const totalGold = journey ? journey.landmarks.reduce((sum, l) => sum + l.gold, 0) : 0;
+  result.gold = arrived ? totalGold : 0;
+  const goldLost = arrived ? 0 : reachedGold;
 
   // Capture ratio vs the day's achievable max drives the synthetic percentile.
   const theoreticalMax = set ? dailyScoreMax(set.prompts) : 0;
   const ratio = theoreticalMax > 0 ? result.points / theoreticalMax : 0;
   const percentile = capturePercentile(ratio);
 
-  // The run is over: reveal each prompt's valid answers so the player can review
-  // them. Safe to send here (never during a live prompt).
-  const answers: Record<string, string[]> = {};
+  // The run is over: reveal each prompt's valid answers (iso + name) so the
+  // recap can show them and mark got/missed. Safe here (never during a prompt).
+  const answers: Record<string, { iso: string; name: string }[]> = {};
   if (set) {
     for (const p of set.prompts) {
-      answers[p.id] = labelAnswers(validIdsFor(p, "countries")).map((a) => a.name);
+      answers[p.id] = labelAnswers(validIdsFor(p, "countries"));
     }
   }
 
-  return { percentile, result, answers };
+  return { percentile, result, answers, goldLost };
 }
