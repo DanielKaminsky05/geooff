@@ -59,10 +59,15 @@ export default function JourneyMap({
   const start = Math.max(0, Math.min(1, from));
 
   // One geometry for everything: the smooth curve sampled into dense points.
+  // Key on stable primitives, not the mutable `route.points` / `destination.at`
+  // references: `journeyId` ("short"|"medium"|"long") uniquely identifies the route's
+  // points, and `destination.name` its location — so the parent passing a fresh object
+  // with the same data won't needlessly rebuild this dense geometry.
   const { geo, dest } = useMemo(() => {
     const pts = sampleSmooth(route.points.map(project));
     return { geo: buildRouteGeometry(pts), dest: project(destination.at) };
-  }, [route.points, destination.at]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.journeyId, destination.name]);
 
   // Tween `shown` from start → target, PAUSING on each landmark crossed to pop a
   // gold reward — so reaching a temple is a felt beat, not a blur.
@@ -167,19 +172,37 @@ export default function JourneyMap({
     return { w: parts[2], h: parts[3] };
   }, [geo, start, target]);
 
+  // Chase cam: the centre tracks the traveler, so this one string must rebuild
+  // each frame — but it's a single allocation, nothing more.
   const viewBox = `${traveler.x - span.w / 2} ${traveler.y - span.h / 2} ${span.w} ${span.h}`;
 
+  // Full (static) route line — point set never changes with `shown`, so memoize it
+  // once per geometry instead of re-serializing every frame.
+  const fullLine = useMemo(() => geo.points.map((p) => `${p.x},${p.y}`).join(" "), [geo]);
+
   // Travelled gold line: the SAME sampled points up to the traveler — exact overlay.
-  const fullLine = geo.points.map((p) => `${p.x},${p.y}`).join(" ");
-  const travelledLine = (() => {
+  // `geo.cumulative` is monotonically increasing, so the points with
+  // `cumulative[i] <= targetLen` are an exact prefix: find the cutoff index with a
+  // cheap scan and `slice` it (O(points-up-to-now)) rather than filtering all points.
+  const travelledLine = useMemo(() => {
     const targetLen = geo.length * shown;
-    const pts = geo.points.filter((_, i) => geo.cumulative[i] <= targetLen);
+    let cut = 0;
+    while (cut < geo.cumulative.length && geo.cumulative[cut] <= targetLen) cut++;
+    const pts = geo.points.slice(0, cut);
     pts.push(traveler);
     return pts.map((p) => `${p.x},${p.y}`).join(" ");
-  })();
+  }, [geo, shown, traveler.x, traveler.y]);
 
   // Marker scale relative to the (zoomed) view, so icons stay a steady size.
-  const u = Math.max(1, Number(viewBox.split(" ")[2]) || 170) / 100;
+  const u = Math.max(1, span.w || 170) / 100;
+
+  // Landmark positions depend only on the (static) geometry + landmark fractions,
+  // never on `shown` — so resolve them once instead of per frame. The lit/justPassed
+  // flags below stay reactive to `shown`.
+  const landmarkPositions = useMemo(
+    () => landmarks.map((lm) => pointAtFraction(geo, lm.atFraction)),
+    [geo, landmarks],
+  );
 
   const landEls = useMemo(
     () =>
@@ -205,7 +228,7 @@ export default function JourneyMap({
         )}
 
         {landmarks.map((lm: DailyLandmark, i) => {
-          const at = pointAtFraction(geo, lm.atFraction);
+          const at = landmarkPositions[i];
           const lit = shown >= lm.atFraction;
           const justPassed = lit && shown - lm.atFraction <= JUST_PASSED_WINDOW;
           // Always drawn (so you see temples ahead on the path); dimmed until reached.
