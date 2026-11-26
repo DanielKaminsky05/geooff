@@ -406,9 +406,9 @@ export interface DailyPromptResult {
   promptId: string;
   named: number;
   total: number;
-  /** normalized score for this prompt, 0..DAILY_PROMPT_MAX = share of its
-   *  rarity-weighted pool captured. The server re-applies the sweep bonus at
-   *  finish (×1.5 when named === total), so this is the pre-sweep base. */
+  /** normalized capture base for this prompt, 0..DAILY_PROMPT_MAX = your
+   *  rarity-weighted share of the prompt's pool. At finish the server adds a
+   *  flat DAILY_NAME_BONUS per named country on top of this base. */
   points: number;
   /** lowercase ISO codes the player named for this prompt — lets the recap
    *  highlight which valid answers were got (green) vs missed (red). */
