@@ -344,6 +344,17 @@ export default function DailyDive() {
       const isLast = legIndex + 1 >= set.prompts.length;
       const gainedPts = justResult ? Math.round(promptScore(justResult)) : 0;
       const tier = justResult ? promptTier(justResult.named, justResult.total) : null;
+      // Reaching the destination (progress hits 100%) is a win whenever it
+      // happens — on the final leg, or EARLY with prompts to spare — so the
+      // trekker celebrates there. Only a final leg that fell short is a death.
+      const reachedDest = target >= 1 - 1e-6;
+      const legOutcome: "arrived" | "died" | undefined = legArrived
+        ? reachedDest
+          ? "arrived"
+          : isLast
+            ? "died"
+            : undefined
+        : undefined;
       // Reduced motion: never gate Continue on the travel tween (the map snaps
       // instantly and arrival bookkeeping already ran in handlePromptComplete).
       const travelling = !PREFERS_REDUCED_MOTION && !legArrived && phase !== "finish";
@@ -357,6 +368,7 @@ export default function DailyDive() {
             progress={target}
             onArrived={handleLegArrived}
             onLandmark={handleLandmark}
+            outcome={legOutcome}
             className="absolute inset-0"
           />
           {hud}
@@ -394,6 +406,18 @@ export default function DailyDive() {
             </div>
           )}
 
+          {/* Reached the destination (possibly early): the gold is banked/safe,
+              and the rest of the run is purely for points. A subtle gold-rimmed
+              banner marks the moment. */}
+          {reachedDest && legArrived && (
+            <div className="pointer-events-none absolute inset-x-0 top-4 z-30 flex justify-center px-4">
+              <div className="daily-recap-pop rounded-full border border-[var(--color-chrome-gold)]/60 bg-[var(--color-chrome)]/90 px-4 py-1.5 text-center text-sm font-semibold chrome-ink backdrop-blur">
+                <span style={{ color: "var(--color-chrome-gold)" }}>Reached {set.destination.name}</span>
+                <span className="opacity-75"> — gold secured</span>
+              </div>
+            </div>
+          )}
+
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
             <div className="pointer-events-auto flex w-full max-w-md flex-col items-center gap-2 rounded-xl border border-[var(--color-chrome-gold)]/40 bg-[var(--color-chrome)]/90 px-5 py-4 text-center chrome-ink backdrop-blur">
               <p className="text-xs uppercase tracking-wide opacity-70">
@@ -408,7 +432,9 @@ export default function DailyDive() {
                   />
                 </div>
                 <p className="mt-1 text-xs opacity-70">
-                  {Math.round(target * 100)}% of the way to {set.destination.name}
+                  {reachedDest
+                    ? "Gold secured — the rest of the run is for points"
+                    : `${Math.round(target * 100)}% of the way to ${set.destination.name}`}
                 </p>
               </div>
               <button
@@ -418,7 +444,17 @@ export default function DailyDive() {
                 data-testid="leg-continue"
                 className="mt-1 rounded-lg bg-[#f4efe3] px-6 py-2 font-semibold text-[var(--color-chrome)] transition hover:brightness-105 disabled:opacity-60"
               >
-                {phase === "finish" ? "Arriving…" : travelling ? "Travelling…" : isLast ? "Reach the destination" : "Press on"}
+                {phase === "finish"
+                  ? "Arriving…"
+                  : travelling
+                    ? "Travelling…"
+                    : isLast
+                      ? reachedDest
+                        ? "See your result"
+                        : "Reach the destination"
+                      : reachedDest
+                        ? "Keep going for points"
+                        : "Press on"}
               </button>
             </div>
           </div>
@@ -458,6 +494,7 @@ export default function DailyDive() {
           landmarks={journey.landmarks}
           from={endProgress}
           progress={endProgress}
+          outcome={recapResult.outcome}
           className="absolute inset-0"
         />
         <DailyRecap
