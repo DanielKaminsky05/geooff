@@ -21,8 +21,19 @@ import type {
 } from "./contract";
 import { FIXTURE_DAILY_SET, todayIso } from "./contract";
 
-/** Same origin as the socket client (socket.tsx). Daily Trek is REST on it. */
-const BASE_URL = import.meta.env.VITE_WS_URL ?? "http://localhost:3001";
+/**
+ * Map a WebSocket base URL to HTTP for REST: `wss://host` -> `https://host`,
+ * `ws://host` -> `http://host`; `http(s)://` passes through unchanged. fetch()
+ * rejects ws/wss URLs, so without this a production `VITE_WS_URL=wss://...`
+ * (shared with the socket client) makes every daily call throw and silently
+ * fall back to the fixture.
+ */
+export function toHttpBase(url: string): string {
+  return url.replace(/^ws/, "http");
+}
+
+/** Same host as the socket client (socket.tsx); Daily Trek is REST on it. */
+const BASE_URL = toHttpBase(import.meta.env.VITE_WS_URL ?? "http://localhost:3001");
 
 /** Timeout (ms) for the initial daily set fetch and the finish submission. */
 const TIMEOUT_FETCH_MS = 10_000;
