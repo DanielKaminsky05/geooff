@@ -30,7 +30,7 @@ export interface JourneyMapProps {
 }
 
 const JUST_PASSED_WINDOW = 0.06;
-const TWEEN_MS = 1600;
+const TWEEN_MS = 2800;
 
 export default function JourneyMap({
   route,

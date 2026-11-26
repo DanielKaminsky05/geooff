@@ -246,7 +246,7 @@ export default function DailyDive() {
               <div className="w-full">
                 <div className="h-2 w-full overflow-hidden rounded-full bg-black/30">
                   <div
-                    className="h-full rounded-full bg-[var(--color-chrome-gold)] transition-[width] duration-[1600ms] ease-out"
+                    className="h-full rounded-full bg-[var(--color-chrome-gold)] transition-[width] duration-[2800ms] ease-out"
                     style={{ width: `${Math.round((legArrived ? target : start) * 100)}%` }}
                   />
                 </div>
