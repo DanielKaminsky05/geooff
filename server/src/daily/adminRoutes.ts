@@ -16,6 +16,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { buildPromptPool, validIdsFor, labelAnswers } from "../prompts.js";
 import { compileAuthoredSet } from "./authoredBuild.js";
+import { JOURNEY_LANDMARKS } from "./window.js";
 import { setAuthoredSet, unsetAuthoredSet, authoredDates, getAuthoredSet, type AuthoredDailySet } from "./authoredSets.js";
 import { toPublicDailySet } from "./types.js";
 import type { AuthoredSetsRepo } from "./authoredSetsRepo.js";
@@ -90,7 +91,9 @@ export function registerDailyAdminRoutes(app: Express, options: DailyAdminOption
           .sort((a, b) => a.localeCompare(b)),
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
-    res.json({ prompts });
+    // The default temple layout per journey — the builder seeds its gold editor
+    // from this (positions fixed; the author tunes the gold).
+    res.json({ prompts, journeyDefaults: JOURNEY_LANDMARKS });
   });
 
   app.post("/daily/admin/sets", requireToken, async (req: Request, res: Response) => {

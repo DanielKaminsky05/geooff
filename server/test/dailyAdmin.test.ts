@@ -78,6 +78,17 @@ describe("POST /daily/admin/sets", () => {
     expect(set.routes.map((r) => r.journeyId).sort()).toEqual(["long", "medium", "short"]);
   });
 
+  it("applies a temple-gold override to the served journeys", async () => {
+    const { app } = makeApp();
+    await request(app)
+      .post("/daily/admin/sets")
+      .set("x-admin-token", TOKEN)
+      .send(body({ landmarks: { short: [{ atFraction: 0.5, gold: 777 }, { atFraction: 1, gold: 888 }] } }));
+    const set = (await request(app).get("/daily")).body as DailySet;
+    const short = set.journeys.find((j) => j.id === "short")!;
+    expect(short.landmarks.map((l) => l.gold)).toEqual([777, 888]);
+  });
+
   it("rejects an invalid trek with 400 and persists nothing", async () => {
     const { app, repo } = makeApp();
     const res = await request(app)
