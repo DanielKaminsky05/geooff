@@ -62,11 +62,11 @@ export default function JourneySelect({ set, onSelect, className }: JourneySelec
             >
               {/* Wide invisible hit area so the thin road is easy to click. */}
               <path d={line} fill="none" stroke="transparent" strokeWidth={22} vectorEffect="non-scaling-stroke" style={{ pointerEvents: "stroke" }} />
-              <path d={line} fill="none" stroke={stroke} strokeWidth={on ? 5 : 3.4} strokeDasharray="2 7" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+              <path d={line} fill="none" stroke={stroke} strokeWidth={on ? 5 : 3.4} strokeDasharray="5 6" strokeLinecap="butt" vectorEffect="non-scaling-stroke" />
               {/* Stops (the locations along the way) reveal only on hover. */}
               {on &&
                 pts.map((p, i) => (
-                  <rect key={i} x={p.x - 2} y={p.y - 2} width={4} height={4} rx={0.7} fill={stroke} stroke="var(--map-paper)" strokeWidth={0.7} vectorEffect="non-scaling-stroke" />
+                  <circle key={i} cx={p.x} cy={p.y} r={2} fill={stroke} stroke="var(--map-paper)" strokeWidth={0.7} vectorEffect="non-scaling-stroke" />
                 ))}
               <text
                 x={origin.x}

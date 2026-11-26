@@ -120,7 +120,7 @@ export default function JourneyMap({
 
         {geo.points.length >= 2 && (
           <>
-            <path d={fullLine} fill="none" stroke="var(--map-terracotta)" strokeWidth={3} strokeOpacity={0.55} strokeDasharray="5 6" vectorEffect="non-scaling-stroke" />
+            <path d={fullLine} fill="none" stroke="var(--map-terracotta)" strokeWidth={3} strokeOpacity={0.55} strokeDasharray="5 6" strokeLinecap="butt" vectorEffect="non-scaling-stroke" />
             <path d={travelledPath} fill="none" stroke="var(--color-chrome-gold)" strokeWidth={4} strokeOpacity={0.95} strokeLinecap="round" vectorEffect="non-scaling-stroke" data-testid="journey-route" />
           </>
         )}
@@ -139,7 +139,7 @@ export default function JourneyMap({
                       <animate attributeName="stroke-opacity" values="0.8;0" dur="1.3s" repeatCount="indefinite" />
                     </circle>
                   )}
-                  <rect x={at.x - 1.1 * u} y={at.y - 1.1 * u} width={2.2 * u} height={2.2 * u} rx={0.4 * u} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
+                  <circle cx={at.x} cy={at.y} r={1.1 * u} fill="var(--color-chrome-gold)" stroke="var(--map-ink)" strokeWidth={0.8} vectorEffect="non-scaling-stroke" />
                 </>
               )}
             </g>

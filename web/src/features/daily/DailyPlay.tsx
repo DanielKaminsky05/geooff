@@ -133,9 +133,9 @@ export default function DailyPlay({
     const dest = project(destination.at);
     return (
       <g aria-hidden="true" style={{ pointerEvents: "none" }}>
-        <path d={line} fill="none" stroke="var(--map-terracotta)" strokeWidth={3.2} strokeOpacity={0.85} strokeDasharray="5 5" vectorEffect="non-scaling-stroke" />
+        <path d={line} fill="none" stroke="var(--map-terracotta)" strokeWidth={3.2} strokeOpacity={0.85} strokeDasharray="5 6" strokeLinecap="butt" vectorEffect="non-scaling-stroke" />
         {pts.map((s, i) => (
-          <rect key={i} x={s.x - 1.3} y={s.y - 1.3} width={2.6} height={2.6} rx={0.45} fill="var(--map-terracotta)" stroke="var(--map-paper)" strokeWidth={0.6} vectorEffect="non-scaling-stroke" />
+          <circle key={i} cx={s.x} cy={s.y} r={1.3} fill="var(--map-terracotta)" stroke="var(--map-paper)" strokeWidth={0.6} vectorEffect="non-scaling-stroke" />
         ))}
         <circle cx={dest.x} cy={dest.y} r={3} fill="none" stroke="var(--color-accent)" strokeWidth={1.2} vectorEffect="non-scaling-stroke" />
         <Star cx={dest.x} cy={dest.y} r={1.9} fill="var(--color-accent)" />
