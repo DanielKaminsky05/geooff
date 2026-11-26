@@ -439,4 +439,7 @@ export interface DailyFinishRes {
   /** 0..100, "you beat ~N% of players" — hardcoded curve in phase 1. */
   percentile: number;
   result: DailyRunResult;
+  /** promptId → every valid answer (country name), alphabetised — revealed only
+   *  AFTER the run so the player can review the correct answers per prompt. */
+  answers?: Record<string, string[]>;
 }

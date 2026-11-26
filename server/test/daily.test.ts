@@ -274,9 +274,9 @@ describe("POST /daily/finish — reconciliation", () => {
     expect(body.result.points).toBe(60 + named * DAILY_NAME_BONUS);
   });
 
-  it("dies when points fall short — gold is zeroed", async () => {
+  it("dies when points fall short, and banks no gold if no landmark was reached", async () => {
     const app = makeApp({ today: () => DATE });
-    // 10 base, 0 names on each prompt → 50 total, far below the long distance.
+    // 10 base, 0 names on each prompt → 50 total, short of even the first landmark.
     const perPrompt = set.prompts.map((p) => ({ promptId: p.id, named: 0, total: 0, points: 10 }));
     const res = await request(app)
       .post("/daily/finish")
@@ -284,7 +284,30 @@ describe("POST /daily/finish — reconciliation", () => {
     const body = res.body as DailyFinishRes;
     expect(body.result.points).toBe(50); // 5 × (10 + 0)
     expect(body.result.outcome).toBe("died");
-    expect(body.result.gold).toBe(0); // zeroed on death regardless of client claim
+    expect(body.result.gold).toBe(0); // reached no landmark → nothing to keep
     expect(journeyLong.distance).toBeGreaterThan(50);
+  });
+
+  it("keeps gold from landmarks reached even on a death (progressive)", async () => {
+    const app = makeApp({ today: () => DATE });
+    const longDist = journeyLong.distance;
+    const target = Math.round(0.3 * longDist); // ~30% in → died, but past early landmarks
+    let remaining = target;
+    const perPrompt = set.prompts.map((p) => {
+      const points = Math.min(DAILY_PROMPT_MAX, remaining);
+      remaining -= points;
+      return { promptId: p.id, named: 0, total: 0, points };
+    });
+    const res = await request(app)
+      .post("/daily/finish")
+      .send({ result: baseResult({ journey: "long", perPrompt }) });
+    const body = res.body as DailyFinishRes;
+    const progress = body.result.points / longDist;
+    const expectedGold = journeyLong.landmarks
+      .filter((l) => l.atFraction <= progress + 1e-9)
+      .reduce((s, l) => s + l.gold, 0);
+    expect(body.result.outcome).toBe("died");
+    expect(body.result.gold).toBe(expectedGold);
+    expect(expectedGold).toBeGreaterThan(0); // actually collected some en route
   });
 });

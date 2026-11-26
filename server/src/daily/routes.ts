@@ -30,7 +30,7 @@ import {
   DAILY_NAME_BONUS,
   normalizeAnswer,
 } from "../protocol.js";
-import { validIdsFor, promptById } from "../prompts.js";
+import { validIdsFor, promptById, labelAnswers } from "../prompts.js";
 import { matchAnswer } from "../matching.js";
 import { lookupFor, canonicalFor } from "../sets.js";
 import { TokenBucket, DEFAULT_ANSWER_LIMIT, type BucketConfig } from "../rateLimit.js";
@@ -206,8 +206,12 @@ function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
   const distance = journey?.distance ?? Infinity;
   const arrived = result.points >= distance;
   result.outcome = arrived ? "arrived" : "died";
-  result.gold = arrived && journey
-    ? journey.landmarks.reduce((sum, l) => sum + l.gold, 0)
+  // Gold is collected at each landmark REACHED (progressive) — you keep what you
+  // picked up even if you die before the destination. Dying only forfeits the
+  // landmarks you never reached (including the big one AT the destination).
+  const progress = Number.isFinite(distance) && distance > 0 ? Math.min(1, result.points / distance) : 0;
+  result.gold = journey
+    ? journey.landmarks.filter((l) => l.atFraction <= progress + 1e-9).reduce((sum, l) => sum + l.gold, 0)
     : 0;
 
   // Capture ratio vs the day's achievable max drives the synthetic percentile.
@@ -215,5 +219,14 @@ function reconcileFinish(raw: DailyRunResult | undefined): DailyFinishRes {
   const ratio = theoreticalMax > 0 ? result.points / theoreticalMax : 0;
   const percentile = capturePercentile(ratio);
 
-  return { percentile, result };
+  // The run is over: reveal each prompt's valid answers so the player can review
+  // them. Safe to send here (never during a live prompt).
+  const answers: Record<string, string[]> = {};
+  if (set) {
+    for (const p of set.prompts) {
+      answers[p.id] = labelAnswers(validIdsFor(p, "countries")).map((a) => a.name);
+    }
+  }
+
+  return { percentile, result, answers };
 }
