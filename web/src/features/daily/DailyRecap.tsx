@@ -110,7 +110,7 @@ export default function DailyRecap({ result, percentile, progress = 0, walletBal
       <header className="chrome-bar chrome-ink shrink-0 border-b border-[var(--color-chrome-gold)]/40 px-4 py-5 text-center">
         <h2
           data-testid="daily-recap-headline"
-          className="daily-recap-pop font-display text-4xl font-black uppercase tracking-wide sm:text-5xl"
+          className="daily-tier-pop font-display text-5xl font-black uppercase tracking-wide sm:text-6xl"
           style={{ color: arrived ? "var(--color-chrome-gold)" : "var(--color-accent)" }}
         >
           {category}
@@ -152,8 +152,8 @@ export default function DailyRecap({ result, percentile, progress = 0, walletBal
                       {p.named} / {p.total}
                     </span>
                     <span
-                      className="w-16 text-right text-xs font-semibold uppercase tracking-wide"
-                      style={{ color: tier.full ? "var(--color-chrome-gold)" : undefined }}
+                      className="w-16 text-right text-xs font-black uppercase tracking-wide"
+                      style={{ color: tier.color }}
                     >
                       {tier.label}
                     </span>

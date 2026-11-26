@@ -31,18 +31,20 @@ export function runCategory(
 
 export interface PromptTier {
   label: string;
+  /** A vivid color for the tier, so each one reads instantly. */
+  color: string;
   /** True when every valid answer was named (a 100% clear). */
   full: boolean;
 }
 
 /** Grade one prompt by how much of its answer set you named. */
 export function promptTier(named: number, total: number): PromptTier {
-  if (total > 0 && named >= total) return { label: "Flawless", full: true };
+  if (total > 0 && named >= total) return { label: "Flawless", color: "#ffd23f", full: true };
   const ratio = total > 0 ? named / total : 0;
-  if (ratio >= 0.75) return { label: "Great", full: false };
-  if (ratio >= 0.4) return { label: "Solid", full: false };
-  if (ratio > 0) return { label: "Scraped", full: false };
-  return { label: "Blank", full: false };
+  if (ratio >= 0.75) return { label: "Great", color: "#c084fc", full: false };
+  if (ratio >= 0.4) return { label: "Solid", color: "#4ade80", full: false };
+  if (ratio > 0) return { label: "Scraped", color: "#fb923c", full: false };
+  return { label: "Blank", color: "#9ca3af", full: false };
 }
 
 /** A unique line shown after the walk when a prompt is fully cleared. */

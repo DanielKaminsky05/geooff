@@ -279,9 +279,6 @@ export default function DailyDive() {
       const justResult = perPromptRef.current[legIndex];
       const start = prevProgressRef.current;
       const target = legTargetRef.current;
-      const landmarksPassed = journey.landmarks.filter(
-        (l) => l.atFraction > start && l.atFraction <= target,
-      ).length;
       const isLast = legIndex + 1 >= set.prompts.length;
       const gainedPts = justResult ? Math.round(promptScore(justResult)) : 0;
       const tier = justResult ? promptTier(justResult.named, justResult.total) : null;
@@ -299,34 +296,42 @@ export default function DailyDive() {
             className="absolute inset-0"
           />
           {hud}
+
+          {/* Flashy tier reveal — big, top-middle, only AFTER the walk finishes. */}
+          {legArrived && justResult && tier && (
+            <div
+              key={legIndex}
+              className="pointer-events-none absolute inset-x-0 top-14 z-20 flex flex-col items-center gap-2 px-4 text-center"
+            >
+              <div
+                className="daily-tier-pop font-display text-6xl font-black uppercase leading-none sm:text-7xl"
+                style={{ color: tier.color }}
+              >
+                {tier.label}
+              </div>
+              <div
+                className="daily-recap-pop rounded-full bg-[var(--color-chrome)]/85 px-4 py-1 text-base font-bold chrome-ink backdrop-blur"
+                style={{ animationDelay: "120ms" }}
+              >
+                +{gainedPts} pts · {justResult.named}
+                {justResult.total ? `/${justResult.total}` : ""} named
+              </div>
+              {tier.full && (
+                <div
+                  className="daily-tier-pop text-sm font-black uppercase tracking-[0.2em]"
+                  style={{ color: tier.color, animationDelay: "200ms" }}
+                >
+                  {FULL_CLEAR_MESSAGE}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center p-4">
             <div className="pointer-events-auto flex w-full max-w-md flex-col items-center gap-2 rounded-xl border border-[var(--color-chrome-gold)]/40 bg-[var(--color-chrome)]/90 px-5 py-4 text-center chrome-ink backdrop-blur">
               <p className="text-xs uppercase tracking-wide opacity-70">
                 Leg {legIndex + 1} of {set.prompts.length}
               </p>
-              {/* Points + tier revealed only AFTER the walk, to keep the surprise. */}
-              {legArrived && justResult && tier ? (
-                <div className="daily-recap-pop flex flex-col items-center gap-0.5">
-                  <p
-                    className="text-xl font-black uppercase tracking-wide"
-                    style={{ color: tier.full ? "var(--color-chrome-gold)" : undefined }}
-                  >
-                    {tier.label}
-                  </p>
-                  <p className="text-sm">
-                    Named {justResult.named}
-                    {justResult.total ? ` of ${justResult.total}` : ""} ·{" "}
-                    <span className="font-semibold text-[var(--color-chrome-gold)]">+{gainedPts} pts</span>
-                  </p>
-                  {tier.full && (
-                    <p className="text-xs font-semibold text-[var(--color-chrome-gold)]">
-                      {FULL_CLEAR_MESSAGE}
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm opacity-80">Travelling…</p>
-              )}
               {/* Overall progress toward the destination. */}
               <div className="w-full">
                 <div className="h-2 w-full overflow-hidden rounded-full bg-black/30">
@@ -339,9 +344,6 @@ export default function DailyDive() {
                   {Math.round(target * 100)}% of the way to {set.destination.name}
                 </p>
               </div>
-              {landmarksPassed > 0 && legArrived && (
-                <p className="text-sm font-semibold text-[var(--color-chrome-gold)]">Landmark reached!</p>
-              )}
               <button
                 type="button"
                 onClick={handleContinue}
