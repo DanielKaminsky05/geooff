@@ -2,22 +2,24 @@
 
 A **local, dev-only** tool for hand-authoring daily treks and saving them to
 Supabase, so curated days override the procedural generator. Built because the
-generator makes serviceable-but-bland treks; a human picks better prompts,
-destinations and rewards.
+generator makes serviceable-but-bland treks; a human draws a better route and
+picks better prompts and rewards.
 
-## Scope of slice 1 (this slice) — metadata-first
+## What it does (built)
 
-Author the **metadata** of a day and reuse the generator's route geometry:
+A map editor at `/builder` (dev only):
 
-- pick the **go-live date**;
-- pick the **destination** (from the existing hand-authored destination catalog,
-  which carries its three route polylines);
-- pick the **5 prompts** (from the prompt catalog), with a **"used already"**
-  flag showing which prior dates each prompt appeared on (de-dup);
-- optionally tune **temple gold** per journey landmark.
-
-Freehand route drawing (laying the three polylines on the map with control
-points) is a **later slice** — slice 1 reuses the chosen destination's routes.
+- **Draw on the world atlas** — place and label the destination **city**, then
+  draw the three routes (short / medium / long). Each route **auto-starts at the
+  city** and is drawn outward toward its origin.
+- **Pick the 5 prompts** from the catalog, seeing each prompt's **correct
+  answers** and the **dates it was already used** (de-dup) in the sidebar.
+- **Tune temple gold** per journey landmark (positions fixed; gold editable),
+  seeded from the defaults.
+- **Schedule** the go-live date; the sidebar shows its **Trek #N** (Wordle-style
+  ordinal from the launch epoch).
+- **Manage published days** — a list tagged `past / today / upcoming`, each with
+  **Edit** (load it back into the editor) and **Remove** (unpublish).
 
 ## How it fits together
 
@@ -25,10 +27,10 @@ points) is a **later slice** — slice 1 reuses the chosen destination's routes.
 Builder UI (/builder, dev-only)
       │  x-admin-token
       ▼
-POST /daily/admin/sets  ──►  daily_sets (Supabase)      service_role, server-only
-      │                           │
-      ▼                           ▼  (hydrated at boot)
-  in-memory authored overlay  ◄───┘
+/daily/admin/*  ──►  daily_sets (Supabase)      service_role, server-only
+      │                   │
+      ▼                   ▼  (hydrated at boot)
+  in-memory authored overlay  ◄──┘
       │
       ▼
 getDailySet(date):  authored overlay  →  else procedural generator
@@ -39,10 +41,21 @@ getDailySet(date):  authored overlay  →  else procedural generator
   never touching Supabase directly.
 - Authored sets live in an **in-memory overlay** the generator checks first, so
   the hot `GET /daily` / `answer` / `finish` paths stay synchronous. The overlay
-  is hydrated from `daily_sets` at boot and updated on each save.
-- Stored content is **ids only** (prompt ids + destination name); the server
-  re-resolves them against its catalogs, so no secret valid-sets are persisted
-  and the stored row stays tiny.
+  is hydrated from `daily_sets` at boot, updated on each save, and **cleared on
+  delete** (so unpublish takes effect live, no restart).
+- Prompts are stored as **ids** (re-resolved server-side for their secret
+  valid-sets); the destination and routes are stored as **drawn geometry**
+  (lat/lon jsonb). No secret answers are persisted.
+
+## Admin API
+
+| Route | Purpose |
+|---|---|
+| `GET /daily/admin/catalog` | prompt catalog: `{id, label, usedOn[], answers[]}` + `journeyDefaults` |
+| `POST /daily/admin/sets` | validate + compile + persist + overlay a trek; serve it immediately |
+| `GET /daily/admin/sets` | list currently-published days `{dailyDate, destinationName}` |
+| `GET /daily/admin/sets/:date` | load one full authored day for editing |
+| `DELETE /daily/admin/sets/:date` | unpublish: remove from DB **and** overlay |
 
 ## Security — local-only by construction
 
@@ -50,15 +63,22 @@ getDailySet(date):  authored overlay  →  else procedural generator
   `import.meta.env.DEV`, so Vite tree-shakes them out of the production bundle
   entirely (no Builder chunk, no admin-API strings ship).
 - **Server:** admin routes mount only when **both** `DAILY_ADMIN_TOKEN` is set
-  **and** `NODE_ENV !== "production"`. The env guard means even a leaked token in
-  a prod environment can't expose `/daily/admin/*`.
+  **and** `NODE_ENV !== "production"`. Even a leaked token in a prod environment
+  can't expose `/daily/admin/*`.
 - Every admin request must send a matching `x-admin-token`; mismatches are 401.
 - The token lives only in `server/.env` (gitignored); `.env.example` ships blank.
 
-## Deferred (later slices)
-- Freehand route/waypoint drawing on the map.
-- A dedicated `prompt_usage` table (slice 1 derives usage from `daily_sets`).
-- Playtest-in-place, difficulty readouts, bulk calendar view.
+## Trek numbering
+
+`web/src/features/daily/trekNumber.ts`: a pure, client-only ordinal — the launch
+day (`DAILY_EPOCH`) is Trek #1 and every date counts up by one. Derived from the
+date, so authored and generator days alike get a stable number with no storage.
+
+## Deferred (later)
+- Playtest-in-place, difficulty readouts, a bulk calendar view.
+- Real archiving / pruning of past days (nothing is auto-deleted today).
+- A dedicated `prompt_usage` table (usage is derived from `daily_sets` for now).
+- A prompt registry table (editable metadata) — see the data-model note.
 - Real admin auth (Supabase Auth) if this ever leaves localhost.
 
 See [`data-model.md`](./data-model.md) for the table and the authored payload.
