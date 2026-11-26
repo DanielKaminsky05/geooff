@@ -12,8 +12,7 @@
  * "unsupported module". A Web-handler (GET) on Node bundles fine.
  */
 import { ImageResponse } from "@vercel/og";
-import { decodeDailyShare, journeyLabel, outcomeLabel, tierColor } from "../src/features/daily/shareLink";
-import { trekNumber } from "../src/features/daily/trekNumber";
+import { decodeDailyShare, journeyLabel, outcomeLabel, tierColor, trekNumber } from "./_share";
 
 // Journal/atlas palette (mirrors index.css map + chrome tokens).
 const PAPER = "#e6d7b4";
@@ -30,7 +29,8 @@ function group(n: number): string {
 
 export function GET(req: Request): Response {
   try {
-  const url = new URL(req.url);
+  // req.url can be host-less on Vercel's Node Web-handler — give it a base.
+  const url = new URL(req.url, "http://localhost");
   const data = decodeDailyShare(url.searchParams.get("d") ?? "");
 
   const arrived = data?.outcome === "arrived";

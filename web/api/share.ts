@@ -7,9 +7,9 @@
  * don't run JS, so this returns a tiny HTML doc carrying Open Graph + Twitter
  * tags whose image points at /api/og. A real visitor is bounced to the homepage.
  *
- * Node.js runtime, Web-handler GET.
+ * Node.js runtime, Web-handler GET. Self-contained (see ./_share).
  */
-import { decodeDailyShare, journeyLabel, outcomeLabel } from "../src/features/daily/shareLink";
+import { decodeDailyShare, journeyLabel, outcomeLabel, group, originFrom } from "./_share";
 
 /** Where a human who clicks the link ends up. */
 const LANDING = "/";
@@ -22,26 +22,24 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Thousands separators without Intl. */
-function group(n: number): string {
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
-
 export function GET(req: Request): Response {
-  const url = new URL(req.url);
-  const payload = url.searchParams.get("p") ?? "";
-  const data = decodeDailyShare(payload);
+  try {
+    // req.url can be host-less on Vercel's Node Web-handler — give it a base.
+    const url = new URL(req.url, "http://localhost");
+    const payload = url.searchParams.get("p") ?? "";
+    const data = decodeDailyShare(payload);
+    const origin = originFrom(req);
 
-  const title = data
-    ? `${data.category ? data.category + " — " : ""}${group(data.points)} pts on GEOFIGHT Daily`
-    : "GEOFIGHT — Daily Trek";
-  const description = data
-    ? `${journeyLabel(data.journey)} journey · ${outcomeLabel(data.outcome)}. Can you beat it? Play today's trek.`
-    : "A daily geography trek. Play today's trek.";
-  const image = `${url.origin}/api/og?d=${encodeURIComponent(payload)}`;
-  const shareUrl = `${url.origin}/s/${encodeURIComponent(payload)}`;
+    const title = data
+      ? `${data.category ? data.category + " — " : ""}${group(data.points)} pts on GEOFIGHT Daily`
+      : "GEOFIGHT — Daily Trek";
+    const description = data
+      ? `${journeyLabel(data.journey)} journey · ${outcomeLabel(data.outcome)}. Can you beat it? Play today's trek.`
+      : "A daily geography trek. Play today's trek.";
+    const image = `${origin}/api/og?d=${encodeURIComponent(payload)}`;
+    const shareUrl = `${origin}/s/${encodeURIComponent(payload)}`;
 
-  const html = `<!doctype html>
+    const html = `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -72,10 +70,17 @@ export function GET(req: Request): Response {
   </body>
 </html>`;
 
-  return new Response(html, {
-    headers: {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "public, max-age=0, s-maxage=86400",
-    },
-  });
+    return new Response(html, {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "public, max-age=0, s-maxage=86400",
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    return new Response(`SHARE_ERROR\n${msg}`, {
+      status: 500,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
 }
