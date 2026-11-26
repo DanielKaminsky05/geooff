@@ -60,11 +60,15 @@ function randInt(rng: () => number, n: number): number {
  * Landmark fractions per the requirements doc: short 1.0; medium .5/1.0;
  * long .33/.66/1.0. Longer journeys carry more total gold.
  */
+// Distances are in POINTS (1 point = 1 unit of distance). Tuned low enough that
+// a single prompt moves you a visible chunk and arrival is achievable: a casual
+// run clears the short road, a strong run reaches the far road. (First-pass
+// numbers — the one open tuning knob.)
 export const JOURNEYS: DailyJourney[] = [
-  { id: "short", distance: 300, landmarks: [{ atFraction: 1, gold: 40 }] },
+  { id: "short", distance: 110, landmarks: [{ atFraction: 1, gold: 40 }] },
   {
     id: "medium",
-    distance: 600,
+    distance: 230,
     landmarks: [
       { atFraction: 0.5, gold: 25 },
       { atFraction: 1, gold: 60 },
@@ -72,7 +76,7 @@ export const JOURNEYS: DailyJourney[] = [
   },
   {
     id: "long",
-    distance: 1000,
+    distance: 400,
     landmarks: [
       { atFraction: 0.33, gold: 30 },
       { atFraction: 0.66, gold: 45 },
