@@ -39,10 +39,17 @@ import { promptTier, FULL_CLEAR_MESSAGE } from "../features/daily/tiers";
  * flat bonus per named country (clamped to the pool size). Mirrors the server's
  * reconcile so the live leg animation agrees with the authoritative finish.
  */
-function promptScore(r: DailyPromptResult): number {
+/**
+ * One prompt's score, rounded to an integer — mirrors the server's per-prompt
+ * reconcile (`routes.ts`: `Math.round(base + DAILY_NAME_BONUS * named)`). Round
+ * HERE, per prompt, so every client total matches the server's `Σ round(...)`
+ * exactly: summing the raw floats and rounding once (`round(Σ)`) drifts by a
+ * point or two and makes the per-leg reveal not add up to the HUD total.
+ */
+export function promptScore(r: DailyPromptResult): number {
   const base = Math.max(0, Math.min(DAILY_PROMPT_MAX, r.points));
   const named = r.total > 0 ? Math.min(Math.max(0, r.named), r.total) : Math.max(0, r.named);
-  return base + DAILY_NAME_BONUS * named;
+  return Math.round(base + DAILY_NAME_BONUS * named);
 }
 
 type Phase = "loading" | "select" | "play" | "finish" | "recap";
@@ -88,7 +95,9 @@ function assembleResult(
   journey: JourneyId,
   perPrompt: DailyPromptResult[],
 ): DailyRunResult {
-  const points = Math.round(perPrompt.reduce((sum, r) => sum + promptScore(r), 0));
+  // promptScore is already integer per prompt, so the sum matches the server's
+  // Σ round(...) exactly — no final rounding (which would reintroduce drift).
+  const points = perPrompt.reduce((sum, r) => sum + promptScore(r), 0);
   return {
     runId: crypto.randomUUID(),
     dailyDate,
@@ -342,7 +351,7 @@ export default function DailyDive() {
       const start = prevProgressRef.current;
       const target = legTargetRef.current;
       const isLast = legIndex + 1 >= set.prompts.length;
-      const gainedPts = justResult ? Math.round(promptScore(justResult)) : 0;
+      const gainedPts = justResult ? promptScore(justResult) : 0;
       const tier = justResult ? promptTier(justResult.named, justResult.total) : null;
       // Reaching the destination (progress hits 100%) is a win whenever it
       // happens — on the final leg, or EARLY with prompts to spare — so the
