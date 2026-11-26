@@ -1,18 +1,61 @@
 /**
  * Share landing page for a Daily Trek score.
  *
- * Reached via a vercel.json rewrite: /s/:payload -> /api/share?p=:payload
- * (a plain query param, not a [dynamic] route — those don't deploy reliably
- * for a non-Next project). Crawlers (iMessage, Discord, X, Slack, Facebook…)
- * don't run JS, so this returns a tiny HTML doc carrying Open Graph + Twitter
- * tags whose image points at /api/og. A real visitor is bounced to the homepage.
+ * Reached via a vercel.json rewrite: /s/:payload -> /api/share?p=:payload.
+ * Crawlers (iMessage, Discord, X, Slack, Facebook…) don't run JS, so this
+ * returns a tiny HTML doc carrying Open Graph + Twitter tags whose image points
+ * at /api/og. A real visitor is bounced to the homepage.
  *
- * Node.js runtime, Web-handler GET. Self-contained (see ./_share).
+ * SINGLE-FILE ON PURPOSE: Vercel does not bundle this project's /api functions'
+ * relative imports (not ../src, not even a sibling ./file) — only node_modules.
+ * So the decode helpers are inlined here; keep them in sync with the client
+ * encoder in src/features/daily/shareLink.ts (stable v1 wire format).
+ *
+ * Node.js runtime, Web-handler GET.
  */
-import { decodeDailyShare, journeyLabel, outcomeLabel, group, originFrom } from "./_share";
 
-/** Where a human who clicks the link ends up. */
 const LANDING = "/";
+const SHARE_VERSION = 1;
+const VALID_JOURNEYS = new Set(["short", "medium", "long"]);
+
+interface ShareData {
+  date: string;
+  journey: "short" | "medium" | "long";
+  outcome: "arrived" | "died";
+  points: number;
+  category?: string;
+}
+
+function b64urlDecode(s: string): string {
+  const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(b64);
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function decode(payload: string): ShareData | null {
+  if (!payload) return null;
+  try {
+    const w = JSON.parse(b64urlDecode(payload)) as Record<string, unknown>;
+    if (w.v !== SHARE_VERSION) return null;
+    if (typeof w.d !== "string" || !VALID_JOURNEYS.has(w.j as string)) return null;
+    if (w.o !== "a" && w.o !== "d") return null;
+    return {
+      date: w.d,
+      journey: w.j as ShareData["journey"],
+      outcome: w.o === "a" ? "arrived" : "died",
+      points: Math.max(0, (w.p as number) | 0),
+      category: typeof w.c === "string" ? w.c : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+const journeyLabel = (j: ShareData["journey"]): string =>
+  j === "short" ? "Short" : j === "medium" ? "Medium" : "Long";
+const outcomeLabel = (o: ShareData["outcome"]): string => (o === "arrived" ? "Arrived" : "Died");
+const group = (n: number): string => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
 function esc(s: string): string {
   return s
@@ -27,8 +70,11 @@ export function GET(req: Request): Response {
     // req.url can be host-less on Vercel's Node Web-handler — give it a base.
     const url = new URL(req.url, "http://localhost");
     const payload = url.searchParams.get("p") ?? "";
-    const data = decodeDailyShare(payload);
-    const origin = originFrom(req);
+    const data = decode(payload);
+
+    const host = req.headers.get("host") ?? "www.geofight.io";
+    const proto = req.headers.get("x-forwarded-proto") ?? "https";
+    const origin = `${proto}://${host}`;
 
     const title = data
       ? `${data.category ? data.category + " — " : ""}${group(data.points)} pts on GEOFIGHT Daily`
