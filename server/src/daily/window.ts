@@ -16,6 +16,7 @@ import { DAILY_PROMPT_COUNT } from "../protocol.js";
 import { buildPromptPool, validIdsFor, type Prompt } from "../prompts.js";
 import { distanceScoreMax } from "./scoring.js";
 import { destinations } from "./destinations.js";
+import { getAuthoredSet } from "./authoredSets.js";
 import type { CompiledDailySet } from "./types.js";
 
 /* ---------------------------------------------------------------- */
@@ -77,7 +78,9 @@ export const DAILY_JOURNEY_FRACTIONS: Record<JourneyId, number> = {
 
 const JOURNEY_ORDER: JourneyId[] = ["short", "medium", "long"];
 
-const JOURNEY_LANDMARKS: Record<JourneyId, DailyLandmark[]> = {
+/** The default landmark layout per journey. Exported so the authored-set
+ *  compiler can fall back to it when a journey has no gold override. */
+export const JOURNEY_LANDMARKS: Record<JourneyId, DailyLandmark[]> = {
   short: [
     { atFraction: 0.5, gold: 20 },
     { atFraction: 1, gold: 30 },
@@ -155,6 +158,12 @@ const cache = new Map<string, CompiledDailySet | null>();
  * same set (same prompts, same destination), across instances and restarts.
  */
 export function getDailySet(dailyDate: string): CompiledDailySet | null {
+  // Phase 3: a hand-authored (Trek Builder) day overrides the generator. Checked
+  // BEFORE the generator cache so a curated set always wins, and never cached
+  // here so re-authoring a date takes effect immediately.
+  const authored = getAuthoredSet(dailyDate);
+  if (authored) return authored;
+
   if (cache.has(dailyDate)) return cache.get(dailyDate)!;
   if (!isValidDateString(dailyDate)) {
     cache.set(dailyDate, null);
