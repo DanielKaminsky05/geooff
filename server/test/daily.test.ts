@@ -131,6 +131,36 @@ describe("GET /daily — public set, no secrets", () => {
   });
 });
 
+describe("GET /daily — local-date rollover (?d=)", () => {
+  it("honours a client local date within ±1 day of server UTC", async () => {
+    const app = makeApp({ today: () => DATE }); // server "today" = 2026-01-15
+    // Player a day behind in their local zone (e.g. 7pm Americas) asks for the 14th.
+    const res = await request(app).get("/daily?d=2026-01-14");
+    expect(res.status).toBe(200);
+    expect((res.body as DailySet).dailyDate).toBe("2026-01-14");
+  });
+
+  it("clamps a far-off date back to the server's date", async () => {
+    const app = makeApp({ today: () => DATE });
+    const res = await request(app).get("/daily?d=2030-06-01");
+    expect(res.status).toBe(200);
+    expect((res.body as DailySet).dailyDate).toBe(DATE);
+  });
+
+  it("ignores a malformed date and uses the server's date", async () => {
+    const app = makeApp({ today: () => DATE });
+    const res = await request(app).get("/daily?d=not-a-date");
+    expect(res.status).toBe(200);
+    expect((res.body as DailySet).dailyDate).toBe(DATE);
+  });
+
+  it("falls back to the server's date when ?d= is absent", async () => {
+    const app = makeApp({ today: () => DATE });
+    const res = await request(app).get("/daily");
+    expect((res.body as DailySet).dailyDate).toBe(DATE);
+  });
+});
+
 describe("POST /daily/answer — validation + scoring", () => {
   // starts-with-u is in the 2026-01-15 set; United Kingdom (gb) is valid.
   it("accepts a correct answer and scores it", async () => {

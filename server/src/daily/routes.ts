@@ -35,12 +35,29 @@ import { validIdsFor, promptById, labelAnswers } from "../prompts.js";
 import { matchAnswer } from "../matching.js";
 import { lookupFor, canonicalFor } from "../sets.js";
 import { BucketStore, DEFAULT_ANSWER_LIMIT, DEFAULT_FINISH_LIMIT, type BucketConfig } from "../rateLimit.js";
-import { getDailySet, todayUtc } from "./window.js";
+import { getDailySet, todayUtc, isValidDateString } from "./window.js";
 import { answerPoints, promptBasePoints, dailyScoreMax } from "./scoring.js";
 import { capturePercentile } from "./percentile.js";
 import { selectPercentile } from "./percentileSelect.js";
 import type { RunsRepo, RunRecord } from "./runsRepo.js";
 import { toPublicDailySet } from "./types.js";
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Resolve which day to serve from a client-supplied local date. The daily rolls
+ * at the player's LOCAL midnight (Wordle-style), so the client sends its local
+ * date; we trust it only when it is a valid date within ±1 day of the server's
+ * UTC date — the widest offset any real timezone produces — so a crafted ?d=
+ * can't pull an arbitrary past or future day. Anything else falls back to UTC.
+ */
+export function resolveClientDate(raw: unknown, serverToday: string): string {
+  if (typeof raw !== "string" || !isValidDateString(raw)) return serverToday;
+  const a = Date.parse(`${raw}T00:00:00Z`);
+  const b = Date.parse(`${serverToday}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return serverToday;
+  return Math.abs(a - b) <= DAY_MS ? raw : serverToday;
+}
 
 /** Options for wiring the daily routes — overridable so tests drive them
  *  deterministically (fake clock, tiny rate limit). Production uses defaults. */
@@ -78,10 +95,14 @@ export function registerDailyRoutes(app: Express, options: DailyRoutesOptions = 
   const lookup = lookupFor("countries");
   const canonical = canonicalFor("countries");
 
-  app.get("/daily", (_req: Request, res: Response<DailySet>) => {
-    const set = getDailySet(today());
+  app.get("/daily", (req: Request, res: Response<DailySet>) => {
+    // The daily rolls at the PLAYER's local midnight (Wordle-style), not the
+    // server's UTC midnight. The client passes its local date as ?d=YYYY-MM-DD;
+    // we honour it but only within ±1 day of server UTC (the widest any real
+    // timezone can differ), so it can't fetch arbitrary past/future days.
+    const set = getDailySet(resolveClientDate(req.query.d, today()));
     if (!set) {
-      // Should not happen for a real UTC date, but guard rather than crash.
+      // Should not happen for a real date, but guard rather than crash.
       res.status(503).json({ error: "no daily set" } as never);
       return;
     }

@@ -87,7 +87,10 @@ async function postJSON(path: string, body: unknown, signal: AbortSignal): Promi
  */
 export async function fetchDailySet(): Promise<DailySet> {
   try {
-    const res = await fetch(url("/daily"), {
+    // Pass our LOCAL date so the daily rolls at the player's local midnight, not
+    // the server's UTC midnight (which is ~evening in the Americas). The server
+    // echoes it back as set.dailyDate and clamps it to ±1 day of its own UTC.
+    const res = await fetch(url(`/daily?d=${encodeURIComponent(todayIso())}`), {
       headers: { accept: "application/json" },
       signal: timeoutSignal(TIMEOUT_FETCH_MS),
     });
