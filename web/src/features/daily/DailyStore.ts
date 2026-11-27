@@ -11,6 +11,9 @@
 
 import type { DailyRunResult } from "../../lib/protocol";
 
+/** The revealed valid-answer lists per prompt, as returned by /daily/finish. */
+export type RevealAnswers = Record<string, { iso: string; name: string }[]>;
+
 export interface DailyStore {
   /** Current gold balance (no sink yet — the shop needs accounts). */
   getWallet(): number;
@@ -30,6 +33,14 @@ export interface DailyStore {
   /** The finished run for a date, if any. */
   getResult(dailyDate: string): DailyRunResult | null;
   /**
+   * Persist the revealed answers for a finished day so the recap can still show
+   * the correct countries when the (locked) day is re-opened. Safe to store:
+   * the player has already finished and seen them — no anti-cheat concern.
+   */
+  saveAnswers(dailyDate: string, answers: RevealAnswers): void;
+  /** The stored revealed answers for a date, if any. */
+  getAnswers(dailyDate: string): RevealAnswers | null;
+  /**
    * Atomically-as-possible record a finished run: persists the result first,
    * then marks the date played only when the result is verifiably stored.
    * Prefer this over calling `saveResult` + `markPlayed` separately.
@@ -43,6 +54,7 @@ const K = {
   wallet: "geofight.daily.wallet",
   played: "geofight.daily.played", // JSON: Record<dailyDate, true>
   result: (date: string) => `geofight.daily.result.${date}`,
+  answers: (date: string) => `geofight.daily.answers.${date}`,
   playerId: "geofight.daily.playerId",
 } as const;
 
@@ -102,6 +114,12 @@ export const localDailyStore: DailyStore = {
   },
   getResult(dailyDate) {
     return readJSON<DailyRunResult | null>(K.result(dailyDate), null);
+  },
+  saveAnswers(dailyDate, answers) {
+    writeJSON(K.answers(dailyDate), answers);
+  },
+  getAnswers(dailyDate) {
+    return readJSON<RevealAnswers | null>(K.answers(dailyDate), null);
   },
   recordFinished(result) {
     // Write the result first. If this silently fails (quota error etc.),

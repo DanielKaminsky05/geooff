@@ -141,9 +141,28 @@ export default function DailyDive() {
       const saved = localDailyStore.getResult(loaded.dailyDate);
       if (!ALLOW_REPLAY && localDailyStore.isPlayedToday(loaded.dailyDate) && saved) {
         setRecapResult(saved);
+        // Restore the revealed answers saved at finish so re-opening the locked
+        // day still shows the correct countries (they're not part of the result).
+        const storedAnswers = localDailyStore.getAnswers(loaded.dailyDate);
+        setRecapAnswers(storedAnswers ?? undefined);
         setPercentile(fallbackPercentile(saved));
         setWalletBalance(localDailyStore.getWallet());
         setPhase("recap");
+        // Backfill: a day finished before answers were persisted (or on another
+        // device) has none stored. Re-ask the server once, best-effort, so the
+        // reveal still works; the reveal is the only thing we take from it.
+        if (!storedAnswers) {
+          void (async () => {
+            try {
+              const res = await postFinish({ result: saved });
+              if (cancelled || !res.answers) return;
+              localDailyStore.saveAnswers(loaded.dailyDate, res.answers);
+              setRecapAnswers(res.answers);
+            } catch {
+              /* leave the reveal unavailable — it's a nicety, not core */
+            }
+          })();
+        }
       } else {
         setPhase("select");
       }
@@ -232,6 +251,9 @@ export default function DailyDive() {
           // is stored (the store's documented order), so the lock can't read as
           // set without a result behind it.
           localDailyStore.recordFinished(finalResult);
+          // Persist the revealed answers too, so re-opening the locked day keeps
+          // showing the correct countries (the result alone doesn't carry them).
+          if (answers) localDailyStore.saveAnswers(finalResult.dailyDate, answers);
         }
         setRecapResult(finalResult);
         setRecapAnswers(answers);

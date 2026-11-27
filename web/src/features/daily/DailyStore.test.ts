@@ -162,4 +162,23 @@ describe("resilience when localStorage throws", () => {
     expect(id).toBeTruthy();
     expect(typeof id).toBe("string");
   });
+
+  it("saveAnswers/getAnswers round-trips the reveal, keyed per date", () => {
+    const answers = {
+      "starts-with-i": [
+        { iso: "in", name: "India" },
+        { iso: "iq", name: "Iraq" },
+      ],
+      "flag-animal": [{ iso: "lk", name: "Sri Lanka" }],
+    };
+    localDailyStore.saveAnswers("2030-09-09", answers);
+    expect(localDailyStore.getAnswers("2030-09-09")).toEqual(answers);
+    // A different date has no stored answers.
+    expect(localDailyStore.getAnswers("2030-09-10")).toBeNull();
+  });
+
+  it("getAnswers returns null (does not throw) when getItem throws", () => {
+    vi.stubGlobal("localStorage", throwingStorage({ getItem: true }));
+    expect(localDailyStore.getAnswers("2030-01-01")).toBeNull();
+  });
 });
